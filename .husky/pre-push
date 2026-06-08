@@ -1,0 +1,3 @@
+#!/bin/sh
+# Garante que typecheck e testes passam antes de qualquer push
+pnpm typecheck && pnpm test

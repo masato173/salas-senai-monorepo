@@ -1,0 +1,3 @@
+#!/bin/sh
+# Roda lint-staged (lint + format) apenas nos arquivos modificados
+npx lint-staged

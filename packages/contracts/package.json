@@ -1,0 +1,14 @@
+{
+  "name": "@salas-senai/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@salas-senai/tsconfig": "workspace:*",
+    "typescript": "^5.4.3"
+  }
+}

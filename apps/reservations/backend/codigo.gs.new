@@ -1,0 +1,230 @@
+// ============================================================
+// COLAR ESTE CONTEÚDO NO APPS SCRIPT DA PLANILHA DEV
+//
+// O doPost SUBSTITUI o existente (mesma assinatura, +1 case)
+// As outras funções são COLADAS abaixo da createReservation existente (sem substituir)
+//
+// Após colar: salvar + Implantar > Gerenciar implantações > lápis > Nova versão > Implantar
+// ============================================================
+
+
+// ─────────────────────────────────────────────────────────────
+// BLOCO 1 — SUBSTITUIR a função doPost inteira
+// (única diferença: linha do case 'createReservationRange')
+// ─────────────────────────────────────────────────────────────
+function doPost(e) {
+  try {
+    var body = JSON.parse(e.postData.contents);
+    var action = body.action || '';
+
+    if (action === 'createReservation')      return createReservation(body);
+    if (action === 'createReservationRange') return createReservationRange(body);
+
+    return jsonResponse({ error: 'Ação desconhecida.' });
+
+  } catch (err) {
+    Logger.log('ERRO em doPost: ' + err.stack);
+    return jsonResponse({ ok: false, error: { code: 'INTERNAL', message: 'Erro interno.' } });
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// BLOCO 2 — COLAR abaixo da função createReservation existente
+// (não substitui nada — apenas adiciona)
+// ─────────────────────────────────────────────────────────────
+
+// ── Criar múltiplas reservas em período (tudo ou nada) ────────
+// Mesma sala+horário em N datas. Atomicidade: 1 lock, valida tudo,
+// checa conflito em todas, só então escreve. Idempotente via clientRequestId.
+function createReservationRange(body) {
+  var lock = LockService.getScriptLock();
+
+  try {
+    lock.waitLock(15000);
+  } catch (e) {
+    return jsonResponse({ ok: false, error: { code: 'LOCK_TIMEOUT', message: 'Sistema ocupado. Tente novamente.' } });
+  }
+
+  try {
+    var payload  = body.payload || {};
+    var clientId = body.clientRequestId || '';
+
+    // 1) Valida campos específicos do range (dataInicio/dataFim/diasSemana)
+    var rangeErr = validateRangeRequest(payload);
+    if (rangeErr) {
+      return jsonResponse({ ok: false, error: { code: 'VALIDATION', message: rangeErr } });
+    }
+
+    // 2) Expande as datas
+    var datas = expandDateRange(payload.dataInicio, payload.dataFim, payload.diasSemana);
+    if (datas.length === 0) {
+      return jsonResponse({ ok: false, error: { code: 'VALIDATION', message: 'Nenhuma data válida no período para os dias selecionados.' } });
+    }
+    if (datas.length > 60) {
+      return jsonResponse({ ok: false, error: { code: 'VALIDATION', message: 'Máximo 60 reservas por requisição.' } });
+    }
+
+    // 3) Valida horário/sala/etc UMA vez (mesmo payload pra todas as datas)
+    var basePayload = clonePayloadForDate(payload, datas[0]);
+    var erros = validateReservationPayload(basePayload);
+    if (erros) {
+      return jsonResponse({ ok: false, error: { code: 'VALIDATION', message: erros } });
+    }
+
+    var ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var sheet = ss.getSheetByName('Reservas');
+    if (!sheet) {
+      return jsonResponse({ ok: false, error: { code: 'INTERNAL', message: 'Aba Reservas não encontrada.' } });
+    }
+
+    // 4) Idempotência — se clientId já existe, devolve todas as rows desse clientId
+    if (clientId) {
+      var existentes = findRowsByClientId(sheet, clientId);
+      if (existentes.length > 0) {
+        return jsonResponse({
+          ok: true,
+          data: { count: existentes.length, reservations: existentes },
+          error: null
+        });
+      }
+    }
+
+    // 5) Checa conflito em CADA data — tudo ou nada
+    var conflitos = [];
+    for (var i = 0; i < datas.length; i++) {
+      var pCheck = clonePayloadForDate(payload, datas[i]);
+      if (checkConflicts(sheet, pCheck)) {
+        conflitos.push(datas[i]);
+      }
+    }
+    if (conflitos.length > 0) {
+      return jsonResponse({
+        ok: false,
+        error: {
+          code: 'CONFLICT',
+          message: 'Conflito em ' + conflitos.length + ' data(s).',
+          details: { conflicts: conflitos }
+        }
+      });
+    }
+
+    // 6) Sem conflito → grava todas
+    var now = new Date().toISOString();
+    var reservasCriadas = [];
+
+    for (var j = 0; j < datas.length; j++) {
+      var id  = Utilities.getUuid();
+      var row = [
+        id,
+        (payload.sala       || '').trim(),
+        datas[j],
+        (payload.inicio     || '').trim(),
+        (payload.fim        || '').trim(),
+        (payload.professor  || '').trim(),
+        (payload.turma      || '').trim(),
+        sanitize(payload.observacao || ''),
+        'ACTIVE',
+        (body.userEmail     || '').trim(),
+        now,
+        now,
+        clientId
+      ];
+
+      sheet.appendRow(row);
+      var lastrow = sheet.getLastRow();
+      sheet.getRange(lastrow, 3, 1, 3).setNumberFormat('@');  // força C/D/E como texto
+      reservasCriadas.push(rowToObj(row));
+    }
+
+    return jsonResponse({
+      ok: true,
+      data: { count: reservasCriadas.length, reservations: reservasCriadas },
+      error: null
+    });
+
+  } catch (err) {
+    Logger.log('ERRO em createReservationRange: ' + err.stack);
+    return jsonResponse({ ok: false, error: { code: 'INTERNAL', message: 'Erro interno ao salvar.' } });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+// ── Helpers de range (novos) ──────────────────────────────────
+
+// Valida dataInicio, dataFim, diasSemana. Retorna string (mensagem) ou null.
+// Segue o estilo de validateReservationPayload (primeira falha já retorna).
+function validateRangeRequest(p) {
+  var DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+  if (!p.dataInicio || !DATE_RE.test(String(p.dataInicio).trim())) {
+    return 'Data de início inválida. Use YYYY-MM-DD.';
+  }
+  if (!p.dataFim    || !DATE_RE.test(String(p.dataFim).trim())) {
+    return 'Data de fim inválida. Use YYYY-MM-DD.';
+  }
+  if (String(p.dataFim).trim() < String(p.dataInicio).trim()) {
+    return 'Data de fim deve ser igual ou posterior à data de início.';
+  }
+  if (!Array.isArray(p.diasSemana) || p.diasSemana.length === 0) {
+    return 'Selecione ao menos um dia da semana.';
+  }
+  for (var i = 0; i < p.diasSemana.length; i++) {
+    var d = p.diasSemana[i];
+    if (typeof d !== 'number' || d < 0 || d > 6 || (d | 0) !== d) {
+      return 'Dia da semana inválido (use inteiros 0-6, sendo 0=domingo).';
+    }
+  }
+  return null;
+}
+
+// Expande [dataInicio..dataFim] filtrando pelos diasSemana (0=dom..6=sab).
+// Itera em meio-dia UTC pra evitar DST. Limite hard de 60 datas.
+function expandDateRange(dataInicio, dataFim, diasSemana) {
+  var datas = [];
+  var seen  = {};
+
+  var p1 = String(dataInicio).split('-');
+  var p2 = String(dataFim).split('-');
+  var start = Date.UTC(parseInt(p1[0],10), parseInt(p1[1],10) - 1, parseInt(p1[2],10), 12);
+  var end   = Date.UTC(parseInt(p2[0],10), parseInt(p2[1],10) - 1, parseInt(p2[2],10), 12);
+
+  for (var ms = start; ms <= end; ms += 86400000) {
+    var d = new Date(ms);
+    if (diasSemana.indexOf(d.getUTCDay()) === -1) continue;
+    var iso = Utilities.formatDate(d, 'America/Manaus', 'yyyy-MM-dd');
+    if (!seen[iso]) {
+      seen[iso] = true;
+      datas.push(iso);
+    }
+    if (datas.length > 60) break;  // proteção: deixa o caller rejeitar
+  }
+  return datas;
+}
+
+// Cópia do payload trocando só o campo `data` — pra passar pra checkConflicts/validateReservationPayload.
+function clonePayloadForDate(p, dataStr) {
+  return {
+    sala:       p.sala,
+    data:       dataStr,
+    inicio:     p.inicio,
+    fim:        p.fim,
+    professor:  p.professor,
+    turma:      p.turma,
+    observacao: p.observacao
+  };
+}
+
+// Idempotência multi-row: coleta TODAS as linhas com o clientRequestId dado.
+function findRowsByClientId(sheet, clientId) {
+  var dados = sheet.getDataRange().getValues();
+  var found = [];
+  for (var i = 1; i < dados.length; i++) {
+    if (dados[i][12] === clientId) {
+      found.push(rowToObj(dados[i]));
+    }
+  }
+  return found;
+}

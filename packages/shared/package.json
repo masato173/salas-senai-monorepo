@@ -1,0 +1,20 @@
+{
+  "name": "@salas-senai/shared",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "test":      "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@salas-senai/contracts": "workspace:*",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@salas-senai/tsconfig": "workspace:*",
+    "typescript": "^5.4.3",
+    "vitest": "^1.4.0"
+  }
+}

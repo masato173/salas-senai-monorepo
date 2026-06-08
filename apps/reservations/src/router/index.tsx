@@ -1,0 +1,103 @@
+import React, { lazy, Suspense } from 'react';
+import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
+import { AppLayout } from '../layouts/AppLayout';
+import { RouteLoader } from './RouteLoader';
+import { ProtectedRoute } from './ProtectedRoute';
+
+// ─────────────────────────────────────────────────────────────
+// Lazy loading — cada página carrega só quando visitada
+// O Dashboard carrega imediatamente (não é lazy) porque é a
+// primeira página que o usuário vê
+// ─────────────────────────────────────────────────────────────
+import { DashboardPage } from '../pages/Dashboard';
+
+const AgendamentosPage  = lazy(() => import('../pages/Agendamentos'));
+const ReservasPage      = lazy(() => import('../pages/Reservas'));
+const SalasPage         = lazy(() => import('../pages/Salas'));
+const TurmasPage        = lazy(() => import('../pages/Turmas'));
+const RelatoriosPage    = lazy(() => import('../pages/Relatorios'));
+const ConfiguracoesPage = lazy(() => import('../pages/Configuracoes'));
+const NotFoundPage      = lazy(() => import('../pages/NotFound'));
+
+export const router = createBrowserRouter([
+  {
+    path:    '/',
+    element: <AppLayout />,
+    children: [
+      {
+        index:   true,
+        element: <DashboardPage />,
+      },
+      {
+        path:    'agendamentos',
+        element: (
+          <Suspense fallback={<RouteLoader />}>
+            <AgendamentosPage />
+          </Suspense>
+        ),
+      },
+      {
+        path:    'reservas',
+        element: (
+          <ProtectedRoute>
+            <Suspense fallback={<RouteLoader />}>
+              <ReservasPage />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path:    'salas',
+        element: (
+          <ProtectedRoute>
+            <Suspense fallback={<RouteLoader />}>
+              <SalasPage />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path:    'turmas',
+        element: (
+          <ProtectedRoute>
+            <Suspense fallback={<RouteLoader />}>
+              <TurmasPage />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path:    'relatorios',
+        element: (
+          <ProtectedRoute>
+            <Suspense fallback={<RouteLoader />}>
+              <RelatoriosPage />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path:    'configuracoes',
+        element: (
+          <ProtectedRoute requiredRole="ADMIN">
+            <Suspense fallback={<RouteLoader />}>
+              <ConfiguracoesPage />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path:    '*',
+        element: (
+          <Suspense fallback={<RouteLoader />}>
+            <NotFoundPage />
+          </Suspense>
+        ),
+      },
+    ],
+  },
+]);
+
+export function AppRouter() {
+  return <RouterProvider router={router} />;
+}
