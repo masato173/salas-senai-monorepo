@@ -52,14 +52,14 @@ Migração incremental. **Cada item só inicia com o anterior estável; o legado
 - **F0 — Legado:** leitura de ocupação (HTML/CSS/JS + Apps Script + Sheets), filtros (turma/data/sala/mês/turno), paginação, proteção XSS.
 - **F1 — Frontend React:** estrutura Vite + TS + Zustand + React Query, roteamento, Dashboard exibindo o legado via iframe.
 - **F2 — Backend de reservas (Apps Script):** `doPost` + `LockService` + `checkConflicts` + idempotência; aba `Reservas`.
-- **Sprint 2 — Reserva única ponta-a-ponta:** service + hook + `ReservationForm` + página `/reservas`.
+- **Sprint 2 — Reserva única ponta-a-ponta:** service + hook + `ReservationForm` + página `/reservas`. Validada no navegador.
+- **Sprint 2.5 — Reserva em período** (multi-dia, mesma sala/horário; tudo-ou-nada; dias da semana escolhidos; limite 60 datas). 104/104 testes verdes, validada no navegador, 4 cleanups aplicados.
 
 **🔄 Em andamento**
-- **Reserva em período** (multi-dia, mesma sala/horário; tudo-ou-nada; dias da semana escolhidos; limite 60 datas).
+- **Sprint 3 — Visualização (calendário) + cancelar:** FullCalendar (mês/semana/dia), `listReservations`, soft delete via status='CANCELLED', validação de owner por `createdBy`.
 
 **⏭️ Próximo (curto prazo)**
-- Teste end-to-end da reserva única no navegador → planilha DEV.
-- Visualização das reservas criadas (lista + calendário FullCalendar).
+- **Sprint 4 — Editar reserva:** revalidar conflito no backend; decidir comportamento ao editar uma reserva de um período (única data ou todas).
 - Limpeza dos dados de teste na DEV.
 
 **📦 Médio prazo**
@@ -292,8 +292,16 @@ npx vite preview        # http://localhost:4173
 - A nova camada **coexiste** com a antiga (ex.: React novo + HTML legado via fallback/iframe).
 - Mudança de contrato de API é **versionada**, nunca silenciosa.
 - Antes de remover algo antigo: garantir que o novo cobre 100% e está estável em produção.
-- Dados: Sheets → banco relacional via **sync periódico** antes do corte definitivo.
 - Cada fase é **independente e reversível** (rollback claro e testado).
+
+### Migração Sheets → PostgreSQL (decidido)
+
+- **Postgres será a FONTE ÚNICA de verdade.** Sem sync bidirecional.
+- **Funcionários migram pro app web; Sheets é descontinuado** (ou vira espelho read-only unidirecional Postgres→Sheets, nunca editável). Sync bidirecional foi descartado por gerar dupla escrita e conflitos.
+- **Migração de dados:** script único que lê o Sheets e popula o Postgres (seed). NÃO é sync contínuo.
+- **O contrato do service (`appsScript.ts`) deve permanecer estável:** trocar Apps Script por NestJS muda só a implementação interna, não a interface que hooks/componentes consomem. O frontend não deve saber qual backend está por trás.
+- **Pré-condição do corte:** o app cobre 100% das operações que os funcionários fazem hoje no Sheet (criar, listar, cancelar, editar, eventualmente aprovar).
+- **Trigger pra começar a planejar a migração:** aba `Reservas` passar de ~2000 linhas em produção, OU latência percebida do Apps Script ficar inaceitável.
 
 ---
 
@@ -368,3 +376,7 @@ Invoke-RestMethod -Uri $URL -Method Post -Body $body -ContentType 'text/plain'
 | 2026-06 | Colunas C/D/E forçadas como texto (`setNumberFormat('@')`) | Sheets convertia "08:00"/datas em Date de 1899, quebrando detecção de conflito |
 | 2026-06 | Reservas novas em aba separada `Reservas` (formato tabela) | Abas mensais são grade dia×sala incompatível; legado não é tocado |
 | 2026-06 | Reserva em período: tudo-ou-nada, dias da semana escolhidos, limite 60 datas | Atomicidade dentro do lock; proteção contra timeout/abuso |
+| 2026-06 | `dateRange.ts` (frontend) usa `getUTC*` + meio-dia UTC | Determinístico independente do fuso do browser; mantém paridade com `expandDateRange` do backend |
+| 2026-06 | Sem optimistic update no modo período | Datas distintas com mesma sala/horário não conflitam entre si; rollback de N inserts seria custo sem benefício |
+| 2026-06 | `anyLoading` derivado como fonte única no `ReservationForm` | Todos os usos de "form ocupado" passam por uma constante; muda só num lugar se um terceiro mutation entrar |
+| 2026-06 | Migração Sheets → Postgres: Postgres como fonte única, sem sync bidirecional | Sync bidirecional gera dupla escrita e conflitos; funcionários migrarão pro app, Sheets é descontinuado |
