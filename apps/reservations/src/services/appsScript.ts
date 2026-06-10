@@ -16,7 +16,9 @@ export type BackendErrorCode =
   | 'VALIDATION'
   | 'LOCK_TIMEOUT'
   | 'DUPLICATE'
-  | 'INTERNAL';
+  | 'INTERNAL'
+  | 'NOT_FOUND'
+  | 'FORBIDDEN';
 
 export interface BackendError {
   code:    BackendErrorCode;
@@ -96,10 +98,38 @@ export type CreateReservationRangeResponse = BackendEnvelope<{
   reservations: CreatedReservationRow[];
 }>;
 
+// ── Sprint 3: listReservations + cancelReservation ──
+
+// TODO(tech-debt): shape `{ count, reservations }` é duplicado entre
+// CreateReservationRangeResponse e ListReservationsResponse. Unificar
+// em cleanup futuro pra evitar tocar código estável agora.
+export type ListReservationsResponse = BackendEnvelope<{
+  count:        number;
+  reservations: CreatedReservationRow[];
+}>;
+
+export interface ListReservationsOptions {
+  includeCancelled?: boolean;
+}
+
+export interface CancelReservationPayload {
+  id: string;
+}
+
+export interface CancelReservationRequest {
+  userEmail:        string;
+  payload:          CancelReservationPayload;
+  clientRequestId?: string;
+}
+
+export type CancelReservationResponse = BackendEnvelope<CreatedReservationRow>;
+
 interface AppsScriptService {
   fetchSchedule:          () => Promise<ScheduleResult>;
   createReservation:      (req: CreateReservationRequest)      => Promise<CreateReservationResponse>;
   createReservationRange: (req: CreateReservationRangeRequest) => Promise<CreateReservationRangeResponse>;
+  listReservations:       (options?: ListReservationsOptions)  => Promise<ListReservationsResponse>;
+  cancelReservation:      (req: CancelReservationRequest)      => Promise<CancelReservationResponse>;
 }
 
 /**
@@ -172,6 +202,34 @@ export function createAppsScriptService(config: AppsScriptConfig): AppsScriptSer
       });
 
       return (await res.json()) as CreateReservationRangeResponse;
+    },
+
+    async listReservations(options): Promise<ListReservationsResponse> {
+      const params = new URLSearchParams({
+        token:  config.token,
+        action: 'listReservations',
+      });
+      if (options?.includeCancelled) params.set('includeCancelled', 'true');
+
+      const res = await fetch(`${config.url}?${params.toString()}`);
+      return (await res.json()) as ListReservationsResponse;
+    },
+
+    async cancelReservation(req): Promise<CancelReservationResponse> {
+      const body = JSON.stringify({
+        action:          'cancelReservation',
+        clientRequestId: req.clientRequestId ?? crypto.randomUUID(),
+        userEmail:       req.userEmail,
+        payload:         req.payload,
+      });
+
+      const res = await fetch(config.url, {
+        method:  'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body,
+      });
+
+      return (await res.json()) as CancelReservationResponse;
     },
   };
 }

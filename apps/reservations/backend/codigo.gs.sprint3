@@ -1,0 +1,245 @@
+// ============================================================
+// COLAR ESTE CONTEÚDO NO APPS SCRIPT DA PLANILHA DEV
+//
+// SPRINT 3 — adiciona listReservations (GET) + cancelReservation (POST).
+//
+//  • BLOCO 1: SUBSTITUI a função doGet inteira (única diferença: +1 linha de rota)
+//  • BLOCO 2: SUBSTITUI a função doPost inteira (única diferença: +1 linha de rota)
+//  • BLOCO 3: COLAR as 4 funções novas em qualquer ponto do arquivo (recomendo no final)
+//
+// NÃO mexe em createReservation, createReservationRange, helpers existentes,
+// parsePlanilha, getTurnoMap, rowToObj, sanitize, checkConflicts.
+//
+// Após colar: salvar + Implantar > Gerenciar implantações > lápis > Nova versão > Implantar
+// ============================================================
+
+
+// ─────────────────────────────────────────────────────────────
+// BLOCO 1 — SUBSTITUIR a função doGet inteira
+// (única diferença: linha do case 'listReservations' antes do legado)
+// ─────────────────────────────────────────────────────────────
+function doGet(e) {
+  var token = (e.parameter && e.parameter.token) || '';
+  if (token !== SECRET_TOKEN) {
+    return jsonResponse({ error: 'Acesso negado.' });
+  }
+
+  if (e.parameter.action === 'debug') {
+    return debugReservas();
+  }
+  if (e.parameter.action === 'debugconflict') {
+    return debugConflict();
+  }
+  if (e.parameter.action === 'listReservations') {
+    return listReservations(e.parameter);
+  }
+
+  try {
+    var ss       = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var dados    = parsePlanilha(ss);
+    var turnoMap = getTurnoMap(ss);
+    return jsonResponse({ ok: true, total: dados.length, dados: dados, turnoMap: turnoMap });
+  } catch (err) {
+    Logger.log('ERRO em doGet: ' + err.stack);
+    return jsonResponse({ error: 'Erro interno ao processar dados.' });
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// BLOCO 2 — SUBSTITUIR a função doPost inteira
+// (única diferença: linha do case 'cancelReservation')
+// ─────────────────────────────────────────────────────────────
+function doPost(e) {
+  try {
+    var body = JSON.parse(e.postData.contents);
+    var action = body.action || '';
+
+    if (action === 'createReservation')      return createReservation(body);
+    if (action === 'createReservationRange') return createReservationRange(body);
+    if (action === 'cancelReservation')      return cancelReservation(body);
+
+    return jsonResponse({ error: 'Ação desconhecida.' });
+
+  } catch (err) {
+    Logger.log('ERRO em doPost: ' + err.stack);
+    return jsonResponse({ ok: false, error: { code: 'INTERNAL', message: 'Erro interno.' } });
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// BLOCO 3 — COLAR as 4 funções abaixo (em qualquer ponto do arquivo)
+// ─────────────────────────────────────────────────────────────
+
+// ── Lista reservas da aba "Reservas". Read-only, sem lock. ────
+// Por padrão devolve só status='ACTIVE'. Flag ?includeCancelled=true devolve tudo.
+// Resposta: { ok, data: { count, reservations: [...rowToObj] }, error }.
+function listReservations(params) {
+  try {
+    var ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var sheet = ss.getSheetByName('Reservas');
+    if (!sheet) {
+      return jsonResponse({
+        ok: false,
+        error: { code: 'INTERNAL', message: 'Aba Reservas não encontrada.' }
+      });
+    }
+
+    var includeCancelled = String((params && params.includeCancelled) || '').toLowerCase() === 'true';
+    var dados = sheet.getDataRange().getValues();
+    var reservations = [];
+
+    // i=1: pula cabeçalho. Coluna 8 (índice 8) = status.
+    for (var i = 1; i < dados.length; i++) {
+      if (!includeCancelled && dados[i][8] === 'CANCELLED') continue;
+      reservations.push(rowToObj(dados[i]));
+    }
+
+    return jsonResponse({
+      ok: true,
+      data: { count: reservations.length, reservations: reservations },
+      error: null
+    });
+
+  } catch (err) {
+    Logger.log('ERRO em listReservations: ' + err.stack);
+    return jsonResponse({
+      ok: false,
+      error: { code: 'INTERNAL', message: 'Erro interno ao listar reservas.' }
+    });
+  }
+}
+
+
+// ── Cancela uma reserva (soft delete: status='CANCELLED'). ────
+// Idempotência state-based:
+//   • Se status já é CANCELLED → devolve ok=true sem owner check (operação já aplicada).
+//   • Se status é ACTIVE       → valida owner; só createdBy pode cancelar.
+// clientRequestId é aceito e logado para audit, mas NÃO usado pra dedupe.
+function cancelReservation(body) {
+  var lock = LockService.getScriptLock();
+
+  try {
+    lock.waitLock(15000);
+  } catch (e) {
+    return jsonResponse({
+      ok: false,
+      error: { code: 'LOCK_TIMEOUT', message: 'Sistema ocupado. Tente novamente.' }
+    });
+  }
+
+  try {
+    // Audit-only: registra o clientRequestId no log; idempotência é state-based.
+    var clientId = (body && body.clientRequestId) || '';
+    Logger.log('cancelReservation clientRequestId=' + clientId);
+
+    var validationErr = validateCancelPayload(body);
+    if (validationErr) {
+      return jsonResponse({
+        ok: false,
+        error: { code: 'VALIDATION', message: validationErr }
+      });
+    }
+
+    var ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var sheet = ss.getSheetByName('Reservas');
+    if (!sheet) {
+      return jsonResponse({
+        ok: false,
+        error: { code: 'INTERNAL', message: 'Aba Reservas não encontrada.' }
+      });
+    }
+
+    var id        = String(body.payload.id).trim();
+    var userEmail = String(body.userEmail).trim();
+
+    var found = findRowByIdWithIndex(sheet, id);
+    if (!found) {
+      return jsonResponse({
+        ok: false,
+        error: { code: 'NOT_FOUND', message: 'Reserva não encontrada.' }
+      });
+    }
+
+    // Idempotência state-based — se já CANCELLED, devolve ok sem owner check.
+    if (found.row[8] === 'CANCELLED') {
+      return jsonResponse({
+        ok: true,
+        data: rowToObj(found.row),
+        error: null
+      });
+    }
+
+    // Owner check só pra reservas ACTIVE. createdBy = coluna J = índice 9.
+    if (found.row[9] !== userEmail) {
+      return jsonResponse({
+        ok: false,
+        error: { code: 'FORBIDDEN', message: 'Apenas o criador pode cancelar a reserva.' }
+      });
+    }
+
+    // Atualiza:
+    //   status     → coluna I (1-based: 9)
+    //   updatedAt  → coluna L (1-based: 12)
+    // NÃO toca C/D/E — setNumberFormat('@') preservado.
+    var now = new Date().toISOString();
+    sheet.getRange(found.sheetRowIndex, 9 ).setValue('CANCELLED');
+    sheet.getRange(found.sheetRowIndex, 12).setValue(now);
+
+    // Reconstrói row atualizada para o response (sem reler a planilha).
+    var updated = found.row.slice();
+    updated[8]  = 'CANCELLED';
+    updated[11] = now;
+
+    return jsonResponse({
+      ok: true,
+      data: rowToObj(updated),
+      error: null
+    });
+
+  } catch (err) {
+    Logger.log('ERRO em cancelReservation: ' + err.stack);
+    return jsonResponse({
+      ok: false,
+      error: { code: 'INTERNAL', message: 'Erro interno ao cancelar.' }
+    });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+// ── Valida o payload de cancelamento. ────────────────────────
+// Mesmo padrão de validateReservationPayload / validateRangeRequest:
+// retorna string (primeira mensagem de erro) ou null se tudo ok.
+function validateCancelPayload(body) {
+  if (!body || typeof body !== 'object') {
+    return 'Body inválido.';
+  }
+  if (!body.userEmail || !String(body.userEmail).trim()) {
+    return 'userEmail é obrigatório.';
+  }
+  if (!body.payload || typeof body.payload !== 'object') {
+    return 'payload é obrigatório.';
+  }
+  if (!body.payload.id || !String(body.payload.id).trim()) {
+    return 'payload.id é obrigatório.';
+  }
+  return null;
+}
+
+
+// ── Localiza row por id na aba "Reservas". ───────────────────
+// Retorna { row, sheetRowIndex } (sheetRowIndex 1-based pra sheet.getRange)
+// ou null se não encontrar.
+function findRowByIdWithIndex(sheet, id) {
+  var dados = sheet.getDataRange().getValues();
+  for (var i = 1; i < dados.length; i++) {
+    if (dados[i][0] === id) {
+      // dados[0] é o cabeçalho (sheet row 1); dados[i] → sheet row i+1.
+      return { row: dados[i], sheetRowIndex: i + 1 };
+    }
+  }
+  return null;
+}

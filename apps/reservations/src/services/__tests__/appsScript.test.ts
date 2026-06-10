@@ -3,6 +3,7 @@ import {
   createAppsScriptService,
   type CreateReservationRequest,
   type CreateReservationRangeRequest,
+  type CancelReservationRequest,
 } from '../appsScript';
 
 const MOCK_PAYLOAD = {
@@ -316,5 +317,222 @@ describe('createAppsScriptService().createReservationRange()', () => {
     const svc = createAppsScriptService(config);
 
     await expect(svc.createReservationRange(VALID_RANGE_REQUEST)).rejects.toThrow('Network down');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// listReservations + cancelReservation (Sprint 3)
+// ─────────────────────────────────────────────────────────────
+
+const VALID_CANCEL_REQUEST: CancelReservationRequest = {
+  userEmail: 'professor@senai.edu',
+  payload: { id: 'r-42' },
+};
+
+const OK_LIST_ENVELOPE = {
+  ok:   true,
+  data: {
+    count: 2,
+    reservations: [
+      { id: 'r-1', sala: '603 Sala', data: '2026-12-10', inicio: '08:00', fim: '10:00' },
+      { id: 'r-2', sala: '603 Sala', data: '2026-12-15', inicio: '08:00', fim: '10:00' },
+    ],
+  },
+  error: null,
+};
+
+const OK_CANCEL_ENVELOPE = {
+  ok:   true,
+  data: {
+    id:         'r-42',
+    sala:       '603 Sala',
+    data:       '2026-12-10',
+    inicio:     '08:00',
+    fim:        '10:00',
+    professor:  'Fulano',
+    turma:      'ADS-A',
+    observacao: '',
+    status:     'CANCELLED',
+    createdBy:  'professor@senai.edu',
+    createdAt:  '2026-06-01T12:00:00.000Z',
+    updatedAt:  '2026-06-09T15:00:00.000Z',
+  },
+  error: null,
+};
+
+const NOT_FOUND_ENVELOPE = {
+  ok:    false,
+  data:  null,
+  error: { code: 'NOT_FOUND', message: 'Reserva não encontrada.' },
+};
+
+const FORBIDDEN_ENVELOPE = {
+  ok:    false,
+  data:  null,
+  error: { code: 'FORBIDDEN', message: 'Apenas o criador pode cancelar a reserva.' },
+};
+
+const INTERNAL_LIST_ENVELOPE = {
+  ok:    false,
+  data:  null,
+  error: { code: 'INTERNAL', message: 'Erro interno ao listar reservas.' },
+};
+
+describe('createAppsScriptService().listReservations()', () => {
+  const config = { url: 'https://script.google.com/macros/s/abc/exec', token: 'test' };
+
+  function mockFetchOnce(payload: unknown) {
+    return vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok:   true,
+      json: () => Promise.resolve(payload),
+    } as Response);
+  }
+
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('faz GET com token e action=listReservations (sem includeCancelled por padrão)', async () => {
+    const fetchSpy = mockFetchOnce(OK_LIST_ENVELOPE);
+    const svc = createAppsScriptService(config);
+
+    await svc.listReservations();
+
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(init?.method ?? 'GET').toBe('GET');
+    const parsed = new URL(String(url));
+    expect(parsed.origin + parsed.pathname).toBe(config.url);
+    expect(parsed.searchParams.get('token')).toBe('test');
+    expect(parsed.searchParams.get('action')).toBe('listReservations');
+    expect(parsed.searchParams.has('includeCancelled')).toBe(false);
+  });
+
+  it('com includeCancelled=true adiciona o param na query', async () => {
+    const fetchSpy = mockFetchOnce(OK_LIST_ENVELOPE);
+    const svc = createAppsScriptService(config);
+
+    await svc.listReservations({ includeCancelled: true });
+
+    const [url] = fetchSpy.mock.calls[0];
+    const parsed = new URL(String(url));
+    expect(parsed.searchParams.get('includeCancelled')).toBe('true');
+  });
+
+  it('retorna envelope ok=true intacto (count + reservations)', async () => {
+    mockFetchOnce(OK_LIST_ENVELOPE);
+    const svc = createAppsScriptService(config);
+
+    const result = await svc.listReservations();
+
+    expect(result.ok).toBe(true);
+    expect(result.data?.count).toBe(2);
+    expect(result.data?.reservations).toHaveLength(2);
+    expect(result.error).toBeNull();
+  });
+
+  it('retorna envelope ok=false com code INTERNAL intacto', async () => {
+    mockFetchOnce(INTERNAL_LIST_ENVELOPE);
+    const svc = createAppsScriptService(config);
+
+    const result = await svc.listReservations();
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe('INTERNAL');
+  });
+
+  it('propaga falha de rede como rejection', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Network down'));
+    const svc = createAppsScriptService(config);
+
+    await expect(svc.listReservations()).rejects.toThrow('Network down');
+  });
+});
+
+describe('createAppsScriptService().cancelReservation()', () => {
+  const config = { url: 'https://script.google.com/macros/s/abc/exec', token: 'test' };
+
+  function mockFetchOnce(payload: unknown) {
+    return vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok:   true,
+      json: () => Promise.resolve(payload),
+    } as Response);
+  }
+
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('envia POST com Content-Type text/plain', async () => {
+    const fetchSpy = mockFetchOnce(OK_CANCEL_ENVELOPE);
+    const svc = createAppsScriptService(config);
+
+    await svc.cancelReservation(VALID_CANCEL_REQUEST);
+
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toBe(config.url);
+    expect(init?.method).toBe('POST');
+    const headers = new Headers(init?.headers);
+    expect(headers.get('content-type')).toMatch(/^text\/plain/i);
+  });
+
+  it('serializa body com action, clientRequestId, userEmail e payload.id', async () => {
+    const fetchSpy = mockFetchOnce(OK_CANCEL_ENVELOPE);
+    const svc = createAppsScriptService(config);
+
+    await svc.cancelReservation({ ...VALID_CANCEL_REQUEST, clientRequestId: 'fixed-uuid-1' });
+
+    const body = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
+    expect(body.action).toBe('cancelReservation');
+    expect(body.clientRequestId).toBe('fixed-uuid-1');
+    expect(body.userEmail).toBe('professor@senai.edu');
+    expect(body.payload.id).toBe('r-42');
+  });
+
+  it('gera clientRequestId via crypto.randomUUID se não fornecido', async () => {
+    const fetchSpy = mockFetchOnce(OK_CANCEL_ENVELOPE);
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(
+      '11111111-2222-3333-4444-555555555555',
+    );
+    const svc = createAppsScriptService(config);
+
+    await svc.cancelReservation(VALID_CANCEL_REQUEST);
+
+    const body = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
+    expect(body.clientRequestId).toBe('11111111-2222-3333-4444-555555555555');
+  });
+
+  it('retorna envelope ok=true intacto (reserva com status=CANCELLED)', async () => {
+    mockFetchOnce(OK_CANCEL_ENVELOPE);
+    const svc = createAppsScriptService(config);
+
+    const result = await svc.cancelReservation(VALID_CANCEL_REQUEST);
+
+    expect(result.ok).toBe(true);
+    expect(result.data?.id).toBe('r-42');
+    expect(result.data?.status).toBe('CANCELLED');
+    expect(result.error).toBeNull();
+  });
+
+  it('retorna envelope ok=false com code NOT_FOUND intacto', async () => {
+    mockFetchOnce(NOT_FOUND_ENVELOPE);
+    const svc = createAppsScriptService(config);
+
+    const result = await svc.cancelReservation(VALID_CANCEL_REQUEST);
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe('NOT_FOUND');
+  });
+
+  it('retorna envelope ok=false com code FORBIDDEN intacto', async () => {
+    mockFetchOnce(FORBIDDEN_ENVELOPE);
+    const svc = createAppsScriptService(config);
+
+    const result = await svc.cancelReservation(VALID_CANCEL_REQUEST);
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe('FORBIDDEN');
+  });
+
+  it('propaga falha de rede como rejection', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Network down'));
+    const svc = createAppsScriptService(config);
+
+    await expect(svc.cancelReservation(VALID_CANCEL_REQUEST)).rejects.toThrow('Network down');
   });
 });
