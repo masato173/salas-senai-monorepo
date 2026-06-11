@@ -3,6 +3,7 @@ import { FileText, Clock, CheckCircle2, XCircle, Plus } from 'lucide-react';
 import { useReservationStore } from '../../store/reservationStore';
 import { ReservationList } from '../../components/reservations/ReservationList';
 import { ReservationForm } from '../../components/reservations/ReservationForm';
+import { ReservationCalendar } from '../../components/reservations/ReservationCalendar';
 import { createAppsScriptService } from '../../services/appsScript';
 import { APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN, SALAS, CURRENT_USER } from '../../config';
 
@@ -127,6 +128,9 @@ export default function ReservasPage() {
         </div>
         <ReservationList showApproval />
       </div>
+
+      {/* Calendário (sub-etapa 4.0 — fumaça, sem eventos ainda) */}
+      <ReservationCalendar />
     </div>
   );
 }
