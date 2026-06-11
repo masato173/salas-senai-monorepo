@@ -26,6 +26,15 @@ describe('reservationToEvent()', () => {
       title: '603 Sala · ADS-A',
       start: '2026-12-10T08:00:00',
       end:   '2026-12-10T10:00:00',
+      extendedProps: {
+        sala:       '603 Sala',
+        data:       '2026-12-10',
+        inicio:     '08:00',
+        fim:        '10:00',
+        professor:  'Fulano',
+        observacao: '',
+        createdBy:  'professor@senai.edu',
+      },
     });
   });
 
@@ -59,5 +68,33 @@ describe('reservationToEvent()', () => {
     expect(typeof event.end).toBe('string');
     expect(event.start).not.toBeInstanceOf(Date);
     expect(event.end).not.toBeInstanceOf(Date);
+  });
+
+  it('anexa extendedProps com os 7 campos consumidos pelo modal', () => {
+    const event = reservationToEvent(SAMPLE);
+
+    expect(event.extendedProps).toBeDefined();
+    expect(Object.keys(event.extendedProps!).sort()).toEqual(
+      ['createdBy', 'data', 'fim', 'inicio', 'observacao', 'professor', 'sala'].sort(),
+    );
+  });
+
+  it('preserva createdBy em extendedProps (owner-check antecipado em 4.2b)', () => {
+    const event = reservationToEvent({ ...SAMPLE, createdBy: 'outro.prof@senai.edu' });
+
+    expect(event.extendedProps?.createdBy).toBe('outro.prof@senai.edu');
+  });
+
+  it('NÃO inclui status, turma, id ou timestamps em extendedProps', () => {
+    // Guarda defensiva: se um dia o mapper começar a copiar campos a mais,
+    // o modal precisa ser revisitado junto. Esse teste força a revisão.
+    const event = reservationToEvent(SAMPLE);
+    const props = event.extendedProps ?? {};
+
+    expect(props).not.toHaveProperty('status');
+    expect(props).not.toHaveProperty('turma');
+    expect(props).not.toHaveProperty('id');
+    expect(props).not.toHaveProperty('createdAt');
+    expect(props).not.toHaveProperty('updatedAt');
   });
 });

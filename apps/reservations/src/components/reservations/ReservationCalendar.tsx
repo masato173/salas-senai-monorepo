@@ -5,16 +5,19 @@ import interactionPlugin from '@fullcalendar/interaction';
 import ptBrLocale from '@fullcalendar/core/locales/pt-br';
 import type { EventInput } from '@fullcalendar/core';
 import { RefreshCw, AlertCircle } from 'lucide-react';
+import type { ReservationDetails } from './reservationToEvent';
 
 // Sub-etapa 4.1a — componente "burro": recebe events/loading/error via props.
 // Dados vivem em useListReservations(service) na página /reservas.
-// Click no evento (modal de detalhes + Cancelar) é 4.2.
+// Sub-etapa 4.2a — adiciona onEventClick: extrai id+extendedProps e repassa pro pai.
+// Continua burro (não abre modal, não guarda estado).
 
 interface ReservationCalendarProps {
-  events:     EventInput[];
-  loading?:   boolean;
-  error?:     string | null;
-  onRefresh?: () => void;
+  events:        EventInput[];
+  loading?:      boolean;
+  error?:        string | null;
+  onRefresh?:    () => void;
+  onEventClick?: (reservation: ReservationDetails) => void;
 }
 
 export function ReservationCalendar({
@@ -22,6 +25,7 @@ export function ReservationCalendar({
   loading = false,
   error   = null,
   onRefresh,
+  onEventClick,
 }: ReservationCalendarProps) {
   return (
     <div style={{
@@ -89,6 +93,14 @@ export function ReservationCalendar({
         timeZone="America/Manaus"
         height={600}
         events={events}
+        eventClick={(info) => {
+          // Cast seguro: o mapper (reservationToEvent) é a única fonte que popula
+          // extendedProps. Testes do mapper (6, 7, 8) garantem o shape exato.
+          onEventClick?.({
+            id: info.event.id,
+            ...(info.event.extendedProps as Omit<ReservationDetails, 'id'>),
+          });
+        }}
       />
     </div>
   );

@@ -4,9 +4,10 @@ import { useReservationStore } from '../../store/reservationStore';
 import { ReservationList } from '../../components/reservations/ReservationList';
 import { ReservationForm } from '../../components/reservations/ReservationForm';
 import { ReservationCalendar } from '../../components/reservations/ReservationCalendar';
+import { ReservationDetailsModal } from '../../components/reservations/ReservationDetailsModal';
 import { createAppsScriptService } from '../../services/appsScript';
 import { useListReservations } from '../../hooks/useListReservations';
-import { reservationToEvent } from '../../components/reservations/reservationToEvent';
+import { reservationToEvent, type ReservationDetails } from '../../components/reservations/reservationToEvent';
 import { APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN, SALAS, CURRENT_USER } from '../../config';
 
 export default function ReservasPage() {
@@ -14,6 +15,7 @@ export default function ReservasPage() {
   const [showForm, setShowForm] = useState(false);
   const [sala, setSala] = useState<string>(SALAS[6]); // "603 Sala"
   const [turma, setTurma] = useState('');
+  const [selectedReservation, setSelectedReservation] = useState<ReservationDetails | null>(null);
 
   const service = useMemo(
     () => createAppsScriptService({ url: APPS_SCRIPT_URL, token: APPS_SCRIPT_TOKEN }),
@@ -145,6 +147,13 @@ export default function ReservasPage() {
         loading={list.status === 'loading'}
         error={list.error?.message ?? null}
         onRefresh={() => list.refetch()}
+        onEventClick={(r) => setSelectedReservation(r)}
+      />
+
+      {/* Modal de detalhes (4.2a — estático, sem cancelar) */}
+      <ReservationDetailsModal
+        reservation={selectedReservation}
+        onClose={() => setSelectedReservation(null)}
       />
     </div>
   );
