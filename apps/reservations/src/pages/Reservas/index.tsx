@@ -7,6 +7,7 @@ import { ReservationCalendar } from '../../components/reservations/ReservationCa
 import { ReservationDetailsModal } from '../../components/reservations/ReservationDetailsModal';
 import { createAppsScriptService } from '../../services/appsScript';
 import { useListReservations } from '../../hooks/useListReservations';
+import { useCancelReservation } from '../../hooks/useCancelReservation';
 import { reservationToEvent, type ReservationDetails } from '../../components/reservations/reservationToEvent';
 import { APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN, SALAS, CURRENT_USER } from '../../config';
 
@@ -28,6 +29,21 @@ export default function ReservasPage() {
     () => (list.data?.reservations ?? []).map(reservationToEvent),
     [list.data],
   );
+
+  // Cancel (4.2b). Estado vive aqui; modal recebe via props.
+  const cancelMutation = useCancelReservation(service);
+  const handleConfirmCancel = async (id: string) => {
+    const res = await cancelMutation.mutate({
+      userEmail: CURRENT_USER.userEmail,
+      payload:   { id },
+    });
+    if (res.ok) {
+      setSelectedReservation(null);
+      cancelMutation.reset();
+      list.refetch();
+    }
+    // Erro: cancelMutation.error/status já preenchidos pelo hook; modal observa via props.
+  };
 
   const pending  = reservations.filter(r => r.status === 'PENDING').length;
   const approved = reservations.filter(r => r.status === 'APPROVED').length;
@@ -150,10 +166,15 @@ export default function ReservasPage() {
         onEventClick={(r) => setSelectedReservation(r)}
       />
 
-      {/* Modal de detalhes (4.2a — estático, sem cancelar) */}
+      {/* Modal de detalhes (4.2b — fluxo de cancelamento em 2 cliques + owner-check). */}
       <ReservationDetailsModal
         reservation={selectedReservation}
-        onClose={() => setSelectedReservation(null)}
+        onClose={() => { setSelectedReservation(null); cancelMutation.reset(); }}
+        currentUserEmail={CURRENT_USER.userEmail}
+        onConfirmCancel={handleConfirmCancel}
+        cancelStatus={cancelMutation.status}
+        cancelError={cancelMutation.error}
+        onCancelReset={() => cancelMutation.reset()}
       />
     </div>
   );
