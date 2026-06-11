@@ -5,6 +5,8 @@ import { ReservationList } from '../../components/reservations/ReservationList';
 import { ReservationForm } from '../../components/reservations/ReservationForm';
 import { ReservationCalendar } from '../../components/reservations/ReservationCalendar';
 import { createAppsScriptService } from '../../services/appsScript';
+import { useListReservations } from '../../hooks/useListReservations';
+import { reservationToEvent } from '../../components/reservations/reservationToEvent';
 import { APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN, SALAS, CURRENT_USER } from '../../config';
 
 export default function ReservasPage() {
@@ -16,6 +18,13 @@ export default function ReservasPage() {
   const service = useMemo(
     () => createAppsScriptService({ url: APPS_SCRIPT_URL, token: APPS_SCRIPT_TOKEN }),
     [],
+  );
+
+  // Lista de reservas pro calendário (auto-fetch no mount via hook default).
+  const list = useListReservations(service);
+  const events = useMemo(
+    () => (list.data?.reservations ?? []).map(reservationToEvent),
+    [list.data],
   );
 
   const pending  = reservations.filter(r => r.status === 'PENDING').length;
@@ -86,6 +95,7 @@ export default function ReservasPage() {
             turma={turma}
             service={service}
             onCancel={() => setShowForm(false)}
+            onSuccess={() => list.refetch()}
           />
         </div>
       )}
@@ -129,8 +139,13 @@ export default function ReservasPage() {
         <ReservationList showApproval />
       </div>
 
-      {/* Calendário (sub-etapa 4.0 — fumaça, sem eventos ainda) */}
-      <ReservationCalendar />
+      {/* Calendário (sub-etapa 4.1a — lê via useListReservations) */}
+      <ReservationCalendar
+        events={events}
+        loading={list.status === 'loading'}
+        error={list.error?.message ?? null}
+        onRefresh={() => list.refetch()}
+      />
     </div>
   );
 }

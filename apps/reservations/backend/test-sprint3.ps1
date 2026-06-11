@@ -7,6 +7,20 @@ $URL   = 'https://script.google.com/macros/s/AKfycbyAxnzsvR4ogYUtHsa-lWLC8DE_8Fs
 $TOKEN = 'senai@2026'
 
 
+# ── Datas únicas por execução ────────────────────────────────
+# Base distante (2030) + random 0..730 dias = espaço de ~2 anos.
+# Garante que runs sequenciais no MESMO Sheets nunca colidam.
+# Tests usam offsets fixos sobre RUN_OFFSET (T1=+0, T5=+1, T9=+2, T10=+30..+37).
+$RUN_OFFSET = Get-Random -Minimum 0 -Maximum 730
+$BASE_DATE  = (Get-Date '2030-01-01').AddDays($RUN_OFFSET)
+Write-Host "RUN_OFFSET = $RUN_OFFSET dias (base $($BASE_DATE.ToString('yyyy-MM-dd')))" -ForegroundColor DarkGray
+
+function Get-TestDate {
+  param([int]$DayOffset = 0)
+  $BASE_DATE.AddDays($DayOffset).ToString('yyyy-MM-dd')
+}
+
+
 # ── Helpers de body ───────────────────────────────────────────
 function New-CreateBody {
   param(
@@ -52,7 +66,7 @@ function New-CancelBody {
 
 # ── TESTE 1: setup — cria reserva ACTIVE que será cancelada ────
 Write-Host "`n--- TESTE 1: setup — cria reserva ACTIVE p/ testes seguintes ---" -ForegroundColor Cyan
-$body1 = New-CreateBody -Data '2027-04-10' -Inicio '08:00' -Fim '09:00'
+$body1 = New-CreateBody -Data (Get-TestDate 0) -Inicio '08:00' -Fim '09:00'
 $res1  = Invoke-RestMethod -Uri $URL -Method Post -Body $body1 -ContentType 'text/plain'
 $res1  | ConvertTo-Json -Depth 5
 if (-not $res1.ok) {
@@ -96,15 +110,32 @@ Write-Host "2a chamada: ok=$($res4b.ok), status=$($res4b.data.status)"
 
 # ── TESTE 5: cancel com email errado (id ACTIVE) → FORBIDDEN ────
 Write-Host "`n--- TESTE 5: cancel com email errado (deve FORBIDDEN) ---" -ForegroundColor Cyan
-# Setup: cria nova reserva ACTIVE em outra sala/dia
-$bodyS5 = New-CreateBody -Sala '605 Sala' -Data '2027-04-11' -Inicio '08:00' -Fim '09:00'
-$resS5  = Invoke-RestMethod -Uri $URL -Method Post -Body $bodyS5 -ContentType 'text/plain'
-$idAlheio = $resS5.data.id
-Write-Host "Setup: criada $idAlheio com owner.sprint3@senai.edu"
-$body5  = New-CancelBody -Id $idAlheio -Email 'outro.email@senai.edu'
-$res5   = Invoke-RestMethod -Uri $URL -Method Post -Body $body5 -ContentType 'text/plain'
-$res5   | ConvertTo-Json -Depth 5
-# Esperado: ok=false, error.code='FORBIDDEN'
+# Setup CRÍTICO: tem que criar com SUCESSO antes de testar FORBIDDEN.
+# Se colidir (improvável com data única, mas defensivo), tenta data adiante.
+$idAlheio = $null
+for ($i = 0; $i -lt 10 -and -not $idAlheio; $i++) {
+  $tryDate = Get-TestDate (1 + $i * 100)
+  $bodyS5  = New-CreateBody -Sala '605 Sala' -Data $tryDate -Inicio '08:00' -Fim '09:00'
+  $resS5   = Invoke-RestMethod -Uri $URL -Method Post -Body $bodyS5 -ContentType 'text/plain'
+  if ($resS5.ok) {
+    $idAlheio = $resS5.data.id
+    Write-Host "Setup OK: criada $idAlheio em $tryDate" -ForegroundColor DarkGray
+  } else {
+    Write-Host "Setup tentativa $($i+1) falhou ($($resS5.error.code) em $tryDate), tentando outra data..." -ForegroundColor Yellow
+  }
+}
+if (-not $idAlheio) {
+  Write-Host "TESTE 5 ABORTADO — não consegui criar reserva de setup em 10 tentativas." -ForegroundColor Red
+} else {
+  $body5 = New-CancelBody -Id $idAlheio -Email 'outro.email@senai.edu'
+  $res5  = Invoke-RestMethod -Uri $URL -Method Post -Body $body5 -ContentType 'text/plain'
+  $res5  | ConvertTo-Json -Depth 5
+  if ($res5.error.code -eq 'FORBIDDEN') {
+    Write-Host "OK — FORBIDDEN confirmado (cancel com email errado em reserva ACTIVE)" -ForegroundColor Green
+  } else {
+    Write-Host "ERRO: esperava FORBIDDEN, veio $($res5.error.code) (ok=$($res5.ok))" -ForegroundColor Red
+  }
+}
 
 
 # ── TESTE 6: cancel com id inexistente → NOT_FOUND ────
@@ -139,7 +170,7 @@ if ($found8 -and $found8.status -eq 'CANCELLED') {
 
 # ── TESTE 9: smoke createReservation legado (anti-regressao) ────
 Write-Host "`n--- TESTE 9: smoke createReservation (anti-regressao Sprint 2) ---" -ForegroundColor Cyan
-$body9 = New-CreateBody -Sala '607 Sala' -Data '2027-04-12' -Inicio '10:00' -Fim '11:00'
+$body9 = New-CreateBody -Sala '607 Sala' -Data (Get-TestDate 2) -Inicio '10:00' -Fim '11:00'
 $res9  = Invoke-RestMethod -Uri $URL -Method Post -Body $body9 -ContentType 'text/plain'
 $res9  | ConvertTo-Json -Depth 5
 # Esperado: ok=true, data.id presente
@@ -153,8 +184,8 @@ $body10 = @{
   userEmail       = 'sprint3.range@senai.edu'
   payload         = @{
     sala       = '608 Sala'
-    dataInicio = '2027-05-03'
-    dataFim    = '2027-05-10'
+    dataInicio = (Get-TestDate 30)
+    dataFim    = (Get-TestDate 37)
     diasSemana = @(2, 4)
     inicio     = '14:00'
     fim        = '15:00'
