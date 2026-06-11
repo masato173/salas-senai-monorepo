@@ -54,13 +54,12 @@ Migração incremental. **Cada item só inicia com o anterior estável; o legado
 - **F2 — Backend de reservas (Apps Script):** `doPost` + `LockService` + `checkConflicts` + idempotência; aba `Reservas`.
 - **Sprint 2 — Reserva única ponta-a-ponta:** service + hook + `ReservationForm` + página `/reservas`. Validada no navegador.
 - **Sprint 2.5 — Reserva em período** (multi-dia, mesma sala/horário; tudo-ou-nada; dias da semana escolhidos; limite 60 datas). 104/104 testes verdes, validada no navegador, 4 cleanups aplicados.
-
-**🔄 Em andamento**
-- **Sprint 3 — Visualização (calendário) + cancelar:** FullCalendar (mês/semana/dia), `listReservations`, soft delete via status='CANCELLED', validação de owner por `createdBy`.
+- **Sprint 3 — Visualização (calendário) + cancelar.** FullCalendar v6 (mês/semana/dia, locale PT-BR, timeZone America/Manaus); `listReservations` (GET) + `cancelReservation` (POST) no backend; soft delete via status='CANCELLED'; owner validation por `createdBy`; idempotência state-based. Frontend: calendário lê via `useListReservations`, refetch automático após criar, modal de detalhes, cancelamento com confirmação inline + owner-check preventivo. 145/145 vitest, 11/11 PowerShell, validado no navegador ponta-a-ponta.
 
 **⏭️ Próximo (curto prazo)**
+- **Limpeza dos dados de teste na DEV** (reservas de 2030 do `test-sprint3.ps1` + testes manuais).
 - **Sprint 4 — Editar reserva:** revalidar conflito no backend; decidir comportamento ao editar uma reserva de um período (única data ou todas).
-- Limpeza dos dados de teste na DEV.
+- **(Opcional) 4.5 — Polish visual do calendário** com `/frontend-design`, escopado ao DS existente (voz via tipografia/microinterações, não cores novas).
 
 **📦 Médio prazo**
 - Autenticação (login SENAI) + remover token do frontend (proxy / backend intermediário).
@@ -173,6 +172,7 @@ Uma tarefa só está concluída quando **TODOS** forem verdadeiros:
 - [ ] tipagem válida (sem `any` desnecessário, imports válidos)
 - [ ] validado manualmente no caminho real (navegador / `Invoke-RestMethod`)
 - [ ] backend: validação **dentro do lock**, idempotência mantida, contrato preservado
+- [ ] **endpoint novo de Apps Script: colado no editor + redeploy Nova versão + teste PowerShell verde RODANDO.** "Gerado e auditado no repo" ≠ "publicado e funcionando". (Lição Sprint 3: o frontend foi construído contra um `listReservations` que existia no `.gs` do repo mas nunca tinha sido publicado no deploy — o calendário ficou vazio até o redeploy. Ao fatiar em etapas, a etapa de frontend NÃO começa antes de a etapa de backend estar publicada e testada.)
 - [ ] decisão técnica relevante registrada na tabela de Decisões
 
 ---
@@ -227,9 +227,15 @@ POST → doPost → LockService → validate → checkConflict → saveReservati
 id | sala | data | inicio | fim | professor | turma | observacao | status | createdBy | createdAt | updatedAt | clientRequestId
 ```
 
-- Idempotência por `clientRequestId`.
-- Colunas C/D/E (data/inicio/fim) forçadas como texto via `setNumberFormat('@')` após `appendRow` — **não regredir** (Sheets converte "08:00"/"2026-12-10" em Date de 1899 ao reler, quebrando a comparação de conflito).
-- Códigos de erro padronizados: `CONFLICT`, `VALIDATION`, `LOCK_TIMEOUT`, `DUPLICATE`, `INTERNAL`.
+- Idempotência por `clientRequestId` (criação); idempotência **state-based** para cancelamento (status já CANCELLED → ok).
+- Colunas C/D/E (data/inicio/fim) forçadas como texto via `setNumberFormat('@')` após `appendRow` — **não regredir** (Sheets converte "08:00"/"2026-12-10" em Date de 1899 ao reler, quebrando a comparação de conflito). O cancel atualiza só as colunas I (status) e L (updatedAt) via `setValue`, sem tocar C/D/E.
+- Códigos de erro padronizados: `CONFLICT`, `VALIDATION`, `LOCK_TIMEOUT`, `DUPLICATE`, `INTERNAL`, `NOT_FOUND`, `FORBIDDEN`.
+- **Latência de propagação do Sheets (característica conhecida, não bug):** após uma escrita (ex.: cancelar), um `refetch` imediato pode, raramente, ler o estado anterior por milissegundos antes de propagar. O refetch automático cobre o caso normal; o botão "Atualizar" é o fallback manual. Some quando migrar pro Postgres (leitura/escrita consistente).
+
+**Endpoints (GET via `doGet`, POST via `doPost`):**
+- `doGet` sem `action` → grade legada (dashboard/iframe) — **nunca tocar**.
+- `doGet?action=listReservations[&includeCancelled=true]` → lista (ACTIVE por padrão).
+- `doPost action=createReservation | createReservationRange | cancelReservation`.
 
 ---
 
@@ -380,3 +386,10 @@ Invoke-RestMethod -Uri $URL -Method Post -Body $body -ContentType 'text/plain'
 | 2026-06 | Sem optimistic update no modo período | Datas distintas com mesma sala/horário não conflitam entre si; rollback de N inserts seria custo sem benefício |
 | 2026-06 | `anyLoading` derivado como fonte única no `ReservationForm` | Todos os usos de "form ocupado" passam por uma constante; muda só num lugar se um terceiro mutation entrar |
 | 2026-06 | Migração Sheets → Postgres: Postgres como fonte única, sem sync bidirecional | Sync bidirecional gera dupla escrita e conflitos; funcionários migrarão pro app, Sheets é descontinuado |
+| 2026-06 | Cancelar reserva = soft delete (status='CANCELLED'), não hard delete | Mantém auditoria; `listReservations` filtra ACTIVE por padrão, flag `includeCancelled=true` devolve tudo |
+| 2026-06 | Idempotência do cancel é **state-based**, não por `clientRequestId` | Se já CANCELLED, devolve `ok=true` sem owner check — operação já aplicada; `clientRequestId` só logado |
+| 2026-06 | Owner validation no cancel: backend rejeita FORBIDDEN se `userEmail` ≠ `createdBy` (col J, índice 9 do array) | Camada de proteção mesmo sem auth; frontend desabilita botão preventivamente (UX), backend é a defesa real |
+| 2026-06 | Calendário: mapper passa `start`/`end` como string ISO sem `Z`, sem construir `Date` | FullCalendar resolve via `timeZone='America/Manaus'`; evita off-by-one de fuso. Reserva 08:00 aparece 08:00 |
+| 2026-06 | Dados da reserva pro modal via `extendedProps` do evento (FullCalendar) | Evento auto-suficiente; click recupera tudo sem segunda busca. Tipo `ReservationDetails` único = sem drift |
+| 2026-06 | Calendário "burro" (recebe events/loading/error via props); `useListReservations` vive na página | Desacopla; quando backend virar Postgres, troca a fonte na página e o calendário não percebe |
+| 2026-06 | `test-sprint3.ps1` usa datas únicas por execução (base 2030 + random) | Datas fixas colidiam entre runs (CONFLICT), mascarando FORBIDDEN/smoke. Re-execução agora é idempotente |
