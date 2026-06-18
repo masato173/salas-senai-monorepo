@@ -1,0 +1,375 @@
+// ============================================================
+// COLAR ESTE CONTEÚDO NO APPS SCRIPT DA PLANILHA DEV
+//
+// SPRINT 4 — FASE C2: updateReservationGroup (editar TODAS as ACTIVE de um grupo).
+//
+// Esta fase NÃO implementa:
+//   • Remanejamento parcial (C3)
+//   • Frontend (Fase D)
+//
+// Pré-requisitos:
+//   • Fase A live (col N = groupId)
+//   • Fase C1 live (checkConflicts com excludeId; updateReservation; validateUpdatePayload)
+//
+// Os 5 blocos abaixo:
+//   • BLOCO 1: SUBSTITUI doPost (+1 rota updateReservationGroup)
+//   • BLOCO 2: SUBSTITUI checkConflicts (+2º param opcional excludeGroupId)
+//   • BLOCO 3: COLAR updateReservationGroup (NOVA)
+//   • BLOCO 4: COLAR validateGroupUpdatePayload (NOVA)
+//   • BLOCO 5: COLAR findActiveRowsByGroupId (NOVA)
+//
+// Funções compartilhadas preservadas: createReservation, createReservationRange,
+// cancelReservation, listReservations, updateReservation (C1), rowToObj,
+// findRowByIdWithIndex, validateReservationPayload, validateUpdatePayload,
+// validateCancelPayload, sanitize, toMinutes, normalizeDate, jsonResponse,
+// findRowsByClientId, helpers de range — NADA disso muda.
+//
+// REGRAS APLICADAS (alinhadas com a conversa):
+//   • Edita SÓ ACTIVE do grupo. Linhas CANCELLED ignoradas silenciosamente
+//     (findActiveRowsByGroupId já filtra).
+//   • Editáveis: sala/inicio/fim/turma/observacao. data NÃO muda — cada linha
+//     mantém a sua data própria (vem da row lida, NÃO do payload).
+//   • Imutáveis (id/data/professor/status/createdBy/createdAt/clientRequestId/
+//     groupId) lidos da row de cada linha, nunca do payload.
+//   • Owner-check itera todas as linhas. Se alguma createdBy != userEmail → FORBIDDEN
+//     (defesa-em-profundidade contra grupos com createdBy divergente).
+//   • Atomicidade tudo-ou-nada: roda checkConflicts em CADA data ANTES de escrever.
+//     Se qualquer uma conflitar → CONFLICT com details.conflicts; NADA escrito.
+//   • checkConflicts agora pula irmãs via excludeGroupId (linha do grupo não conflita
+//     com outras linhas do mesmo grupo — esperado, datas distintas).
+//   • Idempotência state-based no GRUPO: se TODAS as linhas já estão no estado
+//     novo (sala/inicio/fim/turma/observacao iguais) → no-op global, sem setValues,
+//     sem updatedAt novo. Se UMA diverge → reescreve todas (semântica
+//     "edita grupo = sincroniza grupo").
+//   • setNumberFormat('@') em C/D/E de cada linha editada (anti Sheets 1899).
+//   • clientRequestId só logado para audit (não dedupe, não sobrescrito na col M).
+//   • FLAG TURMA: mantém assimetria com create (turma exigida no group update,
+//     opcional no create). Remover a linha marcada em validateGroupUpdatePayload
+//     se reservas legacy sem turma precisarem ser editáveis.
+//
+// CONFIRMAÇÃO DE ADITIVIDADE — checkConflicts:
+//   Callers atuais e a chamada de cada um:
+//     • createReservation         → checkConflicts(sheet, payload)
+//     • createReservationRange    → checkConflicts(sheet, pCheck)
+//     • updateReservation (C1)    → checkConflicts(sheet, payload, id)
+//     • updateReservationGroup    → checkConflicts(sheet, p, undefined, groupId)
+//   Os 3 primeiros passam excludeGroupId === undefined → guard novo é falsy →
+//   bypassa → comportamento IDÊNTICO ao da C1.
+//
+// Após colar: salvar + Implantar > Gerenciar implantações > lápis
+//              > Nova versão > Implantar
+// ============================================================
+
+
+// ─────────────────────────────────────────────────────────────
+// BLOCO 1 — SUBSTITUIR a função doPost inteira
+// (única diferença: linha do case 'updateReservationGroup')
+// ─────────────────────────────────────────────────────────────
+function doPost(e) {
+  try {
+    var body = JSON.parse(e.postData.contents);
+    var action = body.action || '';
+
+    if (action === 'createReservation')       return createReservation(body);
+    if (action === 'createReservationRange')  return createReservationRange(body);
+    if (action === 'cancelReservation')       return cancelReservation(body);
+    if (action === 'updateReservation')       return updateReservation(body);
+    if (action === 'updateReservationGroup')  return updateReservationGroup(body);
+
+    return jsonResponse({ error: 'Ação desconhecida.' });
+
+  } catch (err) {
+    Logger.log('ERRO em doPost: ' + err.stack);
+    return jsonResponse({ ok: false, error: { code: 'INTERNAL', message: 'Erro interno.' } });
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// BLOCO 2 — SUBSTITUIR a função checkConflicts inteira
+// (única diferença vs C1: +2º param opcional excludeGroupId + 1 guard no loop)
+//
+// excludeGroupId === undefined → bypass → comportamento idêntico ao C1.
+// updateReservationGroup passa o groupId pra ignorar todas as linhas irmãs
+// (uma linha do grupo não pode "conflitar" com as outras linhas do mesmo grupo —
+// elas estão em datas distintas, mas o filtro de data já cuida disso; o guard
+// serve principalmente quando o cenário de redução de data fizer duas linhas
+// caírem na mesma data, tornando-as conceitualmente "a mesma reserva").
+// ─────────────────────────────────────────────────────────────
+function checkConflicts(sheet, payload, excludeId, excludeGroupId) {
+  var dados   = sheet.getDataRange().getValues();
+  var sala    = (payload.sala || '').trim();
+  var dataReq = (payload.data || '').trim();
+  var newIni  = toMinutes(payload.inicio);
+  var newFim  = toMinutes(payload.fim);
+
+  for (var i = 1; i < dados.length; i++) {
+    var row = dados[i];
+    if (excludeId && row[0] === excludeId)             continue;  // Sprint 4 Fase C1
+    if (excludeGroupId && row[13] === excludeGroupId)  continue;  // Sprint 4 Fase C2
+    if (row[8] === 'CANCELLED')                        continue;
+    if (String(row[1]).trim() !== sala)                continue;
+    if (normalizeDate(row[2])  !== dataReq)            continue;
+
+    var exIni = toMinutes(row[3]);
+    var exFim = toMinutes(row[4]);
+
+    if (isNaN(exIni) || isNaN(exFim)) continue;
+    if (newIni < exFim && newFim > exIni) return true;
+  }
+
+  return false;
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// BLOCO 3 — COLAR updateReservationGroup (NOVA)
+//
+// Fluxo:
+//   1. waitLock                                     → LOCK_TIMEOUT
+//   2. validateGroupUpdatePayload                   → VALIDATION
+//   3. findActiveRowsByGroupId                       → NOT_FOUND se vazio
+//   4. owner-check em TODAS as linhas               → FORBIDDEN
+//   5. state-based no-op                            → devolve lista sem mexer
+//   6. checkConflicts em CADA data (excludeGroupId) → coleta conflitos
+//   7. se conflitos → CONFLICT (NADA escrito)
+//   8. setValues B-N por linha + setNumberFormat C/D/E
+//   9. return { count, reservations }
+// ─────────────────────────────────────────────────────────────
+function updateReservationGroup(body) {
+  var lock = LockService.getScriptLock();
+
+  try {
+    lock.waitLock(15000);
+  } catch (e) {
+    return jsonResponse({
+      ok: false,
+      error: { code: 'LOCK_TIMEOUT', message: 'Sistema ocupado. Tente novamente.' }
+    });
+  }
+
+  try {
+    // Audit-only: clientRequestId logado, NÃO usado pra dedupe.
+    var clientId = (body && body.clientRequestId) || '';
+    Logger.log('updateReservationGroup clientRequestId=' + clientId);
+
+    var validationErr = validateGroupUpdatePayload(body);
+    if (validationErr) {
+      return jsonResponse({
+        ok: false,
+        error: { code: 'VALIDATION', message: validationErr }
+      });
+    }
+
+    var ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var sheet = ss.getSheetByName('Reservas');
+    if (!sheet) {
+      return jsonResponse({
+        ok: false,
+        error: { code: 'INTERNAL', message: 'Aba Reservas não encontrada.' }
+      });
+    }
+
+    var groupId   = String(body.payload.groupId).trim();
+    var userEmail = String(body.userEmail).trim();
+
+    var found = findActiveRowsByGroupId(sheet, groupId);
+    if (found.length === 0) {
+      return jsonResponse({
+        ok: false,
+        error: { code: 'NOT_FOUND', message: 'Nenhuma reserva ativa neste grupo.' }
+      });
+    }
+
+    // Owner-check em TODAS as linhas — defesa-em-profundidade.
+    for (var ic = 0; ic < found.length; ic++) {
+      if (found[ic].row[9] !== userEmail) {
+        return jsonResponse({
+          ok: false,
+          error: { code: 'FORBIDDEN', message: 'Apenas o criador pode editar o grupo.' }
+        });
+      }
+    }
+
+    // EDITÁVEIS: lidos SÓ do payload, trimados/sanitizados.
+    var newSala       = String(body.payload.sala       || '').trim();
+    var newInicio     = String(body.payload.inicio     || '').trim();
+    var newFim        = String(body.payload.fim        || '').trim();
+    var newTurma      = String(body.payload.turma      || '').trim();
+    var newObservacao = sanitize(body.payload.observacao || '');
+
+    // Idempotência state-based no GRUPO: se TODAS as linhas já estão no estado
+    // novo, devolve lista atual SEM tocar setValues nem updatedAt.
+    var allEqual = true;
+    for (var ie = 0; ie < found.length; ie++) {
+      var r = found[ie].row;
+      var same =
+        String(r[1]).trim()  === newSala     &&
+        String(r[3]).trim()  === newInicio   &&
+        String(r[4]).trim()  === newFim      &&
+        String(r[6]).trim()  === newTurma    &&
+        String(r[7] || '')   === newObservacao;
+      if (!same) { allEqual = false; break; }
+    }
+
+    if (allEqual) {
+      var noopList = [];
+      for (var inm = 0; inm < found.length; inm++) {
+        noopList.push(rowToObj(found[inm].row));
+      }
+      return jsonResponse({
+        ok: true,
+        data: { count: noopList.length, reservations: noopList },
+        error: null
+      });
+    }
+
+    // Revalida conflito em CADA data — tudo ou nada.
+    // Ignora todas as irmãs via excludeGroupId.
+    var conflitos = [];
+    for (var ich = 0; ich < found.length; ich++) {
+      var rowAtual = found[ich].row;
+      var pCheck = {
+        sala:   newSala,
+        data:   normalizeDate(rowAtual[2]),
+        inicio: newInicio,
+        fim:    newFim
+      };
+      if (checkConflicts(sheet, pCheck, undefined, groupId)) {
+        conflitos.push(normalizeDate(rowAtual[2]));
+      }
+    }
+
+    if (conflitos.length > 0) {
+      return jsonResponse({
+        ok: false,
+        error: {
+          code: 'CONFLICT',
+          message: 'Conflito em ' + conflitos.length + ' data(s) do grupo.',
+          details: { conflicts: conflitos }
+        }
+      });
+    }
+
+    // Escrita: pra cada linha, preserva imutáveis (incluindo data própria) e
+    // troca só os campos editáveis + updatedAt.
+    var now = new Date().toISOString();
+    var reservasAtualizadas = [];
+
+    for (var iw = 0; iw < found.length; iw++) {
+      var rowOrig = found[iw].row;
+
+      var preservedId         = rowOrig[0];   // A
+      var preservedData       = rowOrig[2];   // C  ← cada linha mantém sua data
+      var preservedProfessor  = rowOrig[5];   // F
+      var preservedStatus     = rowOrig[8];   // I  ← 'ACTIVE'
+      var preservedCreatedBy  = rowOrig[9];   // J
+      var preservedCreatedAt  = rowOrig[10];  // K
+      var preservedClientId   = rowOrig[12];  // M
+      var preservedGroupId    = rowOrig[13];  // N  ← == groupId do payload
+
+      var novaRow = [
+        preservedId,           // 0  A id            (PRESERVADO)
+        newSala,               // 1  B sala
+        preservedData,         // 2  C data          (PRESERVADO — própria da linha)
+        newInicio,             // 3  D inicio
+        newFim,                // 4  E fim
+        preservedProfessor,    // 5  F professor     (PRESERVADO)
+        newTurma,              // 6  G turma
+        newObservacao,         // 7  H observacao
+        preservedStatus,       // 8  I status        (PRESERVADO == 'ACTIVE')
+        preservedCreatedBy,    // 9  J createdBy     (PRESERVADO)
+        preservedCreatedAt,    // 10 K createdAt     (PRESERVADO)
+        now,                   // 11 L updatedAt
+        preservedClientId,     // 12 M clientReqId   (PRESERVADO — audit do create)
+        preservedGroupId       // 13 N groupId       (PRESERVADO)
+      ];
+
+      // setValues atômico em B-N (13 cols). A=id NÃO é tocado fisicamente.
+      sheet.getRange(found[iw].sheetRowIndex, 2, 1, 13).setValues([novaRow.slice(1)]);
+
+      // Reforço anti-regressão Sheets 1899 — C/D/E como texto.
+      sheet.getRange(found[iw].sheetRowIndex, 3, 1, 3).setNumberFormat('@');
+
+      reservasAtualizadas.push(rowToObj(novaRow));
+    }
+
+    return jsonResponse({
+      ok: true,
+      data: { count: reservasAtualizadas.length, reservations: reservasAtualizadas },
+      error: null
+    });
+
+  } catch (err) {
+    Logger.log('ERRO em updateReservationGroup: ' + err.stack);
+    return jsonResponse({
+      ok: false,
+      error: { code: 'INTERNAL', message: 'Erro interno ao editar grupo.' }
+    });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// BLOCO 4 — COLAR validateGroupUpdatePayload (NOVA)
+//
+// PUT-like: exige groupId/sala/inicio/fim/turma. observacao opcional.
+// NÃO valida data (cada linha mantém a sua).
+// Mesmas regras de horário do create/C1 (06:00-23:00, fim > inicio).
+// ─────────────────────────────────────────────────────────────
+function validateGroupUpdatePayload(body) {
+  if (!body || typeof body !== 'object') {
+    return 'Body inválido.';
+  }
+  if (!body.userEmail || !String(body.userEmail).trim()) {
+    return 'userEmail é obrigatório.';
+  }
+  if (!body.payload || typeof body.payload !== 'object') {
+    return 'payload é obrigatório.';
+  }
+  if (!body.payload.groupId || !String(body.payload.groupId).trim()) {
+    return 'payload.groupId é obrigatório.';
+  }
+
+  var p = body.payload;
+  if (!p.sala    || !String(p.sala).trim())    return 'Sala é obrigatória.';
+  if (!p.inicio  || !String(p.inicio).trim())  return 'Horário de início é obrigatório.';
+  if (!p.fim     || !String(p.fim).trim())     return 'Horário de fim é obrigatório.';
+
+  var ini = toMinutes(p.inicio);
+  var fim = toMinutes(p.fim);
+
+  if (isNaN(ini) || isNaN(fim))                return 'Formato de horário inválido. Use HH:MM.';
+  if (ini < 360)                               return 'Horário mínimo permitido: 06:00.';
+  if (fim > 1380)                              return 'Horário máximo permitido: 23:00.';
+  if (fim <= ini)                              return 'Horário de fim deve ser após o início.';
+
+  // FLAG TURMA — assimetria deliberada com o create. Remover esta linha se
+  // reservas legacy sem turma precisarem ser editáveis via grupo.
+  if (!p.turma   || !String(p.turma).trim())   return 'Turma é obrigatória.';
+
+  return null;
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// BLOCO 5 — COLAR findActiveRowsByGroupId (NOVA)
+//
+// Retorna [{ row, sheetRowIndex }] das linhas ACTIVE do grupo. CANCELLED do
+// mesmo grupo são filtradas aqui — nunca chegam no writer do updateGroup.
+// Similar a findRowsByClientId (codigo.gs.new), mas com filtro de status e
+// preservando o índice 1-based pra sheet.getRange.
+// ─────────────────────────────────────────────────────────────
+function findActiveRowsByGroupId(sheet, groupId) {
+  var dados = sheet.getDataRange().getValues();
+  var found = [];
+  for (var i = 1; i < dados.length; i++) {
+    if (dados[i][13] === groupId && dados[i][8] === 'ACTIVE') {
+      // dados[0] = header (sheet row 1); dados[i] → sheet row i+1.
+      found.push({ row: dados[i], sheetRowIndex: i + 1 });
+    }
+  }
+  return found;
+}
