@@ -1,6 +1,5 @@
 import React from 'react';
 import type { Reservation } from '../../types';
-import { OFFICIAL_SLOTS } from '../../validators/conflict';
 
 interface ConflictAlertProps {
   conflicts: Reservation[];
