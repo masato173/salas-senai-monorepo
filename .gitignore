@@ -2,3 +2,13 @@ node_modules/
 dist/
 *.bak
 backup-*/
+
+# Exports/logs de sessao do Claude Code
+*local-command-caveat*
+*-the-messages-below.txt
+
+# E2E - artefatos de execucao (nao versionar)
+tools/e2e/temp-skills/
+tools/e2e/*.png
+recon_*.png
+e2e_*.png
