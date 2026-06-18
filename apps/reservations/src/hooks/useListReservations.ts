@@ -112,7 +112,7 @@ export function useListReservations(
   }, []);
 
   useEffect(() => {
-    if (autoFetch) refetch();
+    if (autoFetch) void refetch();
     // Mount-only: intencionalmente sem deps de service/options.
     // Se service mudar, caller chama refetch explicitamente.
     // eslint-disable-next-line react-hooks/exhaustive-deps

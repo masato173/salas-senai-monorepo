@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { AlertCircle } from 'lucide-react';
-import type { ReservationDetails } from './reservationToEvent';
+import { isRangeReservation, type ReservationDetails } from './reservationToEvent';
 import type { BackendError } from '../../services/appsScript';
 
 // Sub-etapa 4.2a — modal apresentacional puro.
@@ -43,9 +43,10 @@ export function ReservationDetailsModal({
 
   if (!reservation) return null;
 
-  const { id, sala, data, inicio, fim, professor, observacao, createdBy } = reservation;
+  const { id, sala, data, inicio, fim, professor, observacao, createdBy, groupId } = reservation;
   const isOwner   = createdBy === currentUserEmail;
   const isLoading = cancelStatus === 'loading';
+  const isRange   = id !== undefined && isRangeReservation(id, groupId);
 
   return (
     <div
@@ -68,9 +69,12 @@ export function ReservationDetailsModal({
           display: 'flex', flexDirection: 'column', gap: '16px',
         }}
       >
-        <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--color-text)' }}>
-          Detalhes da reserva
-        </h2>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--color-text)' }}>
+            Detalhes da reserva
+          </h2>
+          {isRange && <span style={badgeStyle}>Período</span>}
+        </div>
 
         <dl style={{
           margin: 0, display: 'grid',
@@ -157,6 +161,14 @@ export function ReservationDetailsModal({
     </div>
   );
 }
+
+// Selo "Período" (Sprint 4 Fase B): mesmo padrão visual do chip "X registros"
+// em pages/Reservas/index.tsx — reusa tokens existentes, sem cor nova.
+const badgeStyle: CSSProperties = {
+  fontSize: '11px', fontWeight: 600,
+  padding: '3px 10px', borderRadius: 20,
+  background: 'var(--color-blue-l)', color: 'var(--color-blue)',
+};
 
 const dtStyle: CSSProperties = {
   fontSize: '11px', fontWeight: 600, color: 'var(--color-muted)',

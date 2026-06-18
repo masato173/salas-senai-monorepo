@@ -15,6 +15,7 @@ const SAMPLE: CreatedReservationRow = {
   createdBy:  'professor@senai.edu',
   createdAt:  '2026-06-01T12:00:00.000Z',
   updatedAt:  '2026-06-01T12:00:00.000Z',
+  groupId:    'r-1',  // Sprint 4 Fase A: única → groupId === id
 };
 
 describe('reservationToEvent()', () => {
@@ -34,6 +35,7 @@ describe('reservationToEvent()', () => {
         professor:  'Fulano',
         observacao: '',
         createdBy:  'professor@senai.edu',
+        groupId:    'r-1',
       },
     });
   });
@@ -70,13 +72,36 @@ describe('reservationToEvent()', () => {
     expect(event.end).not.toBeInstanceOf(Date);
   });
 
-  it('anexa extendedProps com os 7 campos consumidos pelo modal', () => {
+  it('anexa extendedProps com os 8 campos consumidos pelo modal (inclui groupId — Fase B)', () => {
     const event = reservationToEvent(SAMPLE);
 
     expect(event.extendedProps).toBeDefined();
     expect(Object.keys(event.extendedProps!).sort()).toEqual(
-      ['createdBy', 'data', 'fim', 'inicio', 'observacao', 'professor', 'sala'].sort(),
+      ['createdBy', 'data', 'fim', 'groupId', 'inicio', 'observacao', 'professor', 'sala'].sort(),
     );
+  });
+
+  it('extendedProps.groupId === id quando reserva unica (Sprint 4 Fase A)', () => {
+    const event = reservationToEvent(SAMPLE);
+
+    expect(event.extendedProps?.groupId).toBe('r-1');
+    expect(event.extendedProps?.groupId).toBe(event.id);
+  });
+
+  it('extendedProps.groupId compartilhado e distinto do id quando reserva de periodo', () => {
+    const event = reservationToEvent({ ...SAMPLE, id: 'r-1', groupId: 'grp-shared-xyz' });
+
+    expect(event.extendedProps?.groupId).toBe('grp-shared-xyz');
+    expect(event.extendedProps?.groupId).not.toBe(event.id);
+  });
+
+  it("extendedProps.groupId === '' quando linha legacy (sem groupId no row)", () => {
+    // Linhas pre-Fase-A nao tem coluna N — backend devolve groupId undefined.
+    // Mapper aplica ?? '' pra normalizar pro modal.
+    const legacy = { ...SAMPLE, groupId: undefined } as unknown as CreatedReservationRow;
+    const event  = reservationToEvent(legacy);
+
+    expect(event.extendedProps?.groupId).toBe('');
   });
 
   it('preserva createdBy em extendedProps (owner-check antecipado em 4.2b)', () => {

@@ -40,7 +40,7 @@ export default function ReservasPage() {
     if (res.ok) {
       setSelectedReservation(null);
       cancelMutation.reset();
-      list.refetch();
+      void list.refetch();
     }
     // Erro: cancelMutation.error/status já preenchidos pelo hook; modal observa via props.
   };

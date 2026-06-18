@@ -3,6 +3,7 @@ import type { CreatedReservationRow } from '../../services/appsScript';
 
 // Shape consumido pelo ReservationDetailsModal (4.2a) e pelo cancel (4.2b).
 // Espelha exatamente os campos populados em extendedProps + id do evento.
+// Sprint 4 Fase B: groupId obrigatório (mapper sempre injeta — '' pra linhas legacy).
 export interface ReservationDetails {
   id?:        string;
   sala:       string;
@@ -12,6 +13,7 @@ export interface ReservationDetails {
   professor:  string;
   observacao: string;
   createdBy:  string;
+  groupId:    string;
 }
 
 // Mapper puro: CreatedReservationRow → EventInput.
@@ -34,6 +36,24 @@ export function reservationToEvent(r: CreatedReservationRow): EventInput {
       professor:  r.professor,
       observacao: r.observacao,
       createdBy:  r.createdBy,
+      groupId:    r.groupId ?? '',
     },
   };
+}
+
+// Regra de domínio (Sprint 4 Fase B): classifica uma reserva como "de período"
+// (parte de um grupo de N reservas multi-dia) ou "única".
+//
+// Backend (Fase A):
+//   • createReservation (única)       → groupId === id
+//   • createReservationRange (período) → groupId === UUID compartilhado, !== id
+//   • Linhas pré-Fase-A (legacy)       → groupId === ''
+//
+// A função é o ponto único de verdade dessa distinção. O modal usa pra renderizar
+// o selo "Período"; a Fase D (editar) vai reusar pra decidir "editar única vs grupo".
+//
+// Retorna true APENAS no caso período. Legacy retorna false — sem groupId não dá
+// pra afirmar "é grupo"; assume-se única conservadoramente.
+export function isRangeReservation(id: string, groupId: string): boolean {
+  return groupId !== '' && groupId !== id;
 }
