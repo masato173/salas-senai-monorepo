@@ -43,6 +43,21 @@ Comentário em teste que descreve contrato de backend **documenta**. Se o `como`
 
 Quando dois conflitam, o de cima ganha. Sempre.
 
+## Calibração de esforço (Regra Zero)
+
+Antes de começar qualquer tarefa de código, classifique e declare o nível na primeira linha da resposta. O rigor escala com o nível.
+
+- TRIVIAL — renomear, ajuste de texto/formatação, mudança óbvia e isolada. → Implementação + revisão curta. Diga em uma linha por que é trivial.
+- PADRÃO — nova função, bug localizado, ajuste em um módulo. → Fluxo conciso (Diagnóstico → Decisão → Impacto → Implementação → Validação).
+- CRÍTICA — contrato de API, schema/dados, autenticação, lógica de conflito/concorrência, ou algo que afete produção ou várias camadas. → Rigor máximo E PARA para confirmação antes de implementar.
+
+Exemplos neste projeto:
+- TRIVIAL: renomear variável local, corrigir typo, ajustar mensagem.
+- PADRÃO: novo hook seguindo o padrão, novo teste, ajuste de UI isolado.
+- CRÍTICA: tocar checkConflicts, createReservation, schema da aba Reservas, qualquer endpoint Apps Script em produção, política de retry, owner validation.
+
+Se pular uma etapa, é pela Regra Zero — diga qual e por quê.
+
 ## Comunicação
 
 - **Idioma**: PT-BR informal
@@ -76,6 +91,7 @@ Antes de qualquer modificação:
 5. **Rollback plan** — como desfazer se der ruim
 6. **Observability** — logs novos? métricas? como diagnosticar produção?
 7. **Tests first quando aplicável** — RED → GREEN → REFACTOR
+8. **Autocrítica** — revisar o próprio plano como sênior cético antes de implementar: falha de lógica, caso não tratado, requisito esquecido, regressão, acoplamento. Corrigir aqui. Se nada mudou, dizer "plano mantido" e o motivo. Obrigatória em CRÍTICA, recomendada em PADRÃO.
 
 Quando em dúvida: PARE. Explique trade-offs. Nunca assuma silenciosamente.
 
