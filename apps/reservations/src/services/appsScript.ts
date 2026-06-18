@@ -76,8 +76,10 @@ export interface CreateReservationRangeRequest {
   clientRequestId?: string;
 }
 
-// Espelha rowToObj() do backend (codigo.gs) — 12 campos, todos strings.
+// Espelha rowToObj() do backend (codigo.gs) — 12 campos base + groupId (opcional).
 // clientRequestId é metadado de linha (col M), não exposto no retorno.
+// groupId (col N, Sprint 4 Fase A): única → groupId === id; período → UUID único compartilhado
+// por todas as linhas. Opcional para reservas legacy criadas antes da Fase A (devolve '').
 export interface CreatedReservationRow {
   id:         string;
   sala:       string;
@@ -91,6 +93,7 @@ export interface CreatedReservationRow {
   createdBy:  string;  // userEmail
   createdAt:  string;  // ISO
   updatedAt:  string;  // ISO
+  groupId?:   string;  // Sprint 4 Fase A — vazio para reservas legacy
 }
 
 export type CreateReservationRangeResponse = BackendEnvelope<{

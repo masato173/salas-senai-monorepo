@@ -1,0 +1,259 @@
+// ============================================================
+// COLAR ESTE CONTEÚDO NO APPS SCRIPT DA PLANILHA DEV
+//
+// SPRINT 4 — FASE A: groupId no schema + criação.
+//
+// Esta fase NÃO implementa edição. Só:
+//   • Adiciona escrita de groupId na coluna N (1-based 14, 0-based idx 13).
+//   • createReservation (única): groupId = próprio id da reserva.
+//   • createReservationRange (período): 1 UUID compartilhado por todas as linhas.
+//   • rowToObj passa a expor groupId tolerante (row[13] || '').
+//
+// Os 3 blocos abaixo SUBSTITUEM funções existentes. Mudança aditiva: a única
+// diferença em cada uma é +1 elemento no array `row` (createReservation /
+// createReservationRange) ou +1 campo no objeto retornado (rowToObj). Lock,
+// validate, checkConflicts, setNumberFormat('@') em C/D/E, idempotência, owner
+// check, status, soft delete — TUDO preservado.
+//
+// PRÉ-CONDIÇÃO MANUAL (você faz UMA vez na DEV antes de testar):
+//   1) Aba "Reservas" → célula N1 → digitar texto: groupId
+//   2) Salvar.
+// O script NÃO cria nem valida esse cabeçalho. `appendRow` funciona sem ele,
+// mas o header torna a planilha legível pra humanos.
+//
+// COLUNA N (groupId) — formato:
+//   NÃO precisa de setNumberFormat('@'). groupId é UUID hex (mesmo formato do
+//   id da col A, que nunca precisou de @). Sheets não converte UUID em Date.
+//   O @ continua aplicado em C/D/E para "08:00"/"2026-12-10".
+//
+// COMPATIBILIDADE LEGACY:
+//   Linhas pré-Fase-A têm 13 elementos (idx 0-12). rowToObj retorna
+//   row[13] || '' — `undefined || ''` = '' — sem quebrar.
+//
+// Após colar: salvar + Implantar > Gerenciar implantações > lápis
+//              > Nova versão > Implantar
+// ============================================================
+
+
+// ─────────────────────────────────────────────────────────────
+// BLOCO 1 — SUBSTITUIR a função createReservation inteira
+// (única diferença: +1 elemento no array `row` no fim → `id` como groupId)
+// ─────────────────────────────────────────────────────────────
+function createReservation(body) {
+  var lock = LockService.getScriptLock();
+
+  try {
+    lock.waitLock(15000);
+  } catch (e) {
+    return jsonResponse({ ok: false, error: { code: 'LOCK_TIMEOUT', message: 'Sistema ocupado. Tente novamente.' } });
+  }
+
+  try {
+    var payload = body.payload || {};
+
+    // Validação básica
+    var erros = validateReservationPayload(payload);
+    if (erros) {
+      return jsonResponse({ ok: false, error: { code: 'VALIDATION', message: erros } });
+    }
+
+    var ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var sheet = ss.getSheetByName('Reservas');
+
+    if (!sheet) {
+      return jsonResponse({ ok: false, error: { code: 'INTERNAL', message: 'Aba Reservas não encontrada.' } });
+    }
+
+    // Idempotência — evita duplicata por retry
+    var clientId = body.clientRequestId || '';
+    if (clientId) {
+      var dados = sheet.getDataRange().getValues();
+      for (var i = 1; i < dados.length; i++) {
+        if (dados[i][12] === clientId) {
+          return jsonResponse({ ok: true, data: rowToObj(dados[i]), error: null });
+        }
+      }
+    }
+
+    // Verifica conflito
+    var conflito = checkConflicts(sheet, payload);
+    if (conflito) {
+      return jsonResponse({ ok: false, error: { code: 'CONFLICT', message: 'Sala já reservada neste horário.' } });
+    }
+
+    // Salva
+    var now = new Date().toISOString();
+    var id  = Utilities.getUuid();
+    var row = [
+      id,                                  // 0  A  id
+      (payload.sala        || '').trim(),  // 1  B  sala
+      (payload.data        || '').trim(),  // 2  C  data
+      (payload.inicio      || '').trim(),  // 3  D  inicio
+      (payload.fim         || '').trim(),  // 4  E  fim
+      (payload.professor   || '').trim(),  // 5  F  professor
+      (payload.turma       || '').trim(),  // 6  G  turma
+      sanitize(payload.observacao || ''),  // 7  H  observacao
+      'ACTIVE',                            // 8  I  status
+      (body.userEmail      || '').trim(),  // 9  J  createdBy
+      now,                                 // 10 K  createdAt
+      now,                                 // 11 L  updatedAt
+      clientId,                            // 12 M  clientRequestId
+      id                                   // 13 N  groupId — única usa o próprio id
+    ];
+
+    sheet.appendRow(row);
+
+    var lastrow = sheet.getLastRow();
+    sheet.getRange(lastrow, 3,1,3).setNumberFormat('@');
+
+    return jsonResponse({ ok: true, data: rowToObj(row), error: null });
+
+  } catch (err) {
+    Logger.log('ERRO em createReservation: ' + err.stack);
+    return jsonResponse({ ok: false, error: { code: 'INTERNAL', message: 'Erro interno ao salvar.' } });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// BLOCO 2 — SUBSTITUIR a função createReservationRange inteira
+// (únicas diferenças:
+//    +1 linha gerando `var groupId = Utilities.getUuid()` ANTES do loop
+//    +1 elemento no array `row` dentro do loop → `groupId` compartilhado)
+// ─────────────────────────────────────────────────────────────
+function createReservationRange(body) {
+  var lock = LockService.getScriptLock();
+
+  try {
+    lock.waitLock(15000);
+  } catch (e) {
+    return jsonResponse({ ok: false, error: { code: 'LOCK_TIMEOUT', message: 'Sistema ocupado. Tente novamente.' } });
+  }
+
+  try {
+    var payload  = body.payload || {};
+    var clientId = body.clientRequestId || '';
+
+    // 1) Valida campos específicos do range (dataInicio/dataFim/diasSemana)
+    var rangeErr = validateRangeRequest(payload);
+    if (rangeErr) {
+      return jsonResponse({ ok: false, error: { code: 'VALIDATION', message: rangeErr } });
+    }
+
+    // 2) Expande as datas
+    var datas = expandDateRange(payload.dataInicio, payload.dataFim, payload.diasSemana);
+    if (datas.length === 0) {
+      return jsonResponse({ ok: false, error: { code: 'VALIDATION', message: 'Nenhuma data válida no período para os dias selecionados.' } });
+    }
+    if (datas.length > 60) {
+      return jsonResponse({ ok: false, error: { code: 'VALIDATION', message: 'Máximo 60 reservas por requisição.' } });
+    }
+
+    // 3) Valida horário/sala/etc UMA vez (mesmo payload pra todas as datas)
+    var basePayload = clonePayloadForDate(payload, datas[0]);
+    var erros = validateReservationPayload(basePayload);
+    if (erros) {
+      return jsonResponse({ ok: false, error: { code: 'VALIDATION', message: erros } });
+    }
+
+    var ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var sheet = ss.getSheetByName('Reservas');
+    if (!sheet) {
+      return jsonResponse({ ok: false, error: { code: 'INTERNAL', message: 'Aba Reservas não encontrada.' } });
+    }
+
+    // 4) Idempotência — se clientId já existe, devolve todas as rows desse clientId
+    if (clientId) {
+      var existentes = findRowsByClientId(sheet, clientId);
+      if (existentes.length > 0) {
+        return jsonResponse({
+          ok: true,
+          data: { count: existentes.length, reservations: existentes },
+          error: null
+        });
+      }
+    }
+
+    // 5) Checa conflito em CADA data — tudo ou nada
+    var conflitos = [];
+    for (var i = 0; i < datas.length; i++) {
+      var pCheck = clonePayloadForDate(payload, datas[i]);
+      if (checkConflicts(sheet, pCheck)) {
+        conflitos.push(datas[i]);
+      }
+    }
+    if (conflitos.length > 0) {
+      return jsonResponse({
+        ok: false,
+        error: {
+          code: 'CONFLICT',
+          message: 'Conflito em ' + conflitos.length + ' data(s).',
+          details: { conflicts: conflitos }
+        }
+      });
+    }
+
+    // 6) Sem conflito → grava todas
+    // groupId é gerado UMA vez antes do loop e compartilhado por todas as linhas
+    // do período. Permite, na Fase B/C, editar/cancelar todas de uma vez.
+    var now     = new Date().toISOString();
+    var groupId = Utilities.getUuid();
+    var reservasCriadas = [];
+
+    for (var j = 0; j < datas.length; j++) {
+      var id  = Utilities.getUuid();
+      var row = [
+        id,                                  // 0  A  id (por reserva)
+        (payload.sala       || '').trim(),   // 1  B  sala
+        datas[j],                            // 2  C  data
+        (payload.inicio     || '').trim(),   // 3  D  inicio
+        (payload.fim        || '').trim(),   // 4  E  fim
+        (payload.professor  || '').trim(),   // 5  F  professor
+        (payload.turma      || '').trim(),   // 6  G  turma
+        sanitize(payload.observacao || ''),  // 7  H  observacao
+        'ACTIVE',                            // 8  I  status
+        (body.userEmail     || '').trim(),   // 9  J  createdBy
+        now,                                 // 10 K  createdAt
+        now,                                 // 11 L  updatedAt
+        clientId,                            // 12 M  clientRequestId
+        groupId                              // 13 N  groupId — compartilhado
+      ];
+
+      sheet.appendRow(row);
+      var lastrow = sheet.getLastRow();
+      sheet.getRange(lastrow, 3, 1, 3).setNumberFormat('@');  // força C/D/E como texto
+      reservasCriadas.push(rowToObj(row));
+    }
+
+    return jsonResponse({
+      ok: true,
+      data: { count: reservasCriadas.length, reservations: reservasCriadas },
+      error: null
+    });
+
+  } catch (err) {
+    Logger.log('ERRO em createReservationRange: ' + err.stack);
+    return jsonResponse({ ok: false, error: { code: 'INTERNAL', message: 'Erro interno ao salvar.' } });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// BLOCO 3 — SUBSTITUIR a função rowToObj inteira
+// (única diferença: +1 campo groupId tolerante a ausência)
+// ─────────────────────────────────────────────────────────────
+function rowToObj(row) {
+  return {
+    id:         row[0],  sala:       row[1],
+    data:       row[2],  inicio:     row[3],
+    fim:        row[4],  professor:  row[5],
+    turma:      row[6],  observacao: row[7],
+    status:     row[8],  createdBy:  row[9],
+    createdAt:  row[10], updatedAt:  row[11],
+    groupId:    row[13] || ''  // tolerante: '' para linhas legacy sem col N
+  };
+}
