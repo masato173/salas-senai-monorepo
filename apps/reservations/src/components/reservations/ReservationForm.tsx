@@ -6,30 +6,55 @@ import { ConflictAlert } from '../ui/ConflictAlert';
 import { useReservationStore } from '../../store/reservationStore';
 import { useCreateReservation } from '../../hooks/useCreateReservation';
 import { useCreateReservationRange } from '../../hooks/useCreateReservationRange';
+import { useUpdateReservation } from '../../hooks/useUpdateReservation';
+import { useUpdateReservationGroup } from '../../hooks/useUpdateReservationGroup';
 import { expandDateRange } from '../../utils/dateRange';
+import { buildUpdatePayload } from './buildUpdatePayload';
 import type {
   CreateReservationRequest,
   CreateReservationResponse,
   CreateReservationRangeRequest,
   CreateReservationRangeResponse,
+  UpdateReservationRequest,
+  UpdateReservationResponse,
+  UpdateReservationGroupRequest,
+  UpdateReservationGroupResponse,
 } from '../../services/appsScript';
 import type { CreateReservationInput, Turno, Reservation } from '../../types';
 
-interface ReservationCreator {
+interface ReservationFormService {
   createReservation:      (req: CreateReservationRequest)      => Promise<CreateReservationResponse>;
   createReservationRange: (req: CreateReservationRangeRequest) => Promise<CreateReservationRangeResponse>;
+  updateReservation:      (req: UpdateReservationRequest)      => Promise<UpdateReservationResponse>;
+  updateReservationGroup: (req: UpdateReservationGroupRequest) => Promise<UpdateReservationGroupResponse>;
 }
 
+// Sprint 4 D2 — valores iniciais pro modo edit. D3 (modal) preenche.
+export interface ReservationFormInitialValues {
+  id?:         string;     // obrigatorio se mode==='edit-single'
+  groupId?:    string;     // obrigatorio se mode==='edit-group'
+  data?:       string;     // YYYY-MM-DD (usado em edit-single)
+  inicio:      string;     // HH:MM
+  fim:         string;     // HH:MM
+  observacao:  string;
+  groupDates?: string[];   // obrigatorio se mode==='edit-group' — display read-only + validacao de horario
+}
+
+export type ReservationFormMode = 'create' | 'edit-single' | 'edit-group';
+
 interface ReservationFormProps {
-  roomId:     string;
-  salaName:   string; // nome real da sala que o backend espera ("603 Sala")
-  userId:     string;
-  userEmail:  string;
-  professor:  string;
-  turma:      string;
-  service:    ReservationCreator;
-  onSuccess?: (reservation?: Reservation) => void;
-  onCancel?:  () => void;
+  roomId:         string;
+  salaName:       string; // nome real da sala que o backend espera ("603 Sala")
+  userId:         string;
+  userEmail:      string;
+  professor:      string;
+  turma:          string;
+  service:        ReservationFormService;
+  onSuccess?:     (reservation?: Reservation) => void;
+  onCancel?:      () => void;
+  // Sprint 4 D2 — modo edit. Default 'create' preserva chamadas existentes.
+  mode?:          ReservationFormMode;
+  initialValues?: ReservationFormInitialValues;
 }
 
 // Turno inferido automaticamente a partir do horário de início
@@ -43,13 +68,29 @@ function inferTurno(start: string): Turno {
 export function ReservationForm({
   roomId, salaName, userId, userEmail, professor, turma,
   service, onSuccess, onCancel,
+  mode = 'create',
+  initialValues,
 }: ReservationFormProps) {
   const { addReservation, removeReservation, reservations } = useReservationStore();
-  const mutation      = useCreateReservation(useMemo(() => service, [service]));
-  const rangeMutation = useCreateReservationRange(useMemo(() => service, [service]));
+  const mutation            = useCreateReservation(useMemo(() => service, [service]));
+  const rangeMutation       = useCreateReservationRange(useMemo(() => service, [service]));
+  const updateMutation      = useUpdateReservation(useMemo(() => service, [service]));
+  const updateGroupMutation = useUpdateReservationGroup(useMemo(() => service, [service]));
 
-  const [mode, setMode] = useState<'single' | 'range'>('single');
-  const [form, setForm] = useState({ date: '', start: '', end: '', reason: '' });
+  const isEditing   = mode === 'edit-single' || mode === 'edit-group';
+  const isEditGroup = mode === 'edit-group';
+
+  // Estado interno renomeado de 'mode' → 'period' na Fase D2 pra nao colidir
+  // com a prop publica 'mode'. No edit, period eh forcado 'single' (ModeToggle escondido).
+  const [period, setPeriod] = useState<'single' | 'range'>('single');
+
+  const [form, setForm] = useState({
+    date:   initialValues?.data       ?? '',
+    start:  initialValues?.inicio     ?? '',
+    end:    initialValues?.fim        ?? '',
+    reason: initialValues?.observacao ?? '',
+  });
+
   const [dateStart, setDateStart] = useState('');
   const [dateEnd,   setDateEnd]   = useState('');
   const [weekdays,  setWeekdays]  = useState<number[]>([]); // 0=dom..6=sab — mesma convenção do backend
@@ -64,15 +105,21 @@ export function ReservationForm({
     return expandDateRange(dateStart, dateEnd, weekdays);
   }, [dateStart, dateEnd, weekdays]);
 
-  const anyLoading = mutation.status === 'loading' || rangeMutation.status === 'loading';
+  const anyLoading =
+    mutation.status === 'loading' ||
+    rangeMutation.status === 'loading' ||
+    updateMutation.status === 'loading' ||
+    updateGroupMutation.status === 'loading';
 
   const rangeCount      = expandedDates.length;
   const rangeCountValid = rangeCount >= 1 && rangeCount <= 60;
   const submitLabel = anyLoading
     ? 'Enviando…'
-    : mode === 'range'
-      ? (rangeCountValid ? `Solicitar ${rangeCount} reserva${rangeCount === 1 ? '' : 's'}` : 'Solicitar reservas')
-      : 'Solicitar reserva';
+    : isEditing
+      ? 'Salvar alterações'
+      : period === 'range'
+        ? (rangeCountValid ? `Solicitar ${rangeCount} reserva${rangeCount === 1 ? '' : 's'}` : 'Solicitar reservas')
+        : 'Solicitar reserva';
 
   // Validação inline em tempo real — só mostra erro depois de sair do campo (blur)
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -83,12 +130,13 @@ export function ReservationForm({
     return r.ok ? null : r.error ?? null;
   }, [touched, form]);
 
-  const handleSubmit = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrors([]);
-    setConflicts([]);
-
-    if (mode === 'range') {
+  // ─────────────────────────────────────────────────────────────
+  // handleSubmitCreate — Sprint 4 D2: ramo CREATE movido LITERAL do submit
+  // anterior. Única alteração textual: estado interno `mode` foi renomeado
+  // pra `period` (validado por grep). Lógica e comportamento idênticos.
+  // ─────────────────────────────────────────────────────────────
+  const handleSubmitCreate = useCallback(async () => {
+    if (period === 'range') {
       // ── caminho NOVO: reserva em período (sem optimistic update) ──
       if (!dateStart || !dateEnd) {
         setErrors(['Preencha as datas de início e fim do período.']);
@@ -233,10 +281,129 @@ export function ReservationForm({
       setErrors(['Falha desconhecida ao criar reserva.']);
     }
   }, [
-    mode, form, roomId, userId, userEmail, salaName, professor, turma,
+    period, form, roomId, userId, userEmail, salaName, professor, turma,
     dateStart, dateEnd, weekdays, expandedDates,
     addReservation, removeReservation, mutation, rangeMutation, reservations, onSuccess,
   ]);
+
+  // ─────────────────────────────────────────────────────────────
+  // handleSubmitEditSingle — Sprint 4 D2 (C1).
+  // Payload PUT-like com data. Guard de id ausente via buildUpdatePayload.
+  // Sem optimistic, sem tela de sucesso ✓ — chama onSuccess direto.
+  // ─────────────────────────────────────────────────────────────
+  const handleSubmitEditSingle = useCallback(async () => {
+    const timeResult = validateTimeInput({ start: form.start, end: form.end, date: form.date });
+    if (!timeResult.ok) {
+      setErrors([timeResult.error!]);
+      return;
+    }
+
+    const built = buildUpdatePayload({
+      mode: 'edit-single',
+      form,
+      initialValues: initialValues ?? {},
+      salaName,
+      turma,
+    });
+    if (!built.ok) {
+      setErrors([built.error]);
+      return;
+    }
+    if (built.mode !== 'edit-single') {
+      // Defesa estática: builder garante a discriminante, mas o narrow ajuda o TS.
+      setErrors(['Erro interno ao montar payload de edição.']);
+      return;
+    }
+
+    try {
+      const res = await updateMutation.mutate({
+        userEmail,
+        payload: built.payload,
+      });
+
+      if (res.ok) {
+        onSuccess?.();
+        return;
+      }
+
+      // Backend devolve mensagens claras pra CONFLICT, FORBIDDEN, NOT_FOUND, VALIDATION.
+      setErrors([res.error?.message ?? 'Falha desconhecida ao salvar alterações.']);
+    } catch {
+      setErrors(['Falha de conexão. Tente novamente.']);
+    }
+  }, [form, initialValues, salaName, turma, userEmail, updateMutation, onSuccess]);
+
+  // ─────────────────────────────────────────────────────────────
+  // handleSubmitEditGroup — Sprint 4 D2 (C2). Payload SEM data.
+  // Guards: groupId via buildUpdatePayload; groupDates inline (necessario
+  // pra validar horario via primeira data do grupo).
+  // ─────────────────────────────────────────────────────────────
+  const handleSubmitEditGroup = useCallback(async () => {
+    if (!initialValues?.groupDates || initialValues.groupDates.length === 0) {
+      setErrors(['Inconsistência interna: datas do grupo ausentes.']);
+      return;
+    }
+
+    // Valida horario usando primeira data do grupo (validateTimeInput exige `date`).
+    const referenceDate = initialValues.groupDates[0];
+    const timeResult = validateTimeInput({ start: form.start, end: form.end, date: referenceDate });
+    if (!timeResult.ok) {
+      setErrors([timeResult.error!]);
+      return;
+    }
+
+    const built = buildUpdatePayload({
+      mode: 'edit-group',
+      form,
+      initialValues,
+      salaName,
+      turma,
+    });
+    if (!built.ok) {
+      setErrors([built.error]);
+      return;
+    }
+    if (built.mode !== 'edit-group') {
+      setErrors(['Erro interno ao montar payload de edição.']);
+      return;
+    }
+
+    try {
+      const res = await updateGroupMutation.mutate({
+        userEmail,
+        payload: built.payload,
+      });
+
+      if (res.ok) {
+        onSuccess?.();
+        return;
+      }
+
+      if (res.error?.code === 'CONFLICT') {
+        const conflictDates = res.error.details?.conflicts ?? [];
+        const shown = conflictDates.slice(0, 10).map(isoToBR).join(', ');
+        const more = conflictDates.length - 10;
+        const list = shown + (more > 0 ? ` (+${more} mais)` : '');
+        setErrors([`Conflito em ${conflictDates.length} data(s): ${list}`]);
+        return;
+      }
+
+      setErrors([res.error?.message ?? 'Falha desconhecida ao salvar alterações no grupo.']);
+    } catch {
+      setErrors(['Falha de conexão. Tente novamente.']);
+    }
+  }, [form, initialValues, salaName, turma, userEmail, updateGroupMutation, onSuccess]);
+
+  // Despachante.
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrors([]);
+    setConflicts([]);
+
+    if (mode === 'edit-single') return handleSubmitEditSingle();
+    if (mode === 'edit-group')  return handleSubmitEditGroup();
+    return handleSubmitCreate();
+  }, [mode, handleSubmitCreate, handleSubmitEditSingle, handleSubmitEditGroup]);
 
   if (submitted) {
     return (
@@ -261,13 +428,15 @@ export function ReservationForm({
   return (
     <form onSubmit={handleSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-      <ModeToggle
-        mode={mode}
-        onChange={(m) => { setMode(m); setErrors([]); setConflicts([]); }}
-        disabled={anyLoading}
-      />
+      {!isEditing && (
+        <ModeToggle
+          period={period}
+          onChange={(m) => { setPeriod(m); setErrors([]); setConflicts([]); }}
+          disabled={anyLoading}
+        />
+      )}
 
-      <ConflictAlert conflicts={conflicts} onDismiss={() => setConflicts([])} />
+      {!isEditing && <ConflictAlert conflicts={conflicts} onDismiss={() => setConflicts([])} />}
 
       {errors.length > 0 && (
         <div role="alert" style={{
@@ -282,8 +451,29 @@ export function ReservationForm({
         </div>
       )}
 
-      {/* Data — modo único OU período */}
-      {mode === 'single' && (
+      {/* Datas do grupo — read-only no edit-group (informativo) */}
+      {isEditGroup && (
+        <Field label="Datas do grupo (não editável)" htmlFor="res-group-dates">
+          <div
+            id="res-group-dates"
+            style={{
+              fontSize: 12, padding: '8px 12px',
+              borderRadius: 'var(--radius-s)',
+              background: 'var(--color-bg)',
+              border: '1px dashed var(--color-border)',
+              color: 'var(--color-muted)',
+            }}
+          >
+            {initialValues?.groupDates && initialValues.groupDates.length > 0
+              ? initialValues.groupDates.slice(0, 10).map(isoToBR).join(', ') +
+                (initialValues.groupDates.length > 10 ? ` (+${initialValues.groupDates.length - 10} mais)` : '')
+              : '—'}
+          </div>
+        </Field>
+      )}
+
+      {/* Data — modo único (create OU edit-single) */}
+      {!isEditGroup && period === 'single' && (
         <Field label="Data *" htmlFor="res-date">
           <input
             id="res-date"
@@ -298,7 +488,8 @@ export function ReservationForm({
         </Field>
       )}
 
-      {mode === 'range' && (
+      {/* Período — só no create */}
+      {mode === 'create' && period === 'range' && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <Field label="Data início *" htmlFor="res-date-start">
@@ -552,9 +743,9 @@ function isoToBR(iso: string): string {
 }
 
 function ModeToggle({
-  mode, onChange, disabled,
+  period, onChange, disabled,
 }: {
-  mode:     'single' | 'range';
+  period:   'single' | 'range';
   onChange: (m: 'single' | 'range') => void;
   disabled: boolean;
 }) {
@@ -566,7 +757,7 @@ function ModeToggle({
       borderRadius: 'var(--radius-s)',
     }}>
       {(['single', 'range'] as const).map(opt => {
-        const active = mode === opt;
+        const active = period === opt;
         return (
           <button
             key={opt}
