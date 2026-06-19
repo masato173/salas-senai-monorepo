@@ -127,12 +127,58 @@ export interface CancelReservationRequest {
 
 export type CancelReservationResponse = BackendEnvelope<CreatedReservationRow>;
 
+// ── Sprint 4 C1 / C2: updateReservation + updateReservationGroup ──
+
+export interface UpdateReservationPayload {
+  id:         string;
+  sala:       string;
+  data:       string;  // YYYY-MM-DD
+  inicio:     string;  // HH:MM
+  fim:        string;  // HH:MM
+  turma:      string;
+  observacao: string;
+}
+
+export interface UpdateReservationRequest {
+  userEmail:        string;
+  payload:          UpdateReservationPayload;
+  clientRequestId?: string;
+}
+
+export type UpdateReservationResponse = BackendEnvelope<CreatedReservationRow>;
+
+// updateReservationGroup (Sprint 4 C2) — edita TODAS as ACTIVE de um grupo.
+// NÃO inclui `data` — cada linha mantém a sua data própria.
+export interface UpdateReservationGroupPayload {
+  groupId:    string;
+  sala:       string;
+  inicio:     string;  // HH:MM
+  fim:        string;  // HH:MM
+  turma:      string;
+  observacao: string;
+}
+
+export interface UpdateReservationGroupRequest {
+  userEmail:        string;
+  payload:          UpdateReservationGroupPayload;
+  clientRequestId?: string;
+}
+
+// TODO(tech-debt): mesmo shape de CreateReservationRangeResponse e
+// ListReservationsResponse. Unificar em cleanup futuro.
+export type UpdateReservationGroupResponse = BackendEnvelope<{
+  count:        number;
+  reservations: CreatedReservationRow[];
+}>;
+
 interface AppsScriptService {
   fetchSchedule:          () => Promise<ScheduleResult>;
   createReservation:      (req: CreateReservationRequest)      => Promise<CreateReservationResponse>;
   createReservationRange: (req: CreateReservationRangeRequest) => Promise<CreateReservationRangeResponse>;
   listReservations:       (options?: ListReservationsOptions)  => Promise<ListReservationsResponse>;
   cancelReservation:      (req: CancelReservationRequest)      => Promise<CancelReservationResponse>;
+  updateReservation:      (req: UpdateReservationRequest)      => Promise<UpdateReservationResponse>;
+  updateReservationGroup: (req: UpdateReservationGroupRequest) => Promise<UpdateReservationGroupResponse>;
 }
 
 /**
@@ -233,6 +279,40 @@ export function createAppsScriptService(config: AppsScriptConfig): AppsScriptSer
       });
 
       return (await res.json()) as CancelReservationResponse;
+    },
+
+    async updateReservation(req): Promise<UpdateReservationResponse> {
+      const body = JSON.stringify({
+        action:          'updateReservation',
+        clientRequestId: req.clientRequestId ?? crypto.randomUUID(),
+        userEmail:       req.userEmail,
+        payload:         req.payload,
+      });
+
+      const res = await fetch(config.url, {
+        method:  'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body,
+      });
+
+      return (await res.json()) as UpdateReservationResponse;
+    },
+
+    async updateReservationGroup(req): Promise<UpdateReservationGroupResponse> {
+      const body = JSON.stringify({
+        action:          'updateReservationGroup',
+        clientRequestId: req.clientRequestId ?? crypto.randomUUID(),
+        userEmail:       req.userEmail,
+        payload:         req.payload,
+      });
+
+      const res = await fetch(config.url, {
+        method:  'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body,
+      });
+
+      return (await res.json()) as UpdateReservationGroupResponse;
     },
   };
 }
