@@ -19,14 +19,14 @@ export function detectConflicts(
   excludeId?: string,
 ): Reservation[] {
   return existing.filter(r => {
-    if (r.id === excludeId)                          return false;
-    if (r.roomId !== candidate.roomId)               return false;
-    if (r.date   !== candidate.date)                 return false;
+    if (r.id === excludeId) return false;
+    if (r.roomId !== candidate.roomId) return false;
+    if (r.date !== candidate.date) return false;
     if (!(ACTIVE_STATUSES as readonly string[]).includes(r.status)) return false;
 
     return hasConflict(
       { start: candidate.start, end: candidate.end },
-      { start: r.start,         end: r.end         },
+      { start: r.start, end: r.end },
     );
   });
 }
@@ -35,6 +35,6 @@ export function detectConflicts(
  * Hook React para uso em componentes.
  * A lógica pura está em detectConflicts — testável sem React.
  */
-export function useConflict() {
+export function useConflict(): { detectConflicts: typeof detectConflicts } {
   return { detectConflicts };
 }

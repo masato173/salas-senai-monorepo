@@ -12,3 +12,6 @@ tools/e2e/temp-skills/
 tools/e2e/*.png
 recon_*.png
 e2e_*.png
+
+# Turbo cache
+.turbo/
