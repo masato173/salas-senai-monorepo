@@ -30,6 +30,18 @@ export default function ReservasPage() {
     [list.data],
   );
 
+  // Sprint 4 D3 — datas do grupo da reserva selecionada, derivadas da lista
+  // já carregada (sem nova query). Filtra ACTIVE pra espelhar o backend C2.
+  // YYYY-MM-DD ordena lexico = cronológico.
+  const groupDates = useMemo(() => {
+    const gid = selectedReservation?.groupId;
+    if (!gid || !list.data?.reservations) return undefined;
+    return list.data.reservations
+      .filter(r => r.groupId === gid && r.status === 'ACTIVE')
+      .map(r => r.data)
+      .sort();
+  }, [selectedReservation?.groupId, list.data?.reservations]);
+
   // Cancel (4.2b). Estado vive aqui; modal recebe via props.
   const cancelMutation = useCancelReservation(service);
   const handleConfirmCancel = async (id: string) => {
@@ -166,7 +178,7 @@ export default function ReservasPage() {
         onEventClick={(r) => setSelectedReservation(r)}
       />
 
-      {/* Modal de detalhes (4.2b — fluxo de cancelamento em 2 cliques + owner-check). */}
+      {/* Modal de detalhes (4.2b — cancel 2 cliques + owner-check). Sprint 4 D3 — wiring de edit. */}
       <ReservationDetailsModal
         reservation={selectedReservation}
         onClose={() => { setSelectedReservation(null); cancelMutation.reset(); }}
@@ -175,6 +187,10 @@ export default function ReservasPage() {
         cancelStatus={cancelMutation.status}
         cancelError={cancelMutation.error}
         onCancelReset={() => cancelMutation.reset()}
+        service={service}
+        userId={CURRENT_USER.userId}
+        groupDates={groupDates}
+        onEditSuccess={() => { void list.refetch(); }}
       />
     </div>
   );

@@ -22,7 +22,7 @@ import type {
 } from '../../services/appsScript';
 import type { CreateReservationInput, Turno, Reservation } from '../../types';
 
-interface ReservationFormService {
+export interface ReservationFormService {
   createReservation:      (req: CreateReservationRequest)      => Promise<CreateReservationResponse>;
   createReservationRange: (req: CreateReservationRangeRequest) => Promise<CreateReservationRangeResponse>;
   updateReservation:      (req: UpdateReservationRequest)      => Promise<UpdateReservationResponse>;
@@ -81,8 +81,12 @@ export function ReservationForm({
   const isEditGroup = mode === 'edit-group';
 
   // Estado interno renomeado de 'mode' → 'period' na Fase D2 pra nao colidir
-  // com a prop publica 'mode'. No edit, period eh forcado 'single' (ModeToggle escondido).
-  const [period, setPeriod] = useState<'single' | 'range'>('single');
+  // com a prop publica 'mode'. No edit, `period` eh forcado 'single' via computacao
+  // (hardening D2): mesmo que algum caller futuro chame setPeriodState('range') em
+  // modo edit, o valor exposto pelo `period` continua 'single'. Garantia explicita
+  // em vez de "ModeToggle escondido protege".
+  const [periodState, setPeriodState] = useState<'single' | 'range'>('single');
+  const period = isEditing ? 'single' : periodState;
 
   const [form, setForm] = useState({
     date:   initialValues?.data       ?? '',
@@ -431,7 +435,7 @@ export function ReservationForm({
       {!isEditing && (
         <ModeToggle
           period={period}
-          onChange={(m) => { setPeriod(m); setErrors([]); setConflicts([]); }}
+          onChange={(m) => { setPeriodState(m); setErrors([]); setConflicts([]); }}
           disabled={anyLoading}
         />
       )}

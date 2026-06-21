@@ -1,13 +1,22 @@
 import { useEffect, useState, type CSSProperties } from 'react';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { isRangeReservation, type ReservationDetails } from './reservationToEvent';
+import { ReservationForm, type ReservationFormService } from './ReservationForm';
 import type { BackendError } from '../../services/appsScript';
 
 // Sub-etapa 4.2a — modal apresentacional puro.
-// Sub-etapa 4.2b — adiciona fluxo de cancelamento em 2 cliques:
-//   idle → "Cancelar reserva" → confirming → "Confirmar cancelamento" → onConfirmCancel
-// Owner-check preventivo desabilita o botão se createdBy !== currentUserEmail (UX).
-// Backend continua sendo a defesa real (FORBIDDEN tratado defensivamente).
+// Sub-etapa 4.2b — fluxo de cancelamento em 2 cliques + owner-check preventivo.
+// Sprint 4 Fase B — selo "Período" via isRangeReservation.
+// Sprint 4 Fase D3 — modal vira CONTAINER LEVE com 3 views:
+//   • details     — view atual (default).
+//   • pick-scope  — só em reservas de grupo, pergunta "Só esta" vs "Todas do grupo".
+//   • form-edit   — embute o ReservationForm em modo edit-single OU edit-group.
+//
+// Estados de dados (cancel mutation, lista, refetch) continuam vivendo na página.
+// Modal só carrega estados de UI (view, editMode, justSaved, confirming).
+
+type ModalView = 'details' | 'pick-scope' | 'form-edit';
+type EditMode  = 'edit-single' | 'edit-group';
 
 interface ReservationDetailsModalProps {
   reservation: ReservationDetails | null;
@@ -18,6 +27,12 @@ interface ReservationDetailsModalProps {
   cancelStatus:     'idle' | 'loading' | 'success' | 'error';
   cancelError:      BackendError | null;
   onCancelReset:    () => void;
+
+  // Sprint 4 D3 — wiring de edit:
+  service:       ReservationFormService;
+  userId:        string;
+  groupDates?:   string[];        // datas do grupo (filtradas ACTIVE), pro modo edit-group
+  onEditSuccess: () => void;      // página dispara list.refetch()
 }
 
 export function ReservationDetailsModal({
@@ -28,25 +43,65 @@ export function ReservationDetailsModal({
   cancelStatus,
   cancelError,
   onCancelReset,
+  service,
+  userId,
+  groupDates,
+  onEditSuccess,
 }: ReservationDetailsModalProps) {
   const [confirming, setConfirming] = useState(false);
+  const [view,       setView]       = useState<ModalView>('details');
+  const [editMode,   setEditMode]   = useState<EditMode | null>(null);
+  const [justSaved,  setJustSaved]  = useState(false);
 
-  // Reset confirming quando reservation muda (clique em outro evento).
+  // Reset todos os estados internos quando a reserva selecionada muda (clique em outro evento).
   useEffect(() => {
     setConfirming(false);
+    setView('details');
+    setEditMode(null);
+    setJustSaved(false);
   }, [reservation?.id]);
 
-  // Quando erro chega do backend, sai do confirming pra mostrar faixa de erro com botões idle.
+  // Quando erro do cancel chega, sai do confirming pra mostrar faixa de erro com botões idle.
   useEffect(() => {
     if (cancelStatus === 'error') setConfirming(false);
   }, [cancelStatus]);
 
+  // Feedback de sucesso ✓ verde por 1.5s pos edit-success → refetch + close.
+  useEffect(() => {
+    if (!justSaved) return;
+    const t = setTimeout(() => {
+      onEditSuccess();
+      onClose();
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [justSaved, onEditSuccess, onClose]);
+
   if (!reservation) return null;
 
-  const { id, sala, data, inicio, fim, professor, observacao, createdBy, groupId } = reservation;
+  const { id, sala, data, inicio, fim, professor, turma, observacao, createdBy, groupId } = reservation;
   const isOwner   = createdBy === currentUserEmail;
   const isLoading = cancelStatus === 'loading';
   const isRange   = id !== undefined && isRangeReservation(id, groupId);
+
+  const editDisabled = !isOwner || isLoading || !id;
+
+  function handleEdit(): void {
+    if (editDisabled) return;
+    if (isRange) {
+      setView('pick-scope');
+    } else {
+      setEditMode('edit-single');
+      setView('form-edit');
+    }
+  }
+  function handlePickScope(m: EditMode): void {
+    setEditMode(m);
+    setView('form-edit');
+  }
+  function handleBackToDetails(): void {
+    setView('details');
+    setEditMode(null);
+  }
 
   return (
     <div
@@ -65,98 +120,209 @@ export function ReservationDetailsModal({
           borderRadius: 'var(--radius)',
           boxShadow: 'var(--shadow-s)',
           padding: '24px',
-          width: 'min(420px, 100%)',
+          width: 'min(520px, 100%)',
           display: 'flex', flexDirection: 'column', gap: '16px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--color-text)' }}>
-            Detalhes da reserva
-          </h2>
-          {isRange && <span style={badgeStyle}>Período</span>}
-        </div>
-
-        <dl style={{
-          margin: 0, display: 'grid',
-          gridTemplateColumns: 'max-content 1fr',
-          rowGap: '8px', columnGap: '16px', fontSize: '13px',
-        }}>
-          <dt style={dtStyle}>Sala</dt>       <dd style={ddStyle}>{sala}</dd>
-          <dt style={dtStyle}>Data</dt>       <dd style={ddStyle}>{formatDataBR(data)}</dd>
-          <dt style={dtStyle}>Horário</dt>    <dd style={ddStyle}>{inicio} – {fim}</dd>
-          <dt style={dtStyle}>Professor</dt>  <dd style={ddStyle}>{professor}</dd>
-          <dt style={dtStyle}>Observação</dt> <dd style={ddStyle}>{observacao || '—'}</dd>
-        </dl>
-
-        {/* Faixa de erro (padrão ReservationForm) */}
-        {cancelError && !confirming && (
+        {justSaved ? (
+          // ── Feedback ✓ verde 1.5s pos sucesso ────────────────────
           <div style={{
-            display: 'flex', alignItems: 'flex-start', gap: '8px',
-            borderRadius: 'var(--radius-s)', border: '1px solid var(--color-red)',
-            background: 'var(--color-red-l)', padding: '10px 14px',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
+            padding: '24px 8px',
           }}>
-            <AlertCircle size={14} style={{ color: 'var(--color-red)', flexShrink: 0, marginTop: '1px' }} />
-            <span style={{ fontSize: '12px', color: 'var(--color-red)' }}>{cancelError.message}</span>
+            <CheckCircle2 size={40} style={{ color: 'var(--color-green)' }} />
+            <p style={{ margin: 0, fontWeight: 600, fontSize: '14px', color: 'var(--color-green)' }}>
+              Reserva atualizada com sucesso!
+            </p>
+            <p style={{ margin: 0, fontSize: '11px', color: 'var(--color-muted)' }}>
+              Fechando…
+            </p>
           </div>
-        )}
 
-        {/* Indicador de loading */}
-        {isLoading && (
-          <span style={{ fontSize: '11px', color: 'var(--color-muted)' }}>
-            Cancelando…
-          </span>
-        )}
+        ) : view === 'pick-scope' ? (
+          // ── View: escolha "Só esta" vs "Todas do grupo" ─────────
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+              <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--color-text)' }}>
+                Editar reserva do grupo
+              </h2>
+              <span style={badgeStyle}>Período</span>
+            </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-          {confirming ? (
-            <>
+            <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text)' }}>
+              Esta reserva faz parte de um grupo de{' '}
+              <strong>{groupDates?.length ?? '?'} datas</strong>. O que você quer editar?
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <button
                 type="button"
-                onClick={() => { onCancelReset(); setConfirming(false); }}
-                disabled={isLoading}
-                style={{ ...neutralButtonStyle, opacity: isLoading ? 0.6 : 1 }}
+                onClick={() => handlePickScope('edit-single')}
+                style={pickScopeButtonStyle}
+              >
+                Só esta reserva ({formatDataBR(data)})
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePickScope('edit-group')}
+                style={pickScopeButtonStyle}
+              >
+                Todas do grupo ({groupDates?.length ?? '?'} datas)
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={handleBackToDetails}
+                style={neutralButtonStyle}
               >
                 Voltar
               </button>
-              <button
-                type="button"
-                onClick={() => id && onConfirmCancel(id)}
-                disabled={isLoading || !id}
-                style={{
-                  ...destructiveButtonStyle,
-                  cursor: isLoading ? 'not-allowed' : 'pointer',
-                  opacity: isLoading ? 0.6 : 1,
-                }}
-              >
-                Confirmar cancelamento
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => { onCancelReset(); setConfirming(true); }}
-                disabled={!isOwner || isLoading || !id}
-                title={!isOwner ? 'Só quem criou pode cancelar' : undefined}
-                style={{
-                  ...cancelIntentButtonStyle,
-                  cursor: (!isOwner || isLoading) ? 'not-allowed' : 'pointer',
-                  opacity: (!isOwner || isLoading) ? 0.5 : 1,
-                }}
-              >
-                Cancelar reserva
-              </button>
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={isLoading}
-                style={neutralButtonStyle}
-              >
-                Fechar
-              </button>
-            </>
-          )}
-        </div>
+            </div>
+          </>
+
+        ) : view === 'form-edit' && editMode && id ? (
+          // ── View: ReservationForm embutido (D2) ─────────────────
+          <>
+            <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--color-text)' }}>
+              {editMode === 'edit-single' ? 'Editar reserva' : 'Editar grupo'}
+            </h2>
+
+            <ReservationForm
+              key={`${id}:${editMode}`}
+              roomId={sala}
+              salaName={sala}
+              userId={userId}
+              userEmail={currentUserEmail}
+              professor={professor}
+              turma={turma}
+              service={service}
+              mode={editMode}
+              initialValues={{
+                id,
+                groupId,
+                data,
+                inicio,
+                fim,
+                observacao,
+                groupDates: editMode === 'edit-group' ? groupDates : undefined,
+              }}
+              onSuccess={() => setJustSaved(true)}
+              onCancel={handleBackToDetails}
+            />
+          </>
+
+        ) : (
+          // ── View: details (default) ─────────────────────────────
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+              <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--color-text)' }}>
+                Detalhes da reserva
+              </h2>
+              {isRange && <span style={badgeStyle}>Período</span>}
+            </div>
+
+            <dl style={{
+              margin: 0, display: 'grid',
+              gridTemplateColumns: 'max-content 1fr',
+              rowGap: '8px', columnGap: '16px', fontSize: '13px',
+            }}>
+              <dt style={dtStyle}>Sala</dt>       <dd style={ddStyle}>{sala}</dd>
+              <dt style={dtStyle}>Data</dt>       <dd style={ddStyle}>{formatDataBR(data)}</dd>
+              <dt style={dtStyle}>Horário</dt>    <dd style={ddStyle}>{inicio} – {fim}</dd>
+              <dt style={dtStyle}>Professor</dt>  <dd style={ddStyle}>{professor}</dd>
+              <dt style={dtStyle}>Turma</dt>      <dd style={ddStyle}>{turma || '—'}</dd>
+              <dt style={dtStyle}>Observação</dt> <dd style={ddStyle}>{observacao || '—'}</dd>
+            </dl>
+
+            {/* Faixa de erro do cancel (padrão ReservationForm) */}
+            {cancelError && !confirming && (
+              <div style={{
+                display: 'flex', alignItems: 'flex-start', gap: '8px',
+                borderRadius: 'var(--radius-s)', border: '1px solid var(--color-red)',
+                background: 'var(--color-red-l)', padding: '10px 14px',
+              }}>
+                <AlertCircle size={14} style={{ color: 'var(--color-red)', flexShrink: 0, marginTop: '1px' }} />
+                <span style={{ fontSize: '12px', color: 'var(--color-red)' }}>{cancelError.message}</span>
+              </div>
+            )}
+
+            {/* Indicador de loading do cancel */}
+            {isLoading && (
+              <span style={{ fontSize: '11px', color: 'var(--color-muted)' }}>
+                Cancelando…
+              </span>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', flexWrap: 'wrap' }}>
+              {confirming ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => { onCancelReset(); setConfirming(false); }}
+                    disabled={isLoading}
+                    style={{ ...neutralButtonStyle, opacity: isLoading ? 0.6 : 1 }}
+                  >
+                    Voltar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => id && onConfirmCancel(id)}
+                    disabled={isLoading || !id}
+                    style={{
+                      ...destructiveButtonStyle,
+                      cursor: isLoading ? 'not-allowed' : 'pointer',
+                      opacity: isLoading ? 0.6 : 1,
+                    }}
+                  >
+                    Confirmar cancelamento
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleEdit}
+                    disabled={editDisabled}
+                    title={
+                      !isOwner ? 'Só quem criou pode editar' :
+                      isLoading ? 'Aguarde…' : undefined
+                    }
+                    style={{
+                      ...primaryButtonStyle,
+                      cursor: editDisabled ? 'not-allowed' : 'pointer',
+                      opacity: editDisabled ? 0.5 : 1,
+                    }}
+                  >
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { onCancelReset(); setConfirming(true); }}
+                    disabled={!isOwner || isLoading || !id}
+                    title={!isOwner ? 'Só quem criou pode cancelar' : undefined}
+                    style={{
+                      ...cancelIntentButtonStyle,
+                      cursor: (!isOwner || isLoading) ? 'not-allowed' : 'pointer',
+                      opacity: (!isOwner || isLoading) ? 0.5 : 1,
+                    }}
+                  >
+                    Cancelar reserva
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    disabled={isLoading}
+                    style={neutralButtonStyle}
+                  >
+                    Fechar
+                  </button>
+                </>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -179,6 +345,30 @@ const ddStyle: CSSProperties = { margin: 0, color: 'var(--color-text)' };
 
 const neutralButtonStyle: CSSProperties = {
   height: '32px', padding: '0 14px',
+  borderRadius: 'var(--radius-s)',
+  background: 'var(--color-surface)',
+  color: 'var(--color-text)',
+  border: '1px solid var(--color-border)',
+  fontFamily: 'inherit', fontSize: '13px', fontWeight: 600,
+  cursor: 'pointer',
+};
+
+// Acao primaria (Editar): brand color cheio. Sprint 4 D3.
+const primaryButtonStyle: CSSProperties = {
+  height: '32px', padding: '0 14px',
+  borderRadius: 'var(--radius-s)',
+  background: 'var(--color-brand)',
+  color: '#fff',
+  border: '1px solid var(--color-brand)',
+  fontFamily: 'inherit', fontSize: '13px', fontWeight: 600,
+};
+
+// Botao da view pick-scope (Sprint 4 D3): full width, neutro, ativo.
+const pickScopeButtonStyle: CSSProperties = {
+  width: '100%',
+  textAlign: 'left',
+  height: '44px',
+  padding: '0 14px',
   borderRadius: 'var(--radius-s)',
   background: 'var(--color-surface)',
   color: 'var(--color-text)',

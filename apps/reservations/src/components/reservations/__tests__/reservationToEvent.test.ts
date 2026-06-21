@@ -33,6 +33,7 @@ describe('reservationToEvent()', () => {
         inicio:     '08:00',
         fim:        '10:00',
         professor:  'Fulano',
+        turma:      'ADS-A',
         observacao: '',
         createdBy:  'professor@senai.edu',
         groupId:    'r-1',
@@ -72,13 +73,19 @@ describe('reservationToEvent()', () => {
     expect(event.end).not.toBeInstanceOf(Date);
   });
 
-  it('anexa extendedProps com os 8 campos consumidos pelo modal (inclui groupId — Fase B)', () => {
+  it('anexa extendedProps com os 9 campos consumidos pelo modal (inclui turma — Fase D3)', () => {
     const event = reservationToEvent(SAMPLE);
 
     expect(event.extendedProps).toBeDefined();
     expect(Object.keys(event.extendedProps!).sort()).toEqual(
-      ['createdBy', 'data', 'fim', 'groupId', 'inicio', 'observacao', 'professor', 'sala'].sort(),
+      ['createdBy', 'data', 'fim', 'groupId', 'inicio', 'observacao', 'professor', 'sala', 'turma'].sort(),
     );
+  });
+
+  it('preserva turma em extendedProps (Sprint 4 D3 — necessário pro form em modo edit)', () => {
+    const event = reservationToEvent({ ...SAMPLE, turma: 'ELT-3B' });
+
+    expect(event.extendedProps?.turma).toBe('ELT-3B');
   });
 
   it('extendedProps.groupId === id quando reserva unica (Sprint 4 Fase A)', () => {
@@ -110,14 +117,15 @@ describe('reservationToEvent()', () => {
     expect(event.extendedProps?.createdBy).toBe('outro.prof@senai.edu');
   });
 
-  it('NÃO inclui status, turma, id ou timestamps em extendedProps', () => {
+  it('NÃO inclui status, id ou timestamps em extendedProps (id sai pelo event.id; status/timestamps são metadados de audit)', () => {
     // Guarda defensiva: se um dia o mapper começar a copiar campos a mais,
     // o modal precisa ser revisitado junto. Esse teste força a revisão.
+    // Sprint 4 D3: `turma` saiu desta guard porque agora ESTÁ em extendedProps
+    // (necessário pro initialValues do form em modo edit).
     const event = reservationToEvent(SAMPLE);
     const props = event.extendedProps ?? {};
 
     expect(props).not.toHaveProperty('status');
-    expect(props).not.toHaveProperty('turma');
     expect(props).not.toHaveProperty('id');
     expect(props).not.toHaveProperty('createdAt');
     expect(props).not.toHaveProperty('updatedAt');
