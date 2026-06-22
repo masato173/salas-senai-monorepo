@@ -1,0 +1,515 @@
+// ============================================================
+// COLAR ESTE CONTEÚDO NO APPS SCRIPT DA PLANILHA DEV
+//
+// SPRINT 4 — FASE C3: updateReservationSelected (remanejar ocorrências
+// SELECIONADAS de um grupo, criando split parcial).
+//
+// Esta fase NÃO implementa:
+//   • Frontend (Fase F — service + hooks + UI virão depois).
+//
+// Pré-requisitos:
+//   • Fases A (groupId) + C1 (updateReservation) + C2 (updateReservationGroup)
+//     já live no editor + planilha DEV com col N (groupId) preenchida.
+//
+// Os 5 blocos abaixo:
+//   • BLOCO 1: SUBSTITUI doPost (+1 rota updateReservationSelected)
+//   • BLOCO 2: SUBSTITUI checkConflicts (+3º param opcional excludeIds)
+//   • BLOCO 3: COLAR updateReservationSelected (NOVA)
+//   • BLOCO 4: COLAR validateSelectedUpdatePayload (NOVA)
+//   • BLOCO 5: COLAR findRowsByIdsMap (NOVA — helper de lookup batch)
+//
+// Funções preservadas: createReservation, createReservationRange,
+// cancelReservation, listReservations, updateReservation (C1),
+// updateReservationGroup (C2), rowToObj, findRowByIdWithIndex,
+// findActiveRowsByGroupId, validators existentes, sanitize, toMinutes,
+// normalizeDate, jsonResponse, helpers de range — INTACTAS.
+//
+// ============================================================
+// FLAGS CRÍTICAS — LER ANTES DE CONSUMIR ESTE ENDPOINT
+// ============================================================
+//
+// ⚠️ FLAG 1 — RETRY DESABILITADO (regra herdada pra Fase F)
+//
+// O endpoint NÃO tem idempotência state-based nem clientRequestId-based.
+// Cada chamada gera um NOVO UUID pro groupId das selecionadas. Se o hook
+// `useUpdateReservationSelected` (Fase F) retentar em INTERNAL/rede, o backend
+// gera um SEGUNDO split com OUTRO UUID — duplo split, estado corrompido.
+//
+// REGRA OBRIGATÓRIA pra Fase F:
+//   • maxRetries = 0 (ou retry POLICY desligada inteira nesse hook).
+//   • clientRequestId é só logado pra audit.
+//   • Falha de rede / INTERNAL devolve erro pro caller — frontend mostra
+//     toast/mensagem e o user decide retentar manualmente (nova request).
+//
+// Esta é uma EXCEÇÃO CONSCIENTE à política padrão (Cancel/C1/C2 retentam
+// INTERNAL). Decisão tomada porque dedupe state-based é impossível com
+// groupId mudando, e overwrite de clientRequestId em col M perderia audit
+// do create.
+//
+// ⚠️ FLAG 2 — ATOMICIDADE LÓGICA, NÃO TRANSACIONAL
+//
+// Apps Script + Sheets NÃO têm transação real. O endpoint:
+//   (a) Lock cobre concorrência (1 escrita por vez no script).
+//   (b) Valida TUDO antes de escrever (zero-write se algum conflict).
+//   (c) Escreve em sequência: N selecionadas + 1 da origem (se virou única).
+//
+// Se o Sheets falhar no meio das escritas (network blip mid-setValues, quota
+// excedida), o estado fica PARCIAL: algumas selecionadas com novo groupId,
+// outras com antigo. Não há rollback.
+//
+// MITIGAÇÕES:
+//   • Logger.log antes e depois do bloco de escrita (observabilidade pra
+//     diagnosticar pos-mortem).
+//   • Lock garante que outra request não vê o estado parcial concorrente.
+//   • Retry desabilitado (FLAG 1) impede amplificar o problema.
+//
+// FLAG TURMA — mantém assimetria com create (exige turma no update).
+// Remover linha marcada em validateSelectedUpdatePayload se reservas legacy
+// sem turma precisarem ser remanejadas via seleção.
+//
+// ============================================================
+// DECISÕES TRAVADAS (não rediscutir)
+// ============================================================
+//
+// • Payload: { ids: string[], sala, inicio, fim, turma, observacao, userEmail, clientRequestId }
+//   SEM `data` — cada ocorrência mantém a sua data própria.
+//
+// • Validação de entrada:
+//   - ids array non-vazio, sem duplicatas (Set check).
+//   - Cada id existe (NOT_FOUND com lista).
+//   - Cada linha ACTIVE (VALIDATION com lista).
+//   - Todas mesmo groupId (VALIDATION).
+//   - Todas mesmo createdBy === userEmail (FORBIDDEN).
+//
+// • Caso D — selecionou TODAS as ACTIVE do grupo → VALIDATION
+//   "Não selecione o grupo inteiro; use updateReservationGroup."
+//
+// • groupId rewriting:
+//   - Selecionadas N >= 2: novo UUID compartilhado (Utilities.getUuid()).
+//   - Selecionadas N == 1: groupId = próprio id (vira única, regra Fase A).
+//   - Origem (não-selecionadas ACTIVE):
+//       resta >= 2 → mantém groupId original.
+//       resta == 1 → vira única (groupId = próprio id).
+//       resta == 0 → impossível (caso D rejeita antes).
+//
+// • Imutáveis (lidos da row, NUNCA do payload):
+//   id, data, professor, status, createdBy, createdAt, clientRequestId.
+//   Defesa contra payload malicioso.
+//
+// • checkConflicts 3º exclude:
+//   - param novo `excludeIds: string[]` (Opção A — escolhida pra clareza).
+//   - Callers atuais (create, createRange, C1, C2) passam undefined → guard
+//     falsy → comportamento idêntico. Confirmado nos testes T10-T13.
+//
+// Após colar: salvar + Implantar > Gerenciar implantações > lápis
+//              > Nova versão > Implantar
+// ============================================================
+
+
+// ─────────────────────────────────────────────────────────────
+// BLOCO 1 — SUBSTITUIR a função doPost inteira
+// (única diferença vs C2: +1 case updateReservationSelected)
+// ─────────────────────────────────────────────────────────────
+function doPost(e) {
+  try {
+    var body = JSON.parse(e.postData.contents);
+    var action = body.action || '';
+
+    if (action === 'createReservation')         return createReservation(body);
+    if (action === 'createReservationRange')    return createReservationRange(body);
+    if (action === 'cancelReservation')         return cancelReservation(body);
+    if (action === 'updateReservation')         return updateReservation(body);
+    if (action === 'updateReservationGroup')    return updateReservationGroup(body);
+    if (action === 'updateReservationSelected') return updateReservationSelected(body);
+
+    return jsonResponse({ error: 'Ação desconhecida.' });
+
+  } catch (err) {
+    Logger.log('ERRO em doPost: ' + err.stack);
+    return jsonResponse({ ok: false, error: { code: 'INTERNAL', message: 'Erro interno.' } });
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// BLOCO 2 — SUBSTITUIR a função checkConflicts inteira
+// (única diferença vs C2: +3º param opcional excludeIds + 1 guard no loop)
+//
+// excludeIds === undefined → bypassa guard → comportamento idêntico ao C2.
+// Os 4 callers atuais (create, createRange, C1, C2) NÃO mudam suas chamadas:
+//   • createReservation       → checkConflicts(sheet, payload)
+//   • createReservationRange  → checkConflicts(sheet, pCheck)
+//   • updateReservation (C1)  → checkConflicts(sheet, payload, id)
+//   • updateReservationGroup  → checkConflicts(sheet, p, undefined, groupId)
+//   • updateReservationSelected (C3) → checkConflicts(sheet, p, undefined, undefined, idsSelecionados)
+//
+// Otimização: indexa excludeIds em object literal pra lookup O(1) por iteração
+// (em vez de indexOf O(n) na lista).
+// ─────────────────────────────────────────────────────────────
+function checkConflicts(sheet, payload, excludeId, excludeGroupId, excludeIds) {
+  var dados   = sheet.getDataRange().getValues();
+  var sala    = (payload.sala || '').trim();
+  var dataReq = (payload.data || '').trim();
+  var newIni  = toMinutes(payload.inicio);
+  var newFim  = toMinutes(payload.fim);
+
+  // Pre-indexa excludeIds pra lookup O(1).
+  var excludeSet = null;
+  if (excludeIds && excludeIds.length > 0) {
+    excludeSet = {};
+    for (var k = 0; k < excludeIds.length; k++) {
+      excludeSet[excludeIds[k]] = true;
+    }
+  }
+
+  for (var i = 1; i < dados.length; i++) {
+    var row = dados[i];
+    if (excludeId && row[0] === excludeId)             continue;  // Sprint 4 Fase C1
+    if (excludeGroupId && row[13] === excludeGroupId)  continue;  // Sprint 4 Fase C2
+    if (excludeSet && excludeSet[row[0]])              continue;  // Sprint 4 Fase C3
+    if (row[8] === 'CANCELLED')                        continue;
+    if (String(row[1]).trim() !== sala)                continue;
+    if (normalizeDate(row[2])  !== dataReq)            continue;
+
+    var exIni = toMinutes(row[3]);
+    var exFim = toMinutes(row[4]);
+
+    if (isNaN(exIni) || isNaN(exFim)) continue;
+    if (newIni < exFim && newFim > exIni) return true;
+  }
+
+  return false;
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// BLOCO 3 — COLAR updateReservationSelected (NOVA)
+//
+// Fluxo (na ordem):
+//   1. waitLock                                          → LOCK_TIMEOUT
+//   2. validateSelectedUpdatePayload                     → VALIDATION
+//   3. findRowsByIdsMap (lookup batch)                   → NOT_FOUND se algum ausente
+//   4. ACTIVE check em todas                             → VALIDATION
+//   5. Mesmo groupId em todas (e non-empty)              → VALIDATION
+//   6. Mesmo createdBy === userEmail em todas            → FORBIDDEN
+//   7. Caso D: ids.length === |ACTIVE_grupo|             → VALIDATION
+//   8. checkConflicts em CADA selecionada (excludeIds)   → coleta conflitos
+//   9. conflitos.length > 0                              → CONFLICT (ZERO WRITE)
+//  10. Compute newGroupIdSelecionadas:
+//        S == 1 → próprio id
+//        S >= 2 → Utilities.getUuid()
+//  11. Compute origem (ACTIVE - selecionadas):
+//        resta 1 → vai virar única
+//        resta >= 2 → não toca
+//  12. Logger.log START write (observabilidade FLAG 2)
+//  13. Escrita das N selecionadas: setValues B-N + setNumberFormat
+//  14. Escrita da origem (se rest 1): setValue col N (groupId) + L (updatedAt)
+//  15. Logger.log END write
+//  16. return { count, reservations }
+// ─────────────────────────────────────────────────────────────
+function updateReservationSelected(body) {
+  var lock = LockService.getScriptLock();
+
+  try {
+    lock.waitLock(15000);
+  } catch (e) {
+    return jsonResponse({
+      ok: false,
+      error: { code: 'LOCK_TIMEOUT', message: 'Sistema ocupado. Tente novamente.' }
+    });
+  }
+
+  try {
+    var clientId = (body && body.clientRequestId) || '';
+    Logger.log('updateReservationSelected clientRequestId=' + clientId);
+
+    var validationErr = validateSelectedUpdatePayload(body);
+    if (validationErr) {
+      return jsonResponse({
+        ok: false,
+        error: { code: 'VALIDATION', message: validationErr }
+      });
+    }
+
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var sheet = ss.getSheetByName('Reservas');
+    if (!sheet) {
+      return jsonResponse({
+        ok: false,
+        error: { code: 'INTERNAL', message: 'Aba Reservas não encontrada.' }
+      });
+    }
+
+    var userEmail = String(body.userEmail).trim();
+    var ids = body.payload.ids.map(function(x) { return String(x).trim(); });
+
+    // 3. Lookup batch
+    var rowsMap = findRowsByIdsMap(sheet, ids);
+    var missing = [];
+    for (var i = 0; i < ids.length; i++) {
+      if (!rowsMap[ids[i]]) missing.push(ids[i]);
+    }
+    if (missing.length > 0) {
+      return jsonResponse({
+        ok: false,
+        error: { code: 'NOT_FOUND', message: 'Reserva(s) não encontrada(s): ' + missing.join(', ') }
+      });
+    }
+
+    // 4. ACTIVE check
+    var notActive = [];
+    for (var ia = 0; ia < ids.length; ia++) {
+      if (rowsMap[ids[ia]].row[8] !== 'ACTIVE') notActive.push(ids[ia]);
+    }
+    if (notActive.length > 0) {
+      return jsonResponse({
+        ok: false,
+        error: { code: 'VALIDATION', message: 'Selecione apenas reservas ativas. Inválido(s): ' + notActive.join(', ') }
+      });
+    }
+
+    // 5. Mesmo groupId (non-empty)
+    var groupIdOriginal = rowsMap[ids[0]].row[13];
+    if (!groupIdOriginal) {
+      return jsonResponse({
+        ok: false,
+        error: { code: 'VALIDATION', message: 'Reservas sem grupo (legacy) não podem ser remanejadas por seleção.' }
+      });
+    }
+    for (var ig = 1; ig < ids.length; ig++) {
+      if (rowsMap[ids[ig]].row[13] !== groupIdOriginal) {
+        return jsonResponse({
+          ok: false,
+          error: { code: 'VALIDATION', message: 'Todas as reservas devem pertencer ao mesmo grupo.' }
+        });
+      }
+    }
+
+    // 6. Mesmo owner
+    var notOwner = [];
+    for (var io = 0; io < ids.length; io++) {
+      if (rowsMap[ids[io]].row[9] !== userEmail) notOwner.push(ids[io]);
+    }
+    if (notOwner.length > 0) {
+      return jsonResponse({
+        ok: false,
+        error: { code: 'FORBIDDEN', message: 'Apenas o criador pode remanejar a reserva.' }
+      });
+    }
+
+    // 7. Caso D — selecionou todas as ACTIVE do grupo?
+    var activeNoGrupo = findActiveRowsByGroupId(sheet, groupIdOriginal);
+    if (activeNoGrupo.length === ids.length) {
+      return jsonResponse({
+        ok: false,
+        error: { code: 'VALIDATION', message: 'Não selecione o grupo inteiro; use updateReservationGroup.' }
+      });
+    }
+
+    // Editáveis (lidos só do payload)
+    var newSala       = String(body.payload.sala       || '').trim();
+    var newInicio     = String(body.payload.inicio     || '').trim();
+    var newFim        = String(body.payload.fim        || '').trim();
+    var newTurma      = String(body.payload.turma      || '').trim();
+    var newObservacao = sanitize(body.payload.observacao || '');
+
+    // 8-9. Revalida conflito em CADA selecionada — atomicidade lógica.
+    var conflitos = [];
+    for (var ic = 0; ic < ids.length; ic++) {
+      var rowSel = rowsMap[ids[ic]].row;
+      var pCheck = {
+        sala:   newSala,
+        data:   normalizeDate(rowSel[2]),
+        inicio: newInicio,
+        fim:    newFim
+      };
+      if (checkConflicts(sheet, pCheck, undefined, undefined, ids)) {
+        conflitos.push(normalizeDate(rowSel[2]));
+      }
+    }
+    if (conflitos.length > 0) {
+      return jsonResponse({
+        ok: false,
+        error: {
+          code: 'CONFLICT',
+          message: 'Conflito em ' + conflitos.length + ' data(s) selecionada(s).',
+          details: { conflicts: conflitos }
+        }
+      });
+    }
+
+    // 10. Novo groupId pras selecionadas
+    var newGroupIdSelecionadas;
+    if (ids.length === 1) {
+      newGroupIdSelecionadas = ids[0];  // S=1 vira única (Fase A)
+    } else {
+      newGroupIdSelecionadas = Utilities.getUuid();  // S>=2 → UUID compartilhado
+    }
+
+    // 11. Destino da origem (não-selecionadas ACTIVE)
+    var selectedSet = {};
+    for (var is = 0; is < ids.length; is++) selectedSet[ids[is]] = true;
+    var origem = [];
+    for (var ie = 0; ie < activeNoGrupo.length; ie++) {
+      if (!selectedSet[activeNoGrupo[ie].row[0]]) origem.push(activeNoGrupo[ie]);
+    }
+    // origem.length === 0 já bloqueado por caso D
+    var origemVaiVirarUnica = (origem.length === 1);
+
+    var now = new Date().toISOString();
+
+    // 12. FLAG 2 — observabilidade do bloco de escrita
+    Logger.log('updateReservationSelected START write: selecionadas=' + ids.length +
+               ', origem=' + origem.length +
+               ', newGroupId=' + newGroupIdSelecionadas +
+               ', origemVirouUnica=' + origemVaiVirarUnica);
+
+    // 13. Escrita das selecionadas
+    var reservasAtualizadas = [];
+    for (var iw = 0; iw < ids.length; iw++) {
+      var found = rowsMap[ids[iw]];
+      var rowOrig = found.row;
+
+      var preservedId         = rowOrig[0];
+      var preservedData       = rowOrig[2];
+      var preservedProfessor  = rowOrig[5];
+      var preservedStatus     = rowOrig[8];
+      var preservedCreatedBy  = rowOrig[9];
+      var preservedCreatedAt  = rowOrig[10];
+      var preservedClientId   = rowOrig[12];
+
+      var novaRow = [
+        preservedId,                   // 0  A id            (PRESERVADO)
+        newSala,                       // 1  B sala
+        preservedData,                 // 2  C data          (PRESERVADO — propria)
+        newInicio,                     // 3  D inicio
+        newFim,                        // 4  E fim
+        preservedProfessor,            // 5  F professor     (PRESERVADO)
+        newTurma,                      // 6  G turma
+        newObservacao,                 // 7  H observacao
+        preservedStatus,               // 8  I status        (PRESERVADO == ACTIVE)
+        preservedCreatedBy,            // 9  J createdBy     (PRESERVADO)
+        preservedCreatedAt,            // 10 K createdAt     (PRESERVADO)
+        now,                           // 11 L updatedAt
+        preservedClientId,             // 12 M clientReqId   (PRESERVADO — audit do create)
+        newGroupIdSelecionadas         // 13 N groupId       — NOVO (regra C3)
+      ];
+
+      sheet.getRange(found.sheetRowIndex, 2, 1, 13).setValues([novaRow.slice(1)]);
+      sheet.getRange(found.sheetRowIndex, 3, 1, 3).setNumberFormat('@');
+      reservasAtualizadas.push(rowToObj(novaRow));
+    }
+
+    // 14. Escrita da origem (se virou única)
+    if (origemVaiVirarUnica) {
+      var orphanFound = origem[0];
+      var orphanId = orphanFound.row[0];
+      // Col N (groupId) = 1-based col 14. Col L (updatedAt) = 1-based col 12.
+      sheet.getRange(orphanFound.sheetRowIndex, 14).setValue(orphanId);
+      sheet.getRange(orphanFound.sheetRowIndex, 12).setValue(now);
+      Logger.log('updateReservationSelected: origem resta 1, id=' + orphanId + ' virou unica.');
+    }
+
+    Logger.log('updateReservationSelected END write: ok. ' +
+               'selecionadasEscritas=' + reservasAtualizadas.length +
+               ', origemVirouUnica=' + origemVaiVirarUnica);
+
+    return jsonResponse({
+      ok: true,
+      data: { count: reservasAtualizadas.length, reservations: reservasAtualizadas },
+      error: null
+    });
+
+  } catch (err) {
+    Logger.log('ERRO em updateReservationSelected: ' + err.stack);
+    return jsonResponse({
+      ok: false,
+      error: { code: 'INTERNAL', message: 'Erro interno ao remanejar selecionadas.' }
+    });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// BLOCO 4 — COLAR validateSelectedUpdatePayload (NOVA)
+//
+// PUT-like: exige ids[] non-vazio sem duplicatas + sala/inicio/fim/turma.
+// observacao opcional. NÃO valida `data` (cada linha mantém a sua).
+// Mesmas regras de horário do create/C1/C2.
+// ─────────────────────────────────────────────────────────────
+function validateSelectedUpdatePayload(body) {
+  if (!body || typeof body !== 'object') {
+    return 'Body inválido.';
+  }
+  if (!body.userEmail || !String(body.userEmail).trim()) {
+    return 'userEmail é obrigatório.';
+  }
+  if (!body.payload || typeof body.payload !== 'object') {
+    return 'payload é obrigatório.';
+  }
+  if (!Array.isArray(body.payload.ids) || body.payload.ids.length === 0) {
+    return 'payload.ids deve ser array não-vazio.';
+  }
+
+  // Cada id non-empty string
+  for (var i = 0; i < body.payload.ids.length; i++) {
+    var idi = body.payload.ids[i];
+    if (typeof idi !== 'string' || !idi.trim()) {
+      return 'payload.ids[' + i + '] inválido (deve ser string não-vazia).';
+    }
+  }
+
+  // Duplicatas (Set check)
+  var seen = {};
+  for (var j = 0; j < body.payload.ids.length; j++) {
+    var key = String(body.payload.ids[j]).trim();
+    if (seen[key]) return 'payload.ids contém duplicatas.';
+    seen[key] = true;
+  }
+
+  var p = body.payload;
+  if (!p.sala    || !String(p.sala).trim())    return 'Sala é obrigatória.';
+  if (!p.inicio  || !String(p.inicio).trim())  return 'Horário de início é obrigatório.';
+  if (!p.fim     || !String(p.fim).trim())     return 'Horário de fim é obrigatório.';
+
+  var ini = toMinutes(p.inicio);
+  var fim = toMinutes(p.fim);
+  if (isNaN(ini) || isNaN(fim))                return 'Formato de horário inválido. Use HH:MM.';
+  if (ini < 360)                               return 'Horário mínimo permitido: 06:00.';
+  if (fim > 1380)                              return 'Horário máximo permitido: 23:00.';
+  if (fim <= ini)                              return 'Horário de fim deve ser após o início.';
+
+  // FLAG TURMA — assimetria deliberada com o create. Remover esta linha se
+  // reservas legacy sem turma precisarem ser remanejadas via seleção.
+  if (!p.turma   || !String(p.turma).trim())   return 'Turma é obrigatória.';
+
+  return null;
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// BLOCO 5 — COLAR findRowsByIdsMap (NOVA)
+//
+// Lookup batch: dado um array de ids, retorna { id: {row, sheetRowIndex} }
+// pra cada id encontrado. Ids ausentes são OMITIDOS do mapa (caller detecta
+// comparando keys vs lista original).
+//
+// 1 leitura única da sheet, complexidade O(N + M) onde N=linhas, M=ids.
+// ─────────────────────────────────────────────────────────────
+function findRowsByIdsMap(sheet, ids) {
+  var dados = sheet.getDataRange().getValues();
+  var wanted = {};
+  for (var i = 0; i < ids.length; i++) wanted[ids[i]] = true;
+
+  var result = {};
+  for (var k = 1; k < dados.length; k++) {
+    var id = dados[k][0];
+    if (wanted[id]) {
+      // dados[0] = header (sheet row 1); dados[k] → sheet row k+1.
+      result[id] = { row: dados[k], sheetRowIndex: k + 1 };
+    }
+  }
+  return result;
+}
