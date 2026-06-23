@@ -2,44 +2,50 @@
 e2e_calendar.py — Teste E2E do fluxo completo de reserva.
 Controle de Salas SENAI.
 
-Fluxo: criar reserva (Única, hoje) → confirmar no calendário →
-       clicar no evento → modal → cancelar → confirmar que some.
+Fluxo: criar reserva (Única, hoje) → aguardar evento no calendário →
+       abrir modal e CONFIRMAR identidade pelo MARKER da observação →
+       cancelar → confirmar que some.
 
-Cria e limpa atrás de si (o cancelamento é parte do que testamos).
-A reserva fica CANCELLED na planilha DEV (soft delete), mas sai do calendário.
+ROBUSTEZ (Sprint 5 Frente 4 — conserto após Fase D):
+- Sem fallback "primeiro evento". Se o evento da turma E2E-TST não aparecer,
+  o teste FALHA com diagnóstico claro. NUNCA cancela reserva alheia.
+- Identificação por MARKER único (E2E-HHMMSS) na observação, lido do modal
+  ANTES de clicar em "Cancelar reserva". Blindagem contra residuais E2E-TST
+  de runs antigos ou paralelos.
+- wait_for_function pós-submit (timeout 8s) em vez de sleep fixo, robusto
+  contra latência do Sheets.
 
-Seletores descobertos via reconhecimento (recon_reservas.py + recon_form.py):
-  #sel-sala (select), #sel-turma, #res-date, #res-start, #res-end, #res-reason
-  Botões: "Nova reserva", "Única", "Período", "Solicitar reserva", "Atualizar"
-  Eventos: .fc-event   |   Botões view: "Mês"/"Semana"/"Dia"
+Seletores confirmados via leitura do JSX de ReservationDetailsModal.tsx:
+- Título da view details: "Detalhes da reserva"
+- Observação: <dd> com text-content da observacao
+- Botões: "Cancelar reserva" → "Confirmar cancelamento", "Fechar"
 
-ROBUSTEZ:
-- Horário derivado do timestamp pra reduzir CONFLICT entre runs próximos.
-- Observação única (marcador E2E) pra identificar O EVENTO certo no calendário.
-- Esperas explícitas após criar (refetch) e após cancelar.
-- Asserções com mensagem clara; sys.exit(1) em falha.
+A reserva fica CANCELLED na planilha DEV (soft delete) — aceitável.
 """
+
 import sys
 import datetime
 from playwright.sync_api import sync_playwright
 
 URL = "http://localhost:4173/reservas"
-SALA = "03 Sala"                  # sala real da lista (recon)
+
+SALA = "03 Sala"
 TURMA = "E2E-TST"
 
-# Horário único-ish por run: usa hora:minuto atuais como início, +1h fim.
-# Reduz colisão CONFLICT entre runs no mesmo dia/sala.
+# Horário único-ish por run
 now = datetime.datetime.now()
 start_h = now.hour
-# mantém início entre 06 e 20 (fim = início+1, máximo 21:00) dentro da faixa 06:00–23:00
 if start_h < 6:
     start_h = 6
 elif start_h > 20:
     start_h = 20
+
 START = f"{start_h:02d}:{now.minute:02d}"
 END = f"{start_h + 1:02d}:{now.minute:02d}"
 TODAY = now.strftime("%Y-%m-%d")
-MARKER = f"E2E-{now.strftime('%H%M%S')}"   # observação única → identifica o evento
+
+# MARKER único por run — vai pra observação e é a chave de identificação
+MARKER = f"E2E-{now.strftime('%H%M%S')}"
 
 FAILED = False
 
@@ -58,17 +64,18 @@ with sync_playwright() as p:
     page = browser.new_page()
 
     print(f"== E2E Calendário == data={TODAY} sala={SALA} horário={START}-{END} marker={MARKER}")
+
     page.goto(URL)
     page.wait_for_load_state("networkidle")
     page.wait_for_timeout(1500)
 
-    # ---- PASSO 1: abrir form e criar reserva única ----
+    # ---- PASSO 1: criar reserva única ----
     print("\n[1] Criando reserva única...")
+
     page.get_by_role("button", name="Nova reserva").click()
     page.wait_for_timeout(800)
 
-    # Garante modo Única (pode já ser o default). Clique tolerante:
-    # usa get_by_text (como o recon achou) e ignora se não for clicável.
+    # Garante modo Única (default, mas tolerante)
     try:
         page.get_by_text("Única", exact=True).click(timeout=3000)
         page.wait_for_timeout(300)
@@ -85,80 +92,71 @@ with sync_playwright() as p:
 
     page.get_by_role("button", name="Solicitar reserva").click()
 
-    # Espera o backend + refetch do calendário
     print("    aguardando criação + refetch...")
     page.wait_for_load_state("networkidle")
-    page.wait_for_timeout(3000)
-
-    # DIAGNÓSTICO pós-submit: o que o form mostrou?
-    # Procura sinais de sucesso, conflito ou erro pra distinguir
-    # "criação falhou" de "criou mas calendário não mostra".
-    print("    --- diagnóstico pós-submit ---")
-    page.screenshot(path="e2e_after_submit.png", full_page=True)
-    body_text = page.locator("body").inner_text()
-    for termo in ["sucesso", "Sucesso", "criada", "Conflito", "conflito",
-                  "já reservada", "erro", "Erro", "obrigat", "inválid"]:
-        if termo in body_text:
-            print(f"      sinal encontrado no texto: '{termo}'")
-    # Imprime se o form ainda está aberto (campos visíveis = não submeteu/erro)
-    form_aberto = page.locator("#sel-sala").count() > 0 and page.locator("#sel-sala").is_visible()
-    print(f"      form ainda aberto? {form_aberto}")
-    print("    --- fim diagnóstico ---")
-
-    # ---- PASSO 2: confirmar que o evento apareceu no calendário ----
-    print("\n[2] Verificando evento no calendário...")
-    # View de DIA: o evento criado é pra hoje, e nessa view o título completo
-    # ("Sala · Turma") aparece — diferente da view de Mês, que trunca/compacta.
-    page.get_by_role("button", name="Dia", exact=True).click()
     page.wait_for_timeout(1500)
 
-    eventos = page.locator(".fc-event").all()
-    print(f"    {len(eventos)} evento(s) na view de Dia (hoje)")
-    # Diagnóstico: imprime o texto real de cada evento (ajuda se o seletor falhar)
-    for i, ev in enumerate(eventos):
-        try:
-            txt = ev.inner_text().strip().replace("\n", " | ")
-        except Exception:
-            txt = "[erro]"
-        print(f"      evento[{i}] texto='{txt}'")
+    # ---- PASSO 2: ESPERA ROBUSTA pelo evento no calendário ----
+    print("\n[2] Aguardando evento aparecer no calendário (view Dia)...")
+    page.get_by_role("button", name="Dia", exact=True).click()
+    page.wait_for_timeout(1000)
 
-    meu_evento = page.locator(".fc-event", has_text=TURMA)
-    achou = meu_evento.count() > 0
-    # Fallback: se não achou por texto MAS só há eventos de hoje, usa o primeiro.
-    # Como criamos pra hoje com sala/horário únicos, o risco de pegar o errado é baixo.
-    if not achou and len(eventos) > 0:
-        print(f"    (texto '{TURMA}' não casou; usando o primeiro evento de hoje como fallback)")
-        meu_evento = page.locator(".fc-event").first
-        achou = True
-
-    check(
-        achou,
-        f"evento da reserva apareceu no calendário (view Dia)",
-        f"nenhum evento na view de Dia — criação falhou ou refetch não atualizou",
-    )
-
-    if not achou:
-        print("    Abortando: sem evento pra cancelar.")
-        page.screenshot(path="e2e_fail_no_event.png", full_page=True)
+    # Polling: espera até .fc-event contendo E2E-TST aparecer (8s timeout)
+    try:
+        page.wait_for_function(
+            """(turma) => Array.from(document.querySelectorAll('.fc-event'))
+                              .some(el => el.innerText.includes(turma))""",
+            arg=TURMA,
+            timeout=8000,
+        )
+    except Exception:
+        print(f"  ✗ FALHOU: nenhum .fc-event com texto '{TURMA}' apareceu após 8s.")
+        page.screenshot(path= "e2e_fail_no_event.png", full_page=True)
         browser.close()
         sys.exit(1)
 
-    # ---- PASSO 3: clicar no evento → modal ----
-    print("\n[3] Abrindo modal de detalhes...")
-    meu_evento.first.click()
-    page.wait_for_timeout(1000)
+    candidatos = page.locator(".fc-event", has_text=TURMA).all()
+    print(f"    {len(candidatos)} candidato(s) com turma '{TURMA}' no calendário")
 
-    # O modal mostra "Detalhes da reserva" + botão "Cancelar reserva"
-    modal_titulo = page.get_by_text("Detalhes da reserva")
-    check(
-        modal_titulo.count() > 0,
-        "modal de detalhes abriu",
-        "modal NÃO abriu ao clicar no evento",
-    )
+    # ---- PASSO 3: IDENTIFICAR pelo MARKER (blindagem) ----
+    print(f"\n[3] Procurando candidato com observação='{MARKER}' (blindagem anti-residual)...")
 
-    # ---- PASSO 4: cancelar (2 cliques: Cancelar reserva → Confirmar) ----
+    meu_evento_idx = None
+    for idx, candidato in enumerate(candidatos):
+        print(f"    abrindo candidato[{idx}]...")
+        candidato.click()
+        page.wait_for_timeout(800)
+
+        # Modal abriu? confere título da view details
+        if page.get_by_text("Detalhes da reserva").count() == 0:
+            print(f"    candidato[{idx}]: modal não abriu — pulando.")
+            continue
+
+        # Lê o <dd> que contém o MARKER (observação)
+        obs_matches = page.locator("dd", has_text=MARKER).count()
+        if obs_matches > 0:
+            print(f"    ✓ candidato[{idx}] tem MARKER='{MARKER}' — é o nosso.")
+            meu_evento_idx = idx
+            break  # modal já aberto no candidato certo
+
+        # Não bateu — fecha modal e tenta próximo
+        print(f"    candidato[{idx}]: sem MARKER — fechando modal.")
+        page.get_by_role("button", name="Fechar").first.click()
+        page.wait_for_timeout(500)
+
+    if meu_evento_idx is None:
+        print(f"  ✗ FALHOU: nenhum dos {len(candidatos)} candidatos tem MARKER='{MARKER}'.")
+        print(f"    Isso pode significar: (a) a reserva criada não chegou ao calendário,")
+        print(f"    ou (b) há residuais E2E-TST de runs antigos. NÃO cancelo nada — bug.")
+        page.screenshot(path="e2e_fail_no_marker.png", full_page=True)
+        browser.close()
+        sys.exit(1)
+
+    check(True, "evento da reserva identificado pelo MARKER no modal", "")
+
+    # ---- PASSO 4: cancelar (2 cliques: Cancelar reserva → Confirmar cancelamento) ----
     print("\n[4] Cancelando...")
-    # Botão é habilitado pois createdBy == CURRENT_USER (criado pela própria UI)
+
     page.get_by_role("button", name="Cancelar reserva").click()
     page.wait_for_timeout(500)
     page.get_by_role("button", name="Confirmar cancelamento").click()
@@ -171,14 +169,24 @@ with sync_playwright() as p:
     print("\n[5] Verificando que o evento sumiu...")
     page.get_by_role("button", name="Dia", exact=True).click()
     page.wait_for_timeout(1500)
-    restantes = page.locator(".fc-event").all()
-    print(f"    {len(restantes)} evento(s) restante(s) na view de Dia")
-    # Se buscávamos por turma e ela casou antes, confere por turma; senão, conta.
-    sumido_por_texto = page.locator(".fc-event", has_text=TURMA).count() == 0
+
+    # Polling reverso: espera até NÃO ter mais .fc-event com E2E-TST (8s)
+    sumiu = False
+    try:
+        page.wait_for_function(
+            """(turma) => !Array.from(document.querySelectorAll('.fc-event'))
+                                .some(el => el.innerText.includes(turma))""",
+            arg=TURMA,
+            timeout=8000,
+        )
+        sumiu = True
+    except Exception:
+        sumiu = False
+
     check(
-        sumido_por_texto,
-        f"reserva cancelada sumiu do calendário",
-        f"reserva AINDA aparece após cancelar (refetch não atualizou ou cancel falhou)",
+        sumiu,
+        "reserva cancelada sumiu do calendário",
+        "reserva AINDA aparece após cancelar (refetch não atualizou ou cancel falhou)",
     )
 
     page.screenshot(path="e2e_final.png", full_page=True)
@@ -190,5 +198,5 @@ if FAILED:
     print("RESULTADO: ✗ FALHOU — ver screenshots e2e_*.png")
     sys.exit(1)
 else:
-    print("RESULTADO: ✓ PASSOU — fluxo criar→ver→cancelar→sumir OK")
+    print("RESULTADO: ✓ PASSOU — fluxo criar→ver→identificar→cancelar→sumir OK")
     sys.exit(0)
