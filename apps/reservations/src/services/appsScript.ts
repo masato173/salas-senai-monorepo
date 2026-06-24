@@ -171,6 +171,30 @@ export type UpdateReservationGroupResponse = BackendEnvelope<{
   reservations: CreatedReservationRow[];
 }>;
 
+// ── Sprint 4 C3: updateReservationSelected ──
+// Remaneja ocorrências SELECIONADAS de um grupo (subconjunto por IDs).
+// Difere do C2: recebe `ids: string[]` em vez de `groupId`.
+// NÃO inclui `data` — cada ocorrência mantém a sua data própria (igual C2).
+export interface UpdateReservationSelectedPayload {
+  ids: string[]; // IDs das ocorrências selecionadas (1+)
+  sala: string;
+  inicio: string; // HH:MM
+  fim: string; // HH:MM
+  turma: string;
+  observacao: string;
+}
+
+export interface UpdateReservationSelectedRequest {
+  userEmail: string;
+  payload: UpdateReservationSelectedPayload;
+  clientRequestId?: string;
+}
+
+export type UpdateReservationSelectedResponse = BackendEnvelope<{
+  count: number;
+  reservations: CreatedReservationRow[];
+}>;
+
 interface AppsScriptService {
   fetchSchedule: () => Promise<ScheduleResult>;
   createReservation: (req: CreateReservationRequest) => Promise<CreateReservationResponse>;
@@ -183,6 +207,9 @@ interface AppsScriptService {
   updateReservationGroup: (
     req: UpdateReservationGroupRequest,
   ) => Promise<UpdateReservationGroupResponse>;
+  updateReservationSelected: (
+    req: UpdateReservationSelectedRequest,
+  ) => Promise<UpdateReservationSelectedResponse>;
 }
 
 /**
@@ -317,6 +344,23 @@ export function createAppsScriptService(config: AppsScriptConfig): AppsScriptSer
       });
 
       return (await res.json()) as UpdateReservationGroupResponse;
+    },
+
+    async updateReservationSelected(req): Promise<UpdateReservationSelectedResponse> {
+      const body = JSON.stringify({
+        action: 'updateReservationSelected',
+        clientRequestId: req.clientRequestId ?? crypto.randomUUID(),
+        userEmail: req.userEmail,
+        payload: req.payload,
+      });
+
+      const res = await fetch(config.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body,
+      });
+
+      return (await res.json()) as UpdateReservationSelectedResponse;
     },
   };
 }
