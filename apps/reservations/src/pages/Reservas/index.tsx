@@ -8,7 +8,10 @@ import { ReservationDetailsModal } from '../../components/reservations/Reservati
 import { createAppsScriptService } from '../../services/appsScript';
 import { useListReservations } from '../../hooks/useListReservations';
 import { useCancelReservation } from '../../hooks/useCancelReservation';
-import { reservationToEvent, type ReservationDetails } from '../../components/reservations/reservationToEvent';
+import {
+  reservationToEvent,
+  type ReservationDetails,
+} from '../../components/reservations/reservationToEvent';
 import { APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN, SALAS, CURRENT_USER } from '../../config';
 
 export default function ReservasPage() {
@@ -42,12 +45,27 @@ export default function ReservasPage() {
       .sort();
   }, [selectedReservation?.groupId, list.data?.reservations]);
 
+  // Sprint 4 D4.4 — mapa data→id do mesmo grupo ACTIVE. Pro caminho C3
+  // (edit-selected), o EditSelectedView traduz datas selecionadas em ids[].
+  // Mesmo filtro do groupDates pra coerência.
+  const groupIdMap = useMemo<Record<string, string> | undefined>(() => {
+    const gid = selectedReservation?.groupId;
+    if (!gid || !list.data?.reservations) return undefined;
+    const map: Record<string, string> = {};
+    for (const r of list.data.reservations) {
+      if (r.groupId === gid && r.status === 'ACTIVE') {
+        map[r.data] = r.id;
+      }
+    }
+    return map;
+  }, [selectedReservation?.groupId, list.data?.reservations]);
+
   // Cancel (4.2b). Estado vive aqui; modal recebe via props.
   const cancelMutation = useCancelReservation(service);
   const handleConfirmCancel = async (id: string) => {
     const res = await cancelMutation.mutate({
       userEmail: CURRENT_USER.userEmail,
-      payload:   { id },
+      payload: { id },
     });
     if (res.ok) {
       setSelectedReservation(null);
@@ -57,9 +75,11 @@ export default function ReservasPage() {
     // Erro: cancelMutation.error/status já preenchidos pelo hook; modal observa via props.
   };
 
-  const pending  = reservations.filter(r => r.status === 'PENDING').length;
+  const pending = reservations.filter(r => r.status === 'PENDING').length;
   const approved = reservations.filter(r => r.status === 'APPROVED').length;
-  const rejected = reservations.filter(r => r.status === 'REJECTED' || r.status === 'CANCELLED').length;
+  const rejected = reservations.filter(
+    r => r.status === 'REJECTED' || r.status === 'CANCELLED',
+  ).length;
 
   return (
     <div>
@@ -71,10 +91,19 @@ export default function ReservasPage() {
         <button
           onClick={() => setShowForm(v => !v)}
           style={{
-            height: '38px', padding: '0 16px', borderRadius: 'var(--radius-s)',
-            background: 'var(--color-brand)', color: '#fff', border: 'none',
-            fontFamily: 'inherit', fontSize: '13px', fontWeight: 600,
-            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
+            height: '38px',
+            padding: '0 16px',
+            borderRadius: 'var(--radius-s)',
+            background: 'var(--color-brand)',
+            color: '#fff',
+            border: 'none',
+            fontFamily: 'inherit',
+            fontSize: '13px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
           }}
         >
           <Plus size={15} />
@@ -84,26 +113,47 @@ export default function ReservasPage() {
 
       {/* Formulário de nova reserva */}
       {showForm && (
-        <div style={{
-          background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius)', boxShadow: 'var(--shadow-s)',
-          padding: '20px', marginBottom: '24px', maxWidth: '520px',
-        }}>
+        <div
+          style={{
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius)',
+            boxShadow: 'var(--shadow-s)',
+            padding: '20px',
+            marginBottom: '24px',
+            maxWidth: '520px',
+          }}
+        >
           {/* Seletor de sala + turma */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: '12px',
+              marginBottom: '16px',
+            }}
+          >
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label htmlFor="sel-sala" style={labelStyle}>Sala *</label>
+              <label htmlFor="sel-sala" style={labelStyle}>
+                Sala *
+              </label>
               <select
                 id="sel-sala"
                 value={sala}
                 onChange={e => setSala(e.target.value)}
                 style={inputStyle}
               >
-                {SALAS.map(s => <option key={s} value={s}>{s}</option>)}
+                {SALAS.map(s => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
               </select>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label htmlFor="sel-turma" style={labelStyle}>Turma</label>
+              <label htmlFor="sel-turma" style={labelStyle}>
+                Turma
+              </label>
               <input
                 id="sel-turma"
                 type="text"
@@ -131,38 +181,111 @@ export default function ReservasPage() {
       )}
 
       {/* Stats */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-        gap: '12px', marginBottom: '24px',
-      }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+          gap: '12px',
+          marginBottom: '24px',
+        }}
+      >
         {[
-          { label: 'Total',     value: reservations.length, color: 'var(--color-blue)',  bg: 'var(--color-blue-l)',  Icon: FileText      },
-          { label: 'Pendentes', value: pending,             color: 'var(--color-amber)', bg: 'var(--color-amber-l)', Icon: Clock         },
-          { label: 'Aprovadas', value: approved,            color: 'var(--color-green)', bg: 'var(--color-green-l)', Icon: CheckCircle2  },
-          { label: 'Rejeitadas',value: rejected,            color: 'var(--color-red)',   bg: 'var(--color-red-l)',   Icon: XCircle       },
+          {
+            label: 'Total',
+            value: reservations.length,
+            color: 'var(--color-blue)',
+            bg: 'var(--color-blue-l)',
+            Icon: FileText,
+          },
+          {
+            label: 'Pendentes',
+            value: pending,
+            color: 'var(--color-amber)',
+            bg: 'var(--color-amber-l)',
+            Icon: Clock,
+          },
+          {
+            label: 'Aprovadas',
+            value: approved,
+            color: 'var(--color-green)',
+            bg: 'var(--color-green-l)',
+            Icon: CheckCircle2,
+          },
+          {
+            label: 'Rejeitadas',
+            value: rejected,
+            color: 'var(--color-red)',
+            bg: 'var(--color-red-l)',
+            Icon: XCircle,
+          },
         ].map(({ label, value, color, bg, Icon }) => (
-          <div key={label} style={{
-            background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius)', padding: '14px 16px', boxShadow: 'var(--shadow-s)',
-            display: 'flex', alignItems: 'center', gap: '12px',
-          }}>
-            <span style={{ width: 32, height: 32, borderRadius: 8, background: bg, color, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+          <div
+            key={label}
+            style={{
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius)',
+              padding: '14px 16px',
+              boxShadow: 'var(--shadow-s)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+            }}
+          >
+            <span
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                background: bg,
+                color,
+                display: 'grid',
+                placeItems: 'center',
+                flexShrink: 0,
+              }}
+            >
               <Icon size={16} />
             </span>
             <div>
               <div style={{ fontSize: '20px', fontWeight: 700, lineHeight: 1, color }}>{value}</div>
-              <div style={{ fontSize: '11px', color: 'var(--color-muted)', marginTop: 2 }}>{label}</div>
+              <div style={{ fontSize: '11px', color: 'var(--color-muted)', marginTop: 2 }}>
+                {label}
+              </div>
             </div>
           </div>
         ))}
       </div>
 
       {/* Lista */}
-      <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', boxShadow: 'var(--shadow-s)', overflow: 'hidden' }}>
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div
+        style={{
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius)',
+          boxShadow: 'var(--shadow-s)',
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            padding: '12px 16px',
+            borderBottom: '1px solid var(--color-border)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
           <span style={{ fontWeight: 600, fontSize: '13px' }}>Todas as reservas</span>
-          <span style={{ fontSize: '11px', fontWeight: 600, padding: '3px 10px', borderRadius: 20, background: 'var(--color-blue-l)', color: 'var(--color-blue)' }}>
+          <span
+            style={{
+              fontSize: '11px',
+              fontWeight: 600,
+              padding: '3px 10px',
+              borderRadius: 20,
+              background: 'var(--color-blue-l)',
+              color: 'var(--color-blue)',
+            }}
+          >
             {reservations.length} registros
           </span>
         </div>
@@ -175,13 +298,16 @@ export default function ReservasPage() {
         loading={list.status === 'loading'}
         error={list.error?.message ?? null}
         onRefresh={() => list.refetch()}
-        onEventClick={(r) => setSelectedReservation(r)}
+        onEventClick={r => setSelectedReservation(r)}
       />
 
       {/* Modal de detalhes (4.2b — cancel 2 cliques + owner-check). Sprint 4 D3 — wiring de edit. */}
       <ReservationDetailsModal
         reservation={selectedReservation}
-        onClose={() => { setSelectedReservation(null); cancelMutation.reset(); }}
+        onClose={() => {
+          setSelectedReservation(null);
+          cancelMutation.reset();
+        }}
         currentUserEmail={CURRENT_USER.userEmail}
         onConfirmCancel={handleConfirmCancel}
         cancelStatus={cancelMutation.status}
@@ -190,23 +316,32 @@ export default function ReservasPage() {
         service={service}
         userId={CURRENT_USER.userId}
         groupDates={groupDates}
-        onEditSuccess={() => { void list.refetch(); }}
+        groupIdMap={groupIdMap}
+        onEditSuccess={() => {
+          void list.refetch();
+        }}
       />
     </div>
   );
 }
 
 const labelStyle: React.CSSProperties = {
-  fontSize: '11px', fontWeight: 600, color: 'var(--color-muted)',
-  textTransform: 'uppercase', letterSpacing: '.05em',
+  fontSize: '11px',
+  fontWeight: 600,
+  color: 'var(--color-muted)',
+  textTransform: 'uppercase',
+  letterSpacing: '.05em',
 };
 
 const inputStyle: React.CSSProperties = {
-  height: '38px', padding: '0 12px',
+  height: '38px',
+  padding: '0 12px',
   border: '1px solid var(--color-border)',
   borderRadius: 'var(--radius-s)',
   background: 'var(--color-surface)',
   color: 'var(--color-text)',
-  fontFamily: 'inherit', fontSize: '13px',
-  outline: 'none', width: '100%',
+  fontFamily: 'inherit',
+  fontSize: '13px',
+  outline: 'none',
+  width: '100%',
 };

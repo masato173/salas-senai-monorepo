@@ -2,7 +2,12 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { isRangeReservation, type ReservationDetails } from './reservationToEvent';
 import { ReservationForm, type ReservationFormService } from './ReservationForm';
-import type { BackendError } from '../../services/appsScript';
+import { EditSelectedView } from './EditSelectedView';
+import type {
+  BackendError,
+  UpdateReservationSelectedRequest,
+  UpdateReservationSelectedResponse,
+} from '../../services/appsScript';
 
 // Sub-etapa 4.2a — modal apresentacional puro.
 // Sub-etapa 4.2b — fluxo de cancelamento em 2 cliques + owner-check preventivo.
@@ -16,23 +21,37 @@ import type { BackendError } from '../../services/appsScript';
 // Modal só carrega estados de UI (view, editMode, justSaved, confirming).
 
 type ModalView = 'details' | 'pick-scope' | 'form-edit';
-type EditMode  = 'edit-single' | 'edit-group';
+type EditMode = 'edit-single' | 'edit-group' | 'edit-selected';
+
+// Sprint 4 D4.4 — estende ReservationFormService com updateReservationSelected.
+// O método foi adicionado ao AppsScriptService (appsScript.ts) na Fase D4.1,
+// mas a interface local ReservationFormService (no ReservationForm) não foi
+// atualizada. Estender aqui evita tocar o form (brief). O service real
+// construído por createAppsScriptService já satisfaz este tipo.
+interface ReservationDetailsModalService extends ReservationFormService {
+  updateReservationSelected: (
+    req: UpdateReservationSelectedRequest,
+  ) => Promise<UpdateReservationSelectedResponse>;
+}
 
 interface ReservationDetailsModalProps {
   reservation: ReservationDetails | null;
-  onClose:     () => void;
+  onClose: () => void;
 
   currentUserEmail: string;
-  onConfirmCancel:  (id: string) => void;
-  cancelStatus:     'idle' | 'loading' | 'success' | 'error';
-  cancelError:      BackendError | null;
-  onCancelReset:    () => void;
+  onConfirmCancel: (id: string) => void;
+  cancelStatus: 'idle' | 'loading' | 'success' | 'error';
+  cancelError: BackendError | null;
+  onCancelReset: () => void;
 
   // Sprint 4 D3 — wiring de edit:
-  service:       ReservationFormService;
-  userId:        string;
-  groupDates?:   string[];        // datas do grupo (filtradas ACTIVE), pro modo edit-group
-  onEditSuccess: () => void;      // página dispara list.refetch()
+  service: ReservationDetailsModalService;
+  userId: string;
+  groupDates?: string[]; // datas do grupo (filtradas ACTIVE), pro modo edit-group
+  // Sprint 4 D4.4 — wiring do C3 (edit-selected). `| undefined` explícito pra
+  // aceitar groupIdMap={undefined} na chamada sem violar exactOptionalPropertyTypes.
+  groupIdMap?: Record<string, string> | undefined;
+  onEditSuccess: () => void; // página dispara list.refetch()
 }
 
 export function ReservationDetailsModal({
@@ -46,12 +65,13 @@ export function ReservationDetailsModal({
   service,
   userId,
   groupDates,
+  groupIdMap,
   onEditSuccess,
 }: ReservationDetailsModalProps) {
   const [confirming, setConfirming] = useState(false);
-  const [view,       setView]       = useState<ModalView>('details');
-  const [editMode,   setEditMode]   = useState<EditMode | null>(null);
-  const [justSaved,  setJustSaved]  = useState(false);
+  const [view, setView] = useState<ModalView>('details');
+  const [editMode, setEditMode] = useState<EditMode | null>(null);
+  const [justSaved, setJustSaved] = useState(false);
 
   // Reset todos os estados internos quando a reserva selecionada muda (clique em outro evento).
   useEffect(() => {
@@ -78,10 +98,11 @@ export function ReservationDetailsModal({
 
   if (!reservation) return null;
 
-  const { id, sala, data, inicio, fim, professor, turma, observacao, createdBy, groupId } = reservation;
-  const isOwner   = createdBy === currentUserEmail;
+  const { id, sala, data, inicio, fim, professor, turma, observacao, createdBy, groupId } =
+    reservation;
+  const isOwner = createdBy === currentUserEmail;
   const isLoading = cancelStatus === 'loading';
-  const isRange   = id !== undefined && isRangeReservation(id, groupId);
+  const isRange = id !== undefined && isRangeReservation(id, groupId);
 
   const editDisabled = !isOwner || isLoading || !id;
 
@@ -107,43 +128,61 @@ export function ReservationDetailsModal({
     <div
       onClick={onClose}
       style={{
-        position: 'fixed', inset: 0, zIndex: 200,
+        position: 'fixed',
+        inset: 0,
+        zIndex: 200,
         background: 'rgba(0,0,0,.4)',
-        display: 'grid', placeItems: 'center',
+        display: 'grid',
+        placeItems: 'center',
         padding: '16px',
       }}
     >
       <div
-        onClick={(e) => e.stopPropagation()}
+        onClick={e => e.stopPropagation()}
         style={{
           background: 'var(--color-surface)',
           borderRadius: 'var(--radius)',
           boxShadow: 'var(--shadow-s)',
           padding: '24px',
           width: 'min(520px, 100%)',
-          display: 'flex', flexDirection: 'column', gap: '16px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px',
         }}
       >
         {justSaved ? (
           // ── Feedback ✓ verde 1.5s pos sucesso ────────────────────
-          <div style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
-            padding: '24px 8px',
-          }}>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '24px 8px',
+            }}
+          >
             <CheckCircle2 size={40} style={{ color: 'var(--color-green)' }} />
-            <p style={{ margin: 0, fontWeight: 600, fontSize: '14px', color: 'var(--color-green)' }}>
+            <p
+              style={{ margin: 0, fontWeight: 600, fontSize: '14px', color: 'var(--color-green)' }}
+            >
               Reserva atualizada com sucesso!
             </p>
-            <p style={{ margin: 0, fontSize: '11px', color: 'var(--color-muted)' }}>
-              Fechando…
-            </p>
+            <p style={{ margin: 0, fontSize: '11px', color: 'var(--color-muted)' }}>Fechando…</p>
           </div>
-
         ) : view === 'pick-scope' ? (
           // ── View: escolha "Só esta" vs "Todas do grupo" ─────────
           <>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-              <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--color-text)' }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px',
+              }}
+            >
+              <h2
+                style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--color-text)' }}
+              >
                 Editar reserva do grupo
               </h2>
               <span style={badgeStyle}>Período</span>
@@ -164,6 +203,13 @@ export function ReservationDetailsModal({
               </button>
               <button
                 type="button"
+                onClick={() => handlePickScope('edit-selected')}
+                style={pickScopeButtonStyle}
+              >
+                Algumas datas do grupo
+              </button>
+              <button
+                type="button"
                 onClick={() => handlePickScope('edit-group')}
                 style={pickScopeButtonStyle}
               >
@@ -172,20 +218,42 @@ export function ReservationDetailsModal({
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <button
-                type="button"
-                onClick={handleBackToDetails}
-                style={neutralButtonStyle}
-              >
+              <button type="button" onClick={handleBackToDetails} style={neutralButtonStyle}>
                 Voltar
               </button>
             </div>
           </>
-
-        ) : view === 'form-edit' && editMode && id ? (
-          // ── View: ReservationForm embutido (D2) ─────────────────
+        ) : view === 'form-edit' && editMode === 'edit-selected' ? (
+          // ── View: EditSelectedView (Sprint 4 D4.4 — caso C3) ────
           <>
-            <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--color-text)' }}>
+            <h2
+              style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--color-text)' }}
+            >
+              Algumas datas do grupo
+            </h2>
+
+            <EditSelectedView
+              groupDates={groupDates ?? []}
+              groupIdMap={groupIdMap ?? {}}
+              salaAtual={sala}
+              inicioAtual={inicio}
+              fimAtual={fim}
+              turmaAtual={turma}
+              observacaoAtual={observacao}
+              userEmail={currentUserEmail}
+              service={service}
+              onSuccess={() => setJustSaved(true)}
+              onCancel={handleBackToDetails}
+            />
+          </>
+        ) : view === 'form-edit' && editMode && editMode !== 'edit-selected' && id ? (
+          // ── View: ReservationForm embutido (D2) ─────────────────
+          // Guard `editMode !== 'edit-selected'` é puramente TS narrowing —
+          // a branch C3 acima já intercepta esse caso. Comportamento idêntico.
+          <>
+            <h2
+              style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--color-text)' }}
+            >
               {editMode === 'edit-single' ? 'Editar reserva' : 'Editar grupo'}
             </h2>
 
@@ -212,55 +280,85 @@ export function ReservationDetailsModal({
               onCancel={handleBackToDetails}
             />
           </>
-
         ) : (
           // ── View: details (default) ─────────────────────────────
           <>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-              <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--color-text)' }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px',
+              }}
+            >
+              <h2
+                style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--color-text)' }}
+              >
                 Detalhes da reserva
               </h2>
               {isRange && <span style={badgeStyle}>Período</span>}
             </div>
 
-            <dl style={{
-              margin: 0, display: 'grid',
-              gridTemplateColumns: 'max-content 1fr',
-              rowGap: '8px', columnGap: '16px', fontSize: '13px',
-            }}>
-              <dt style={dtStyle}>Sala</dt>       <dd style={ddStyle}>{sala}</dd>
-              <dt style={dtStyle}>Data</dt>       <dd style={ddStyle}>{formatDataBR(data)}</dd>
-              <dt style={dtStyle}>Horário</dt>    <dd style={ddStyle}>{inicio} – {fim}</dd>
-              <dt style={dtStyle}>Professor</dt>  <dd style={ddStyle}>{professor}</dd>
-              <dt style={dtStyle}>Turma</dt>      <dd style={ddStyle}>{turma || '—'}</dd>
+            <dl
+              style={{
+                margin: 0,
+                display: 'grid',
+                gridTemplateColumns: 'max-content 1fr',
+                rowGap: '8px',
+                columnGap: '16px',
+                fontSize: '13px',
+              }}
+            >
+              <dt style={dtStyle}>Sala</dt> <dd style={ddStyle}>{sala}</dd>
+              <dt style={dtStyle}>Data</dt> <dd style={ddStyle}>{formatDataBR(data)}</dd>
+              <dt style={dtStyle}>Horário</dt>{' '}
+              <dd style={ddStyle}>
+                {inicio} – {fim}
+              </dd>
+              <dt style={dtStyle}>Professor</dt> <dd style={ddStyle}>{professor}</dd>
+              <dt style={dtStyle}>Turma</dt> <dd style={ddStyle}>{turma || '—'}</dd>
               <dt style={dtStyle}>Observação</dt> <dd style={ddStyle}>{observacao || '—'}</dd>
             </dl>
 
             {/* Faixa de erro do cancel (padrão ReservationForm) */}
             {cancelError && !confirming && (
-              <div style={{
-                display: 'flex', alignItems: 'flex-start', gap: '8px',
-                borderRadius: 'var(--radius-s)', border: '1px solid var(--color-red)',
-                background: 'var(--color-red-l)', padding: '10px 14px',
-              }}>
-                <AlertCircle size={14} style={{ color: 'var(--color-red)', flexShrink: 0, marginTop: '1px' }} />
-                <span style={{ fontSize: '12px', color: 'var(--color-red)' }}>{cancelError.message}</span>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '8px',
+                  borderRadius: 'var(--radius-s)',
+                  border: '1px solid var(--color-red)',
+                  background: 'var(--color-red-l)',
+                  padding: '10px 14px',
+                }}
+              >
+                <AlertCircle
+                  size={14}
+                  style={{ color: 'var(--color-red)', flexShrink: 0, marginTop: '1px' }}
+                />
+                <span style={{ fontSize: '12px', color: 'var(--color-red)' }}>
+                  {cancelError.message}
+                </span>
               </div>
             )}
 
             {/* Indicador de loading do cancel */}
             {isLoading && (
-              <span style={{ fontSize: '11px', color: 'var(--color-muted)' }}>
-                Cancelando…
-              </span>
+              <span style={{ fontSize: '11px', color: 'var(--color-muted)' }}>Cancelando…</span>
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', flexWrap: 'wrap' }}>
+            <div
+              style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', flexWrap: 'wrap' }}
+            >
               {confirming ? (
                 <>
                   <button
                     type="button"
-                    onClick={() => { onCancelReset(); setConfirming(false); }}
+                    onClick={() => {
+                      onCancelReset();
+                      setConfirming(false);
+                    }}
                     disabled={isLoading}
                     style={{ ...neutralButtonStyle, opacity: isLoading ? 0.6 : 1 }}
                   >
@@ -286,8 +384,7 @@ export function ReservationDetailsModal({
                     onClick={handleEdit}
                     disabled={editDisabled}
                     title={
-                      !isOwner ? 'Só quem criou pode editar' :
-                      isLoading ? 'Aguarde…' : undefined
+                      !isOwner ? 'Só quem criou pode editar' : isLoading ? 'Aguarde…' : undefined
                     }
                     style={{
                       ...primaryButtonStyle,
@@ -299,13 +396,16 @@ export function ReservationDetailsModal({
                   </button>
                   <button
                     type="button"
-                    onClick={() => { onCancelReset(); setConfirming(true); }}
+                    onClick={() => {
+                      onCancelReset();
+                      setConfirming(true);
+                    }}
                     disabled={!isOwner || isLoading || !id}
                     title={!isOwner ? 'Só quem criou pode cancelar' : undefined}
                     style={{
                       ...cancelIntentButtonStyle,
-                      cursor: (!isOwner || isLoading) ? 'not-allowed' : 'pointer',
-                      opacity: (!isOwner || isLoading) ? 0.5 : 1,
+                      cursor: !isOwner || isLoading ? 'not-allowed' : 'pointer',
+                      opacity: !isOwner || isLoading ? 0.5 : 1,
                     }}
                   >
                     Cancelar reserva
@@ -331,36 +431,48 @@ export function ReservationDetailsModal({
 // Selo "Período" (Sprint 4 Fase B): mesmo padrão visual do chip "X registros"
 // em pages/Reservas/index.tsx — reusa tokens existentes, sem cor nova.
 const badgeStyle: CSSProperties = {
-  fontSize: '11px', fontWeight: 600,
-  padding: '3px 10px', borderRadius: 20,
-  background: 'var(--color-blue-l)', color: 'var(--color-blue)',
+  fontSize: '11px',
+  fontWeight: 600,
+  padding: '3px 10px',
+  borderRadius: 20,
+  background: 'var(--color-blue-l)',
+  color: 'var(--color-blue)',
 };
 
 const dtStyle: CSSProperties = {
-  fontSize: '11px', fontWeight: 600, color: 'var(--color-muted)',
-  textTransform: 'uppercase', letterSpacing: '.05em',
+  fontSize: '11px',
+  fontWeight: 600,
+  color: 'var(--color-muted)',
+  textTransform: 'uppercase',
+  letterSpacing: '.05em',
   alignSelf: 'center',
 };
 const ddStyle: CSSProperties = { margin: 0, color: 'var(--color-text)' };
 
 const neutralButtonStyle: CSSProperties = {
-  height: '32px', padding: '0 14px',
+  height: '32px',
+  padding: '0 14px',
   borderRadius: 'var(--radius-s)',
   background: 'var(--color-surface)',
   color: 'var(--color-text)',
   border: '1px solid var(--color-border)',
-  fontFamily: 'inherit', fontSize: '13px', fontWeight: 600,
+  fontFamily: 'inherit',
+  fontSize: '13px',
+  fontWeight: 600,
   cursor: 'pointer',
 };
 
 // Acao primaria (Editar): brand color cheio. Sprint 4 D3.
 const primaryButtonStyle: CSSProperties = {
-  height: '32px', padding: '0 14px',
+  height: '32px',
+  padding: '0 14px',
   borderRadius: 'var(--radius-s)',
   background: 'var(--color-brand)',
   color: '#fff',
   border: '1px solid var(--color-brand)',
-  fontFamily: 'inherit', fontSize: '13px', fontWeight: 600,
+  fontFamily: 'inherit',
+  fontSize: '13px',
+  fontWeight: 600,
 };
 
 // Botao da view pick-scope (Sprint 4 D3): full width, neutro, ativo.
@@ -373,28 +485,36 @@ const pickScopeButtonStyle: CSSProperties = {
   background: 'var(--color-surface)',
   color: 'var(--color-text)',
   border: '1px solid var(--color-border)',
-  fontFamily: 'inherit', fontSize: '13px', fontWeight: 600,
+  fontFamily: 'inherit',
+  fontSize: '13px',
+  fontWeight: 600,
   cursor: 'pointer',
 };
 
 // Intenção destrutiva (passo 1): texto vermelho + borda vermelha sutil.
 const cancelIntentButtonStyle: CSSProperties = {
-  height: '32px', padding: '0 14px',
+  height: '32px',
+  padding: '0 14px',
   borderRadius: 'var(--radius-s)',
   background: 'var(--color-surface)',
   color: 'var(--color-red)',
   border: '1px solid var(--color-red)',
-  fontFamily: 'inherit', fontSize: '13px', fontWeight: 600,
+  fontFamily: 'inherit',
+  fontSize: '13px',
+  fontWeight: 600,
 };
 
 // Confirmação destrutiva (passo 2): vermelho cheio, alarmante.
 const destructiveButtonStyle: CSSProperties = {
-  height: '32px', padding: '0 14px',
+  height: '32px',
+  padding: '0 14px',
   borderRadius: 'var(--radius-s)',
   background: 'var(--color-red)',
   color: '#fff',
   border: '1px solid var(--color-red)',
-  fontFamily: 'inherit', fontSize: '13px', fontWeight: 600,
+  fontFamily: 'inherit',
+  fontSize: '13px',
+  fontWeight: 600,
 };
 
 function formatDataBR(iso: string): string {
