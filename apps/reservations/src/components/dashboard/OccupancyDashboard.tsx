@@ -1,40 +1,48 @@
-import { useMemo, useState, type CSSProperties } from 'react';
+import { type CSSProperties } from 'react';
 import { AlertCircle, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 
-import { useSchedule } from '../../hooks/useSchedule';
-import type { ScheduleResult } from '../../services/appsScript';
 import type { RegistroLegado, Turno } from '../../types';
-import { applyScheduleFilters, type ScheduleFilterState } from './applyScheduleFilters';
+import type { ScheduleFilterState } from './applyScheduleFilters';
+import { formatDataBR, weekdayShort } from './scheduleDateUtils';
 
 // Sprint A3.2 — Dashboard nativo de ocupação. Substitui o iframe legado.
-// Consome useSchedule (A3.1) + applyScheduleFilters (puro) e renderiza
-// tabela paginada (40/página) com os 5 filtros do legado.
+// Sprint A3.5 — REFATORADO pra apresentação CONTROLADA: o pai
+// (Dashboard/index.tsx) carrega o estado (useSchedule + filtros + page +
+// filtered + derivados); este componente só renderiza UI a partir das props.
+//
+// UI permanece IDÊNTICA à da A3.2 — única mudança é a fonte do estado.
 //
 // Rédea visual (frontend-design dentro do DS):
-//   • Tokens existentes apenas. Reusa TURNO_STYLE do ReservationForm (mesma
-//     paleta — amber/green/violet — que o legado já usa pra M/V/N).
-//   • Sem dangerouslySetInnerHTML (JSX escapa). Sem novos tokens. Sem
-//     animação.
-//
-// ★ TIMEZONE: toda data parseada via UTC-noon (Date.UTC(y, m-1, d, 12)) + getUTC*.
-// ZERO new Date(string) cru. Manaus é UTC-4 — bug histórico do projeto.
-
-// ScheduleProvider redeclarado localmente porque a interface em useSchedule.ts
-// não é exportada (mínima, 1 método; brief proíbe tocar aquele arquivo).
-interface ScheduleProvider {
-  fetchSchedule: () => Promise<ScheduleResult>;
-}
+//   • Tokens existentes apenas. TURNO_STYLE com convenção da planilha mensal:
+//     Manhã=verde, Tarde=amarelo, Noite=azul. NÃO MEXER nas cores.
+//   • Sem dangerouslySetInnerHTML (JSX escapa).
+//   • Helpers de data importados de scheduleDateUtils (timezone-safe).
 
 interface OccupancyDashboardProps {
-  service: ScheduleProvider;
+  filtered: RegistroLegado[];
+  filtros: ScheduleFilterState;
+  onFiltroChange: <K extends keyof ScheduleFilterState>(
+    key: K,
+    value: ScheduleFilterState[K],
+  ) => void;
+  page: number;
+  onPageChange: (updater: number | ((p: number) => number)) => void;
+  salasUnicas: string[];
+  mesesUnicos: string[];
+  status: 'idle' | 'loading' | 'success' | 'error';
+  error: string | null;
+  onRefetch: () => void;
+  hoje: string;
 }
 
 const PER_PAGE = 40;
+
 const TURNO_LABEL: Record<Turno, string> = {
   M: 'Matutino',
   V: 'Vespertino',
   N: 'Noturno',
 };
+
 // Cores espelham a planilha mensal: Manhã=verde, Tarde=amarelo, Noite=azul.
 // (Convenção visual que o usuário já reconhece nas abas mensais.)
 const TURNO_STYLE: Record<Turno, { bg: string; color: string }> = {
@@ -43,49 +51,25 @@ const TURNO_STYLE: Record<Turno, { bg: string; color: string }> = {
   N: { bg: 'var(--color-blue-l)', color: 'var(--color-blue)' },
 };
 
-export function OccupancyDashboard({ service }: OccupancyDashboardProps) {
-  const schedule = useSchedule(service);
-
-  const [filtros, setFiltros] = useState<ScheduleFilterState>({
-    turma: '',
-    data: '',
-    sala: '',
-    mes: '',
-    turno: 'TODOS',
-  });
-  const [page, setPage] = useState<number>(1);
-
-  // Reset page=1 sempre que algum filtro mudar (centraliza num updater).
-  function updateFiltro<K extends keyof ScheduleFilterState>(
-    key: K,
-    value: ScheduleFilterState[K],
-  ): void {
-    setFiltros(prev => ({ ...prev, [key]: value }));
-    setPage(1);
-  }
-
-  const registros = useMemo<RegistroLegado[]>(
-    () => schedule.data?.registros ?? [],
-    [schedule.data],
-  );
-
-  const filtered = useMemo<RegistroLegado[]>(
-    () => applyScheduleFilters(registros, filtros),
-    [registros, filtros],
-  );
-
-  const salasUnicas = useMemo<string[]>(
-    () => [...new Set(registros.map(r => r.sala))].sort((a, b) => a.localeCompare(b)),
-    [registros],
-  );
-  const mesesUnicos = useMemo<string[]>(() => [...new Set(registros.map(r => r.mes))], [registros]);
+export function OccupancyDashboard({
+  filtered,
+  filtros,
+  onFiltroChange,
+  page,
+  onPageChange,
+  salasUnicas,
+  mesesUnicos,
+  status,
+  error,
+  onRefetch,
+  hoje,
+}: OccupancyDashboardProps): JSX.Element {
+  const isLoading = status === 'loading';
+  const isError = status === 'error';
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
   const safePage = Math.min(page, totalPages);
   const pageSlice = filtered.slice((safePage - 1) * PER_PAGE, safePage * PER_PAGE);
-  const hoje = todayYmd();
-  const isLoading = schedule.status === 'loading';
-  const isError = schedule.status === 'error';
 
   return (
     <section style={containerStyle} aria-label="Ocupação de salas">
@@ -97,7 +81,7 @@ export function OccupancyDashboard({ service }: OccupancyDashboardProps) {
             type="text"
             placeholder="Buscar turma…"
             value={filtros.turma}
-            onChange={e => updateFiltro('turma', e.target.value)}
+            onChange={e => onFiltroChange('turma', e.target.value)}
             style={inputStyle}
           />
         </Field>
@@ -107,7 +91,7 @@ export function OccupancyDashboard({ service }: OccupancyDashboardProps) {
             id="occ-data"
             type="date"
             value={filtros.data}
-            onChange={e => updateFiltro('data', e.target.value)}
+            onChange={e => onFiltroChange('data', e.target.value)}
             style={inputStyle}
           />
         </Field>
@@ -116,7 +100,7 @@ export function OccupancyDashboard({ service }: OccupancyDashboardProps) {
           <select
             id="occ-sala"
             value={filtros.sala}
-            onChange={e => updateFiltro('sala', e.target.value)}
+            onChange={e => onFiltroChange('sala', e.target.value)}
             style={inputStyle}
           >
             <option value="">Todas</option>
@@ -132,7 +116,7 @@ export function OccupancyDashboard({ service }: OccupancyDashboardProps) {
           <select
             id="occ-mes"
             value={filtros.mes}
-            onChange={e => updateFiltro('mes', e.target.value)}
+            onChange={e => onFiltroChange('mes', e.target.value)}
             style={inputStyle}
           >
             <option value="">Todos</option>
@@ -159,7 +143,7 @@ export function OccupancyDashboard({ service }: OccupancyDashboardProps) {
                   type="button"
                   role="radio"
                   aria-checked={active}
-                  onClick={() => updateFiltro('turno', t)}
+                  onClick={() => onFiltroChange('turno', t)}
                   style={turnoButtonStyle(active)}
                 >
                   {t === 'TODOS' ? 'Todos' : t}
@@ -177,9 +161,7 @@ export function OccupancyDashboard({ service }: OccupancyDashboardProps) {
         </span>
         <button
           type="button"
-          onClick={() => {
-            void schedule.refetch();
-          }}
+          onClick={onRefetch}
           disabled={isLoading}
           style={{
             ...refreshButtonStyle,
@@ -197,14 +179,8 @@ export function OccupancyDashboard({ service }: OccupancyDashboardProps) {
       {isError && (
         <div role="alert" style={errorBoxStyle}>
           <AlertCircle size={14} style={errorIconStyle} aria-hidden="true" />
-          <span style={errorTextStyle}>{schedule.error ?? 'Falha ao carregar dados.'}</span>
-          <button
-            type="button"
-            onClick={() => {
-              void schedule.refetch();
-            }}
-            style={retryButtonStyle}
-          >
+          <span style={errorTextStyle}>{error ?? 'Falha ao carregar dados.'}</span>
+          <button type="button" onClick={onRefetch} style={retryButtonStyle}>
             Tentar novamente
           </button>
         </div>
@@ -260,7 +236,7 @@ export function OccupancyDashboard({ service }: OccupancyDashboardProps) {
       )}
 
       {/* ── Empty state ───────────────────────────────────────── */}
-      {!isLoading && !isError && filtered.length === 0 && registros.length > 0 && (
+      {!isLoading && !isError && filtered.length === 0 && (
         <div style={emptyStateStyle}>
           <p style={emptyTitleStyle}>Nenhum resultado</p>
           <p style={emptySubtitleStyle}>Tente ajustar os filtros.</p>
@@ -272,7 +248,7 @@ export function OccupancyDashboard({ service }: OccupancyDashboardProps) {
         <div style={paginationStyle} role="navigation" aria-label="Paginação">
           <button
             type="button"
-            onClick={() => setPage(p => Math.max(1, p - 1))}
+            onClick={() => onPageChange(p => Math.max(1, p - 1))}
             disabled={safePage <= 1}
             aria-label="Página anterior"
             style={pageButtonStyle(safePage <= 1)}
@@ -284,7 +260,7 @@ export function OccupancyDashboard({ service }: OccupancyDashboardProps) {
           </span>
           <button
             type="button"
-            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            onClick={() => onPageChange(p => Math.min(totalPages, p + 1))}
             disabled={safePage >= totalPages}
             aria-label="Próxima página"
             style={pageButtonStyle(safePage >= totalPages)}
@@ -298,39 +274,6 @@ export function OccupancyDashboard({ service }: OccupancyDashboardProps) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Helpers — timezone-safe + formatters
-// ─────────────────────────────────────────────────────────────
-
-// Date em UTC-noon a partir de YYYY-MM-DD. ZERO new Date(string).
-function ymdToUtcDate(iso: string): Date {
-  const [y, m, d] = iso.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d, 12));
-}
-
-function pad2(n: number): string {
-  return String(n).padStart(2, '0');
-}
-
-// "hoje" em YYYY-MM-DD via UTC (Manaus é UTC-4 — usar UTC com offset manual
-// daria a data local correta; aqui aceitamos o pequeno desvio em horários-
-// limite porque "hoje" é só pra pill informativa, não regra de negócio).
-function todayYmd(): string {
-  const now = new Date();
-  // Usa as partes locais (espelha o legado, que também usa locale do navegador).
-  return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
-}
-
-function formatDataBR(iso: string): string {
-  const dt = ymdToUtcDate(iso);
-  return `${pad2(dt.getUTCDate())}/${pad2(dt.getUTCMonth() + 1)}/${dt.getUTCFullYear()}`;
-}
-
-const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-function weekdayShort(iso: string): string {
-  return WEEKDAYS[ymdToUtcDate(iso).getUTCDay()];
-}
-
-// ─────────────────────────────────────────────────────────────
 // <Field> — replicado pra evitar tocar ReservationForm (brief).
 // ─────────────────────────────────────────────────────────────
 
@@ -340,7 +283,7 @@ interface FieldProps {
   children: React.ReactNode;
 }
 
-function Field({ label, htmlFor, children }: FieldProps) {
+function Field({ label, htmlFor, children }: FieldProps): JSX.Element {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
       <label htmlFor={htmlFor} style={labelStyle}>
@@ -353,6 +296,7 @@ function Field({ label, htmlFor, children }: FieldProps) {
 
 // ─────────────────────────────────────────────────────────────
 // Styles (CSSProperties) — só tokens existentes do DS.
+// (Iguais à versão A3.2, intocados.)
 // ─────────────────────────────────────────────────────────────
 
 const containerStyle: CSSProperties = {
