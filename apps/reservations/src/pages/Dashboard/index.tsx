@@ -12,10 +12,7 @@ import { OccupancyDashboard } from '../../components/dashboard/OccupancyDashboar
 import { todayYmd } from '../../components/dashboard/scheduleDateUtils';
 import type { RegistroLegado } from '../../types';
 
-// Sprint A3.5 — Dashboard nativo. Sobe estado pro pai e mata o iframe.
-//
-// O arquivo LegacyDashboard.tsx PERMANECE no projeto (rede de rollback) —
-// só não é importado/renderizado aqui. Remoção física = A3.6.
+// Sprint A3 — Dashboard nativo (cards + tabela de ocupação). Sem iframe.
 
 // Estado inicial dos filtros — usado pelo useState inicial e pelo reset.
 const ESTADO_INICIAL_FILTROS: ScheduleFilterState = {
