@@ -32,8 +32,17 @@ interface OccupancyDashboardProps {
   status: 'idle' | 'loading' | 'success' | 'error';
   error: string | null;
   onRefetch: () => void;
+  onReset: () => void;
   hoje: string;
 }
+
+// Rótulos longos pros botões de turno (valor interno permanece M/V/N/TODOS).
+const TURNO_FILTRO_LABEL: Record<'TODOS' | 'M' | 'V' | 'N', string> = {
+  TODOS: 'Todos',
+  M: 'Matutino',
+  V: 'Vespertino',
+  N: 'Noturno',
+};
 
 const PER_PAGE = 40;
 
@@ -62,6 +71,7 @@ export function OccupancyDashboard({
   status,
   error,
   onRefetch,
+  onReset,
   hoje,
 }: OccupancyDashboardProps): JSX.Element {
   const isLoading = status === 'loading';
@@ -73,7 +83,27 @@ export function OccupancyDashboard({
 
   return (
     <section style={containerStyle} aria-label="Ocupação de salas">
-      {/* ── Filtros (5) ───────────────────────────────────────── */}
+      {/* ── Barra de ações rápidas ──────────────────────────── */}
+      <div style={actionsBarStyle}>
+        <button
+          type="button"
+          onClick={() => onFiltroChange('data', hoje)}
+          style={actionPrimaryButtonStyle}
+          aria-label="Filtrar pela data de hoje"
+        >
+          Hoje
+        </button>
+        <button
+          type="button"
+          onClick={onReset}
+          style={actionButtonStyle}
+          aria-label="Limpar todos os filtros"
+        >
+          Limpar
+        </button>
+      </div>
+
+      {/* ── Filtros (4 — turma/data/sala/mês) ─────────────── */}
       <div style={filtersRowStyle}>
         <Field label="Turma" htmlFor="occ-turma">
           <input
@@ -127,32 +157,33 @@ export function OccupancyDashboard({
             ))}
           </select>
         </Field>
-
-        <Field label="Turno" htmlFor="occ-turno-group">
-          <div
-            id="occ-turno-group"
-            role="radiogroup"
-            aria-label="Filtrar por turno"
-            style={turnoGroupStyle}
-          >
-            {(['TODOS', 'M', 'V', 'N'] as const).map(t => {
-              const active = filtros.turno === t;
-              return (
-                <button
-                  key={t}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  onClick={() => onFiltroChange('turno', t)}
-                  style={turnoButtonStyle(active)}
-                >
-                  {t === 'TODOS' ? 'Todos' : t}
-                </button>
-              );
-            })}
-          </div>
-        </Field>
       </div>
+
+      {/* ── Turno (linha própria, full-width pra acomodar nomes longos) ── */}
+      <Field label="Turno" htmlFor="occ-turno-group">
+        <div
+          id="occ-turno-group"
+          role="radiogroup"
+          aria-label="Filtrar por turno"
+          style={turnoGroupStyle}
+        >
+          {(['TODOS', 'M', 'V', 'N'] as const).map(t => {
+            const active = filtros.turno === t;
+            return (
+              <button
+                key={t}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => onFiltroChange('turno', t)}
+                style={turnoButtonStyle(active)}
+              >
+                {TURNO_FILTRO_LABEL[t]}
+              </button>
+            );
+          })}
+        </div>
+      </Field>
 
       {/* ── Barra de status: contagem + refetch ───────────────── */}
       <div style={statusBarStyle}>
@@ -314,6 +345,36 @@ const filtersRowStyle: CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
   gap: '12px',
+};
+
+// Barra de ações rápidas (Hoje / Limpar) — sutil, acima dos filtros.
+const actionsBarStyle: CSSProperties = {
+  display: 'flex',
+  gap: '8px',
+  justifyContent: 'flex-start',
+};
+
+// Botão neutro de ação rápida. Mesmo gabarito do refreshButtonStyle.
+const actionButtonStyle: CSSProperties = {
+  height: '32px',
+  padding: '0 14px',
+  borderRadius: 'var(--radius-s)',
+  background: 'var(--color-surface)',
+  color: 'var(--color-text)',
+  border: '1px solid var(--color-border)',
+  fontFamily: 'inherit',
+  fontSize: '12px',
+  fontWeight: 600,
+  cursor: 'pointer',
+  transition: 'background 120ms, color 120ms, border-color 120ms',
+};
+
+// Variante "Hoje" — leve destaque (texto + borda na cor da brand) marcando
+// que é a ação primária do par. Mantém visual sóbrio (sem fundo cheio).
+const actionPrimaryButtonStyle: CSSProperties = {
+  ...actionButtonStyle,
+  color: 'var(--color-brand)',
+  border: '1px solid var(--color-brand)',
 };
 
 const labelStyle: CSSProperties = {

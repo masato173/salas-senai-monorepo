@@ -17,6 +17,15 @@ import type { RegistroLegado } from '../../types';
 // O arquivo LegacyDashboard.tsx PERMANECE no projeto (rede de rollback) —
 // só não é importado/renderizado aqui. Remoção física = A3.6.
 
+// Estado inicial dos filtros — usado pelo useState inicial e pelo reset.
+const ESTADO_INICIAL_FILTROS: ScheduleFilterState = {
+  turma: '',
+  data: '',
+  sala: '',
+  mes: '',
+  turno: 'TODOS',
+};
+
 export function DashboardPage(): JSX.Element {
   const service = useMemo(
     () => createAppsScriptService({ url: APPS_SCRIPT_URL, token: APPS_SCRIPT_TOKEN }),
@@ -24,13 +33,7 @@ export function DashboardPage(): JSX.Element {
   );
   const schedule = useSchedule(service);
 
-  const [filtros, setFiltros] = useState<ScheduleFilterState>({
-    turma: '',
-    data: '',
-    sala: '',
-    mes: '',
-    turno: 'TODOS',
-  });
+  const [filtros, setFiltros] = useState<ScheduleFilterState>(ESTADO_INICIAL_FILTROS);
   const [page, setPage] = useState<number>(1);
 
   function updateFiltro<K extends keyof ScheduleFilterState>(
@@ -38,6 +41,11 @@ export function DashboardPage(): JSX.Element {
     value: ScheduleFilterState[K],
   ): void {
     setFiltros(prev => ({ ...prev, [key]: value }));
+    setPage(1);
+  }
+
+  function resetFiltros(): void {
+    setFiltros(ESTADO_INICIAL_FILTROS);
     setPage(1);
   }
 
@@ -81,6 +89,7 @@ export function DashboardPage(): JSX.Element {
           onRefetch={() => {
             void schedule.refetch();
           }}
+          onReset={resetFiltros}
           hoje={hoje}
         />
       </div>
