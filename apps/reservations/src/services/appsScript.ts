@@ -6,7 +6,7 @@ interface AppsScriptConfig {
   token: string;
 }
 
-interface ScheduleResult {
+export interface ScheduleResult {
   registros: RegistroLegado[];
   turnoMap: TurnoMap;
 }
