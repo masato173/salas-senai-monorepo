@@ -234,8 +234,9 @@ export function createAppsScriptService(config: AppsScriptConfig): AppsScriptSer
 
       // Enriquece + sanitiza cada registro
       const registros: RegistroLegado[] = rawDados.map(r => {
-        // Resolve turno — suporta "APB.X/APB.Y"
-        const turno = resolveTurno(r.turma, turnoMap);
+        // B3.3 — turno por bloco (backend) primário; Lista (turnoMap) fallback.
+        // sanitizeTurno protege contra valor inesperado vindo do backend.
+        const turno = sanitizeTurno(r.turno) ?? resolveTurno(r.turma, turnoMap);
 
         return {
           data: r.data,
@@ -363,6 +364,13 @@ export function createAppsScriptService(config: AppsScriptConfig): AppsScriptSer
       return (await res.json()) as UpdateReservationSelectedResponse;
     },
   };
+}
+
+// B3.3 — defesa em profundidade contra valor inesperado do backend.
+// Backend (parsePlanilha B3.2) manda 'M'|'V'|'N'|null; sanitiza tudo o
+// mais pra null.
+function sanitizeTurno(t: unknown): Turno | null {
+  return t === 'M' || t === 'V' || t === 'N' ? t : null;
 }
 
 function resolveTurno(turma: string, map: TurnoMap): Turno | null {
