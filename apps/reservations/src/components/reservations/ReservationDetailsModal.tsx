@@ -274,7 +274,7 @@ export function ReservationDetailsModal({
                 inicio,
                 fim,
                 observacao,
-                groupDates: editMode === 'edit-group' ? groupDates : undefined,
+                ...(editMode === 'edit-group' && groupDates !== undefined && { groupDates }),
               }}
               onSuccess={() => setJustSaved(true)}
               onCancel={handleBackToDetails}

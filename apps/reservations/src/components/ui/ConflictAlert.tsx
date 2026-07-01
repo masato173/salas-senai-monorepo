@@ -1,4 +1,3 @@
-import React from 'react';
 import type { Reservation } from '../../types';
 
 interface ConflictAlertProps {
@@ -16,7 +15,9 @@ export function ConflictAlert({ conflicts, onDismiss }: ConflictAlertProps) {
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <span className="text-red-600 text-lg" aria-hidden="true">⚠</span>
+          <span className="text-red-600 text-lg" aria-hidden="true">
+            ⚠
+          </span>
           <div>
             <p className="font-semibold text-red-800 dark:text-red-200 text-sm">
               Conflito de horário detectado

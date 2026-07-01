@@ -1,5 +1,3 @@
-import React from 'react';
-
 interface LoadingSkeletonProps {
   rows?: number;
   className?: string;

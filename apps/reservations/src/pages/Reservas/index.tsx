@@ -315,8 +315,8 @@ export default function ReservasPage() {
         onCancelReset={() => cancelMutation.reset()}
         service={service}
         userId={CURRENT_USER.userId}
-        groupDates={groupDates}
-        groupIdMap={groupIdMap}
+        {...(groupDates !== undefined && { groupDates })}
+        {...(groupIdMap !== undefined && { groupIdMap })}
         onEditSuccess={() => {
           void list.refetch();
         }}

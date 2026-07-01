@@ -1,19 +1,16 @@
-import React from 'react';
 import { useReservationStore } from '../../store/reservationStore';
 import { StatusBadge, TurnoBadge } from '../ui/StatusBadge';
 
 interface ReservationListProps {
-  userId?:       string;   // filtra por usuário se fornecido
-  showApproval?: boolean;  // exibe botões de aprovação (coordenador)
+  userId?: string; // filtra por usuário se fornecido
+  showApproval?: boolean; // exibe botões de aprovação (coordenador)
 }
 
 export function ReservationList({ userId, showApproval = false }: ReservationListProps) {
   const { reservations, cancelReservation, approveReservation, rejectReservation } =
     useReservationStore();
 
-  const filtered = userId
-    ? reservations.filter(r => r.userId === userId)
-    : reservations;
+  const filtered = userId ? reservations.filter(r => r.userId === userId) : reservations;
 
   if (filtered.length === 0) {
     return (
@@ -42,9 +39,15 @@ export function ReservationList({ userId, showApproval = false }: ReservationLis
             <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
               <td className="py-3 px-4 font-medium">{r.date}</td>
               <td className="py-3 px-4 text-gray-600 dark:text-gray-300">{r.roomId}</td>
-              <td className="py-3 px-4 text-gray-600 dark:text-gray-300">{r.start}–{r.end}</td>
-              <td className="py-3 px-4"><TurnoBadge turno={r.turno} /></td>
-              <td className="py-3 px-4"><StatusBadge status={r.status} /></td>
+              <td className="py-3 px-4 text-gray-600 dark:text-gray-300">
+                {r.start}–{r.end}
+              </td>
+              <td className="py-3 px-4">
+                <TurnoBadge turno={r.turno} />
+              </td>
+              <td className="py-3 px-4">
+                <StatusBadge status={r.status} />
+              </td>
               <td className="py-3 px-4">
                 <div className="flex gap-2">
                   {showApproval && r.status === 'PENDING' && (

@@ -1,4 +1,4 @@
-import React, { lazy, Suspense } from 'react';
+import { lazy, Suspense } from 'react';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { AppLayout } from '../layouts/AppLayout';
 import { RouteLoader } from './RouteLoader';
@@ -11,25 +11,25 @@ import { ProtectedRoute } from './ProtectedRoute';
 // ─────────────────────────────────────────────────────────────
 import { DashboardPage } from '../pages/Dashboard';
 
-const AgendamentosPage  = lazy(() => import('../pages/Agendamentos'));
-const ReservasPage      = lazy(() => import('../pages/Reservas'));
-const SalasPage         = lazy(() => import('../pages/Salas'));
-const TurmasPage        = lazy(() => import('../pages/Turmas'));
-const RelatoriosPage    = lazy(() => import('../pages/Relatorios'));
+const AgendamentosPage = lazy(() => import('../pages/Agendamentos'));
+const ReservasPage = lazy(() => import('../pages/Reservas'));
+const SalasPage = lazy(() => import('../pages/Salas'));
+const TurmasPage = lazy(() => import('../pages/Turmas'));
+const RelatoriosPage = lazy(() => import('../pages/Relatorios'));
 const ConfiguracoesPage = lazy(() => import('../pages/Configuracoes'));
-const NotFoundPage      = lazy(() => import('../pages/NotFound'));
+const NotFoundPage = lazy(() => import('../pages/NotFound'));
 
 export const router = createBrowserRouter([
   {
-    path:    '/',
+    path: '/',
     element: <AppLayout />,
     children: [
       {
-        index:   true,
+        index: true,
         element: <DashboardPage />,
       },
       {
-        path:    'agendamentos',
+        path: 'agendamentos',
         element: (
           <Suspense fallback={<RouteLoader />}>
             <AgendamentosPage />
@@ -37,7 +37,7 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        path:    'reservas',
+        path: 'reservas',
         element: (
           <ProtectedRoute>
             <Suspense fallback={<RouteLoader />}>
@@ -47,7 +47,7 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        path:    'salas',
+        path: 'salas',
         element: (
           <ProtectedRoute>
             <Suspense fallback={<RouteLoader />}>
@@ -57,7 +57,7 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        path:    'turmas',
+        path: 'turmas',
         element: (
           <ProtectedRoute>
             <Suspense fallback={<RouteLoader />}>
@@ -67,7 +67,7 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        path:    'relatorios',
+        path: 'relatorios',
         element: (
           <ProtectedRoute>
             <Suspense fallback={<RouteLoader />}>
@@ -77,7 +77,7 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        path:    'configuracoes',
+        path: 'configuracoes',
         element: (
           <ProtectedRoute requiredRole="ADMIN">
             <Suspense fallback={<RouteLoader />}>
@@ -87,7 +87,7 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        path:    '*',
+        path: '*',
         element: (
           <Suspense fallback={<RouteLoader />}>
             <NotFoundPage />
