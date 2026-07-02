@@ -1,7 +1,7 @@
 import { useMemo, type CSSProperties } from 'react';
 
 import { SALAS } from '../../config';
-import type { RegistroLegado, Turno } from '../../types';
+import type { RegistroLegado, Turno, AvailabilityResult } from '../../types';
 
 // Sprint A3.3 — cards de resumo do Dashboard. Componente PURO de apresentação:
 // recebe `filtered` (mesmo array que alimenta a tabela em OccupancyDashboard)
@@ -13,6 +13,8 @@ import type { RegistroLegado, Turno } from '../../types';
 interface DashboardStatsProps {
   filtered: RegistroLegado[]; // mesmo subset que vai pra tabela
   hoje: string; // YYYY-MM-DD passado pelo pai (já UTC-safe)
+  // S5 — opcional, backward compat. Quando presente, renderiza 3 cards extras.
+  disponibilidade?: AvailabilityResult;
 }
 
 // Detalhe visual: borda-esquerda na cor do turno. Reusa tokens existentes.
@@ -28,7 +30,11 @@ const TURNO_LABEL: Record<Turno, string> = {
   N: 'Noite',
 };
 
-export function DashboardStats({ filtered, hoje }: DashboardStatsProps): JSX.Element {
+export function DashboardStats({
+  filtered,
+  hoje,
+  disponibilidade,
+}: DashboardStatsProps): JSX.Element {
   const stats = useMemo(() => {
     const salasComAtividade = new Set(filtered.map(r => r.sala)).size;
 
@@ -41,8 +47,26 @@ export function DashboardStats({ filtered, hoje }: DashboardStatsProps): JSX.Ele
       if (r.turno) porTurno[r.turno] += 1;
     }
 
-    return { salasComAtividade, ocupacoesHoje, salasHoje, porTurno };
-  }, [filtered, hoje]);
+    // S5 — contagens de disponibilidade (só se prop presente).
+    const dispHoje = disponibilidade?.salas ?? [];
+    const salasLivres = dispHoje.filter(s => s.status === 'livre').length;
+    const salasComAula = dispHoje.filter(
+      s => s.status === 'aula' || s.status === 'conflito',
+    ).length;
+    const salasComReserva = dispHoje.filter(
+      s => s.status === 'reserva' || s.status === 'conflito',
+    ).length;
+
+    return {
+      salasComAtividade,
+      ocupacoesHoje,
+      salasHoje,
+      porTurno,
+      salasLivres,
+      salasComAula,
+      salasComReserva,
+    };
+  }, [filtered, hoje, disponibilidade]);
 
   const totalOficial = SALAS.length;
 
@@ -63,6 +87,19 @@ export function DashboardStats({ filtered, hoje }: DashboardStatsProps): JSX.Ele
       <TurnoCard turno="M" value={stats.porTurno.M} />
       <TurnoCard turno="V" value={stats.porTurno.V} />
       <TurnoCard turno="N" value={stats.porTurno.N} />
+
+      {/* S5 — disponibilidade de hoje (aditivo, só renderiza se prop presente). */}
+      {disponibilidade && (
+        <>
+          <Card
+            label="Salas livres hoje"
+            value={stats.salasLivres}
+            sub={`de ${totalOficial} salas`}
+          />
+          <Card label="Com aula hoje" value={stats.salasComAula} sub="salas ocupadas" />
+          <Card label="Com reserva hoje" value={stats.salasComReserva} sub="salas reservadas" />
+        </>
+      )}
     </section>
   );
 }

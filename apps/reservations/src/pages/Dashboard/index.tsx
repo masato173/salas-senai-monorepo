@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
 
 import { createAppsScriptService } from '../../services/appsScript';
-import { APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN } from '../../config';
+import { APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN, SALAS } from '../../config';
 import { useSchedule } from '../../hooks/useSchedule';
+import { useListReservations } from '../../hooks/useListReservations';
+import { useAvailability } from '../../hooks/useAvailability';
 import {
   applyScheduleFilters,
   type ScheduleFilterState,
@@ -11,6 +13,7 @@ import { DashboardStats } from '../../components/dashboard/DashboardStats';
 import { OccupancyDashboard } from '../../components/dashboard/OccupancyDashboard';
 import { todayYmd } from '../../components/dashboard/scheduleDateUtils';
 import type { RegistroLegado } from '../../types';
+import type { CreatedReservationRow } from '../../services/appsScript';
 
 // Sprint A3 — Dashboard nativo (cards + tabela de ocupação). Sem iframe.
 
@@ -29,6 +32,11 @@ export function DashboardPage(): JSX.Element {
     [],
   );
   const schedule = useSchedule(service);
+  const list = useListReservations(service);
+  const reservas = useMemo<CreatedReservationRow[]>(
+    () => list.data?.reservations ?? [],
+    [list.data],
+  );
 
   const [filtros, setFiltros] = useState<ScheduleFilterState>(ESTADO_INICIAL_FILTROS);
   const [page, setPage] = useState<number>(1);
@@ -62,6 +70,9 @@ export function DashboardPage(): JSX.Element {
 
   const hoje = todayYmd();
 
+  // S5 — disponibilidade de hoje: aulas + reservas (não CANCELLED).
+  const disponibilidade = useAvailability(registros, reservas, hoje, SALAS);
+
   return (
     <div>
       <div className="page-header">
@@ -72,7 +83,7 @@ export function DashboardPage(): JSX.Element {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <DashboardStats filtered={filtered} hoje={hoje} />
+        <DashboardStats filtered={filtered} hoje={hoje} disponibilidade={disponibilidade} />
         <OccupancyDashboard
           filtered={filtered}
           filtros={filtros}
