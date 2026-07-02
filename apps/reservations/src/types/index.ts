@@ -91,3 +91,37 @@ export interface SlotValidationResult {
   ok: boolean;
   error?: string;
 }
+
+// ─── Sprint Disponibilidade S1 ────────────────────────────────
+
+/** Status dominante de uma sala num intervalo consultado. */
+export type RoomStatus = 'livre' | 'aula' | 'reserva' | 'conflito';
+// 'conflito' = aula + reserva sobrepostos (S4 resolve no backend)
+
+/** Evento que ocupa uma sala num intervalo. */
+export interface SalaEvento {
+  tipo: 'aula' | 'reserva';
+  sala: string;
+  data: string; // YYYY-MM-DD
+  inicio: string; // HH:MM
+  fim: string; // HH:MM
+  turno?: Turno | null; // presente em aula; ausente em reserva
+  turma?: string; // presente em aula
+  professor?: string; // presente em reserva
+  id?: string; // id da reserva (tipo=reserva)
+}
+
+/** Disponibilidade de uma sala num dia (ou filtro de turno). */
+export interface DisponibilidadeSala {
+  sala: string;
+  status: RoomStatus; // pior caso: conflito > aula > reserva > livre
+  eventos: SalaEvento[];
+}
+
+/** Resultado do buildRoomAvailability. */
+export interface AvailabilityResult {
+  data: string; // YYYY-MM-DD consultado
+  turno?: Turno; // filtro aplicado (undefined = dia todo)
+  salas: DisponibilidadeSala[];
+  geradoEm: string; // new Date().toISOString()
+}
