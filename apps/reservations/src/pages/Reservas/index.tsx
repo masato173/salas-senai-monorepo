@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { FileText, Clock, CheckCircle2, XCircle, Plus } from 'lucide-react';
 import { useReservationStore } from '../../store/reservationStore';
 import { ReservationList } from '../../components/reservations/ReservationList';
@@ -8,17 +8,22 @@ import { ReservationDetailsModal } from '../../components/reservations/Reservati
 import { createAppsScriptService } from '../../services/appsScript';
 import { useListReservations } from '../../hooks/useListReservations';
 import { useCancelReservation } from '../../hooks/useCancelReservation';
+import { useSchedule } from '../../hooks/useSchedule';
+import { useAvailability } from '../../hooks/useAvailability';
+import { todayYmd } from '../../components/dashboard/scheduleDateUtils';
 import {
   reservationToEvent,
   type ReservationDetails,
 } from '../../components/reservations/reservationToEvent';
 import { APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN, SALAS, CURRENT_USER } from '../../config';
+import type { RegistroLegado } from '../../types';
 
 export default function ReservasPage() {
   const { reservations } = useReservationStore();
   const [showForm, setShowForm] = useState(false);
   const [sala, setSala] = useState<string>(SALAS[6]); // "603 Sala"
   const [turma, setTurma] = useState('');
+  const [selectedDate, setSelectedDate] = useState<string>(todayYmd);
   const [selectedReservation, setSelectedReservation] = useState<ReservationDetails | null>(null);
 
   const service = useMemo(
@@ -32,6 +37,32 @@ export default function ReservasPage() {
     () => (list.data?.reservations ?? []).map(reservationToEvent),
     [list.data],
   );
+
+  // Sprint Disponibilidade S6 — fluxo data → sala → form.
+  // Aulas vêm de useSchedule; reservas do list acima. Ambos memoizados.
+  const schedule = useSchedule(service);
+  const registros = useMemo<RegistroLegado[]>(
+    () => schedule.data?.registros ?? [],
+    [schedule.data],
+  );
+  const reservas = useMemo(() => list.data?.reservations ?? [], [list.data]);
+  const disp = useAvailability(registros, reservas, selectedDate, SALAS);
+
+  // Status da sala na data selecionada. Default 'livre' se não achar.
+  function statusDaSala(nomeSala: string): 'livre' | 'aula' | 'reserva' | 'conflito' {
+    return disp.salas.find(s => s.sala === nomeSala)?.status ?? 'livre';
+  }
+
+  // Se a data mudar e a sala atual ficar ocupada, resetar pra primeira sala
+  // livre. Se nenhuma estiver livre, mantém a atual (usuário vê o disabled).
+  useEffect(() => {
+    if (statusDaSala(sala) !== 'livre') {
+      const primeiraLivre = SALAS.find(s => statusDaSala(s) === 'livre');
+      if (primeiraLivre) setSala(primeiraLivre);
+    }
+    // disp muda quando selectedDate muda; não precisa listar todas as deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate, disp]);
 
   // Sprint 4 D3 — datas do grupo da reserva selecionada, derivadas da lista
   // já carregada (sem nova query). Filtra ACTIVE pra espelhar o backend C2.
@@ -124,6 +155,23 @@ export default function ReservasPage() {
             maxWidth: '520px',
           }}
         >
+          {/* S6 — Seletor de data (fluxo data → sala → form). */}
+          <div
+            style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '12px' }}
+          >
+            <label htmlFor="sel-data" style={labelStyle}>
+              Data *
+            </label>
+            <input
+              id="sel-data"
+              type="date"
+              value={selectedDate}
+              onChange={e => setSelectedDate(e.target.value)}
+              min={todayYmd()}
+              style={inputStyle}
+            />
+          </div>
+
           {/* Seletor de sala + turma */}
           <div
             style={{
@@ -143,11 +191,16 @@ export default function ReservasPage() {
                 onChange={e => setSala(e.target.value)}
                 style={inputStyle}
               >
-                {SALAS.map(s => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
+                {SALAS.map(s => {
+                  const st = statusDaSala(s);
+                  const ocupada = st !== 'livre';
+                  return (
+                    <option key={s} value={s} disabled={ocupada}>
+                      {s}
+                      {ocupada ? ` (${st})` : ''}
+                    </option>
+                  );
+                })}
               </select>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -166,7 +219,7 @@ export default function ReservasPage() {
           </div>
 
           <ReservationForm
-            key={sala}
+            key={`${sala}-${selectedDate}`}
             roomId={sala}
             salaName={sala}
             userId={CURRENT_USER.userId}
@@ -176,6 +229,12 @@ export default function ReservasPage() {
             service={service}
             onCancel={() => setShowForm(false)}
             onSuccess={() => list.refetch()}
+            initialValues={{
+              data: selectedDate,
+              inicio: '',
+              fim: '',
+              observacao: '',
+            }}
           />
         </div>
       )}
