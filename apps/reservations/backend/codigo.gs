@@ -202,6 +202,26 @@ function createReservation(body) {
       }
     }
 
+    // Sprint Disponibilidade S4 — pré-carga de aulas (1x por request).
+    // Fallback restritivo: erro ao ler aulas -> bloqueia como conflito.
+    var registrosAulas;
+    try {
+      registrosAulas = parsePlanilha(ss);
+    } catch (e) {
+      Logger.log('[S4] Erro ao carregar aulas para verificação: ' + e.message);
+      return jsonResponse({
+        ok: false,
+        error: { code: 'CONFLICT', message: 'Não foi possível verificar conflito com aulas.' }
+      });
+    }
+    if (verificaAulaConflito(registrosAulas, payload.sala, payload.data,
+                              payload.inicio, payload.fim)) {
+      return jsonResponse({
+        ok: false,
+        error: { code: 'CONFLICT', message: 'Sala com aula neste horário.' }
+      });
+    }
+
     // Verifica conflito
     var conflito = checkConflicts(sheet, payload);
     if (conflito) {
@@ -300,11 +320,27 @@ function createReservationRange(body) {
       }
     }
 
+    // Sprint Disponibilidade S4 — pré-carga de aulas UMA vez antes do loop.
+    // Fallback restritivo: erro ao ler aulas -> bloqueia como conflito.
+    var registrosAulas;
+    try {
+      registrosAulas = parsePlanilha(ss);
+    } catch (e) {
+      Logger.log('[S4] Erro ao carregar aulas para verificação: ' + e.message);
+      return jsonResponse({
+        ok: false,
+        error: { code: 'CONFLICT', message: 'Não foi possível verificar conflito com aulas.' }
+      });
+    }
+
     // 5) Checa conflito em CADA data — tudo ou nada
     var conflitos = [];
     for (var i = 0; i < datas.length; i++) {
       var pCheck = clonePayloadForDate(payload, datas[i]);
-      if (checkConflicts(sheet, pCheck)) {
+      if (verificaAulaConflito(registrosAulas, pCheck.sala, pCheck.data,
+                                pCheck.inicio, pCheck.fim)) {
+        conflitos.push(datas[i]);
+      } else if (checkConflicts(sheet, pCheck)) {
         conflitos.push(datas[i]);
       }
     }
@@ -496,6 +532,64 @@ function checkConflicts(sheet, payload, excludeId, excludeGroupId, excludeIds) {
   return false;
 }
 
+// ── Sprint Disponibilidade S4 ─────────────────────────────────
+// Verifica conflito entre uma reserva e aulas na planilha mensal.
+// Recebe registros já carregados (parsePlanilha chamado 1x por request).
+// Retorna true se a reserva conflita com alguma aula.
+//
+// Fórmula canônica (mesma do checkConflicts):
+//   newIni < aulaFim && newFim > aulaIni
+//
+// turno=null → conservador: bloqueia 00:00-23:59 (aula sem turno conhecido).
+function verificaAulaConflito(registros, sala, data, inicio, fim) {
+  var TURNO_HORARIO = {
+    'M': { inicio: '07:30', fim: '12:00' },
+    'V': { inicio: '13:00', fim: '17:30' },
+    'N': { inicio: '18:30', fim: '22:00' }
+  };
+  var newIni = toMinutes(inicio);
+  var newFim = toMinutes(fim);
+  for (var i = 0; i < registros.length; i++) {
+    var r = registros[i];
+    if (r.sala !== sala) continue;
+    if (r.data !== data)  continue;
+    var h = r.turno ? TURNO_HORARIO[r.turno] : null;
+    var aulaIni = h ? toMinutes(h.inicio) : 0;     // null → 00:00
+    var aulaFim = h ? toMinutes(h.fim)    : 1439;  // null → 23:59
+    if (newIni < aulaFim && newFim > aulaIni) return true;
+  }
+  return false;
+}
+
+// READ-ONLY — para validar no Sheet DEV antes de deploy.
+function debugVerificaAula() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var registros = parsePlanilha(ss);
+  var casos = [
+    // Deve detectar conflito (aula M = 07:30-12:00)
+    { sala: '603 Sala', data: '2026-06-15', inicio: '09:00', fim: '11:00',
+      esperado: true,  descricao: 'reserva dentro da aula M' },
+    // Não deve conflitar (V = 13:00-17:30, reserva é de manhã)
+    { sala: '603 Sala', data: '2026-06-15', inicio: '08:00', fim: '09:00',
+      esperado: false, descricao: 'reserva antes da aula V' },
+    // Sala sem aula — não deve conflitar
+    { sala: '707 Sala', data: '2026-06-15', inicio: '09:00', fim: '11:00',
+      esperado: false, descricao: 'sala sem aula cadastrada' },
+    // Tangência (borda) — NÃO deve conflitar
+    { sala: '603 Sala', data: '2026-06-15', inicio: '12:00', fim: '13:00',
+      esperado: false, descricao: 'reserva começa quando aula M termina' }
+  ];
+  Logger.log('=== debugVerificaAula ===');
+  Logger.log('Total registros carregados: ' + registros.length);
+  for (var i = 0; i < casos.length; i++) {
+    var c = casos[i];
+    var resultado = verificaAulaConflito(registros, c.sala, c.data,
+                                          c.inicio, c.fim);
+    var ok = resultado === c.esperado ? 'OK' : 'FALHOU';
+    Logger.log('[' + ok + '] ' + c.descricao +
+               ' -> esperado=' + c.esperado + ', got=' + resultado);
+  }
+}
 
 
 // DEBUG temporário
@@ -865,6 +959,26 @@ function updateReservation(body) {
       });
     }
 
+    // Sprint Disponibilidade S4 — pré-carga de aulas (1x por request).
+    // Fallback restritivo: erro ao ler aulas -> bloqueia como conflito.
+    var registrosAulas;
+    try {
+      registrosAulas = parsePlanilha(ss);
+    } catch (e) {
+      Logger.log('[S4] Erro ao carregar aulas para verificação: ' + e.message);
+      return jsonResponse({
+        ok: false,
+        error: { code: 'CONFLICT', message: 'Não foi possível verificar conflito com aulas.' }
+      });
+    }
+    if (verificaAulaConflito(registrosAulas, newSala, newData,
+                              newInicio, newFim)) {
+      return jsonResponse({
+        ok: false,
+        error: { code: 'CONFLICT', message: 'Sala com aula neste horário.' }
+      });
+    }
+
     // Revalida conflito IGNORANDO a própria reserva (excludeId === id).
     var conflitou = checkConflicts(
       sheet,
@@ -1044,6 +1158,19 @@ function updateReservationGroup(body) {
       });
     }
 
+    // Sprint Disponibilidade S4 — pré-carga de aulas UMA vez antes do loop.
+    // Fallback restritivo: erro ao ler aulas -> bloqueia como conflito.
+    var registrosAulas;
+    try {
+      registrosAulas = parsePlanilha(ss);
+    } catch (e) {
+      Logger.log('[S4] Erro ao carregar aulas para verificação: ' + e.message);
+      return jsonResponse({
+        ok: false,
+        error: { code: 'CONFLICT', message: 'Não foi possível verificar conflito com aulas.' }
+      });
+    }
+
     // Revalida conflito em CADA data — tudo ou nada.
     // Ignora todas as irmãs via excludeGroupId.
     var conflitos = [];
@@ -1055,8 +1182,11 @@ function updateReservationGroup(body) {
         inicio: newInicio,
         fim:    newFim
       };
-      if (checkConflicts(sheet, pCheck, undefined, groupId)) {
-        conflitos.push(normalizeDate(rowAtual[2]));
+      if (verificaAulaConflito(registrosAulas, pCheck.sala, pCheck.data,
+                                pCheck.inicio, pCheck.fim)) {
+        conflitos.push(pCheck.data);
+      } else if (checkConflicts(sheet, pCheck, undefined, groupId)) {
+        conflitos.push(pCheck.data);
       }
     }
 
@@ -1283,6 +1413,19 @@ function updateReservationSelected(body) {
     var newTurma      = String(body.payload.turma      || '').trim();
     var newObservacao = sanitize(body.payload.observacao || '');
 
+    // Sprint Disponibilidade S4 — pré-carga de aulas UMA vez antes do loop.
+    // Fallback restritivo: erro ao ler aulas -> bloqueia como conflito.
+    var registrosAulas;
+    try {
+      registrosAulas = parsePlanilha(ss);
+    } catch (e) {
+      Logger.log('[S4] Erro ao carregar aulas para verificação: ' + e.message);
+      return jsonResponse({
+        ok: false,
+        error: { code: 'CONFLICT', message: 'Não foi possível verificar conflito com aulas.' }
+      });
+    }
+
     // 8-9. Revalida conflito em CADA selecionada — atomicidade lógica.
     var conflitos = [];
     for (var ic = 0; ic < ids.length; ic++) {
@@ -1293,8 +1436,11 @@ function updateReservationSelected(body) {
         inicio: newInicio,
         fim:    newFim
       };
-      if (checkConflicts(sheet, pCheck, undefined, undefined, ids)) {
-        conflitos.push(normalizeDate(rowSel[2]));
+      if (verificaAulaConflito(registrosAulas, pCheck.sala, pCheck.data,
+                                pCheck.inicio, pCheck.fim)) {
+        conflitos.push(pCheck.data);
+      } else if (checkConflicts(sheet, pCheck, undefined, undefined, ids)) {
+        conflitos.push(pCheck.data);
       }
     }
     if (conflitos.length > 0) {
