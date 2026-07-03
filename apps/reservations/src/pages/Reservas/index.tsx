@@ -15,8 +15,10 @@ import {
   reservationToEvent,
   type ReservationDetails,
 } from '../../components/reservations/reservationToEvent';
+import { getEventosDaSala } from '../../services/availability';
+import { RoomAvailabilityPanel } from '../../components/reservations/RoomAvailabilityPanel';
 import { APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN, SALAS, CURRENT_USER } from '../../config';
-import type { RegistroLegado } from '../../types';
+import type { RegistroLegado, SalaEvento } from '../../types';
 
 export default function ReservasPage() {
   const { reservations } = useReservationStore();
@@ -47,6 +49,13 @@ export default function ReservasPage() {
   );
   const reservas = useMemo(() => list.data?.reservations ?? [], [list.data]);
   const disp = useAvailability(registros, reservas, selectedDate, SALAS);
+
+  // Sprint Disponibilidade S8 — eventos futuros da sala selecionada pro painel.
+  // todayYmd() é estável no dia → não entra nas deps do useMemo.
+  const eventosParaPanel = useMemo<SalaEvento[]>(
+    () => getEventosDaSala(registros, reservas, sala, todayYmd()),
+    [registros, reservas, sala],
+  );
 
   // Status da sala na data selecionada. Default 'livre' se não achar.
   function statusDaSala(nomeSala: string): 'livre' | 'aula' | 'reserva' | 'conflito' {
@@ -146,98 +155,112 @@ export default function ReservasPage() {
       {showForm && (
         <div
           style={{
-            background: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius)',
-            boxShadow: 'var(--shadow-s)',
-            padding: '20px',
+            display: 'flex',
+            gap: '16px',
             marginBottom: '24px',
-            maxWidth: '520px',
+            alignItems: 'flex-start',
+            flexWrap: 'wrap',
           }}
         >
-          {/* S6 — Seletor de data (fluxo data → sala → form). */}
-          <div
-            style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '12px' }}
-          >
-            <label htmlFor="sel-data" style={labelStyle}>
-              Data *
-            </label>
-            <input
-              id="sel-data"
-              type="date"
-              value={selectedDate}
-              onChange={e => setSelectedDate(e.target.value)}
-              min={todayYmd()}
-              style={inputStyle}
-            />
-          </div>
-
-          {/* Seletor de sala + turma */}
           <div
             style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: '12px',
-              marginBottom: '16px',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius)',
+              boxShadow: 'var(--shadow-s)',
+              padding: '20px',
+              flex: '0 0 auto',
+              width: '100%',
+              maxWidth: '520px',
             }}
           >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label htmlFor="sel-sala" style={labelStyle}>
-                Sala *
-              </label>
-              <select
-                id="sel-sala"
-                value={sala}
-                onChange={e => setSala(e.target.value)}
-                style={inputStyle}
-              >
-                {SALAS.map(s => {
-                  const st = statusDaSala(s);
-                  const ocupada = st !== 'livre';
-                  return (
-                    <option key={s} value={s} disabled={ocupada}>
-                      {s}
-                      {ocupada ? ` (${st})` : ''}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label htmlFor="sel-turma" style={labelStyle}>
-                Turma
+            {/* S6 — Seletor de data (fluxo data → sala → form). */}
+            <div
+              style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '12px' }}
+            >
+              <label htmlFor="sel-data" style={labelStyle}>
+                Data *
               </label>
               <input
-                id="sel-turma"
-                type="text"
-                value={turma}
-                onChange={e => setTurma(e.target.value)}
-                placeholder="Ex: ADS-2A"
+                id="sel-data"
+                type="date"
+                value={selectedDate}
+                onChange={e => setSelectedDate(e.target.value)}
+                min={todayYmd()}
                 style={inputStyle}
               />
             </div>
-          </div>
 
-          <ReservationForm
-            key={`${sala}-${selectedDate}`}
-            roomId={sala}
-            salaName={sala}
-            userId={CURRENT_USER.userId}
-            userEmail={CURRENT_USER.userEmail}
-            professor={CURRENT_USER.professor}
-            turma={turma}
-            service={service}
-            onCancel={() => setShowForm(false)}
-            onSuccess={() => list.refetch()}
-            initialValues={{
-              data: selectedDate,
-              inicio: '',
-              fim: '',
-              observacao: '',
-            }}
-            registros={registros}
-            reservas={reservas}
-          />
+            {/* Seletor de sala + turma */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '12px',
+                marginBottom: '16px',
+              }}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label htmlFor="sel-sala" style={labelStyle}>
+                  Sala *
+                </label>
+                <select
+                  id="sel-sala"
+                  value={sala}
+                  onChange={e => setSala(e.target.value)}
+                  style={inputStyle}
+                >
+                  {SALAS.map(s => {
+                    const st = statusDaSala(s);
+                    const ocupada = st !== 'livre';
+                    return (
+                      <option key={s} value={s} disabled={ocupada}>
+                        {s}
+                        {ocupada ? ` (${st})` : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label htmlFor="sel-turma" style={labelStyle}>
+                  Turma
+                </label>
+                <input
+                  id="sel-turma"
+                  type="text"
+                  value={turma}
+                  onChange={e => setTurma(e.target.value)}
+                  placeholder="Ex: ADS-2A"
+                  style={inputStyle}
+                />
+              </div>
+            </div>
+
+            <ReservationForm
+              key={`${sala}-${selectedDate}`}
+              roomId={sala}
+              salaName={sala}
+              userId={CURRENT_USER.userId}
+              userEmail={CURRENT_USER.userEmail}
+              professor={CURRENT_USER.professor}
+              turma={turma}
+              service={service}
+              onCancel={() => setShowForm(false)}
+              onSuccess={() => list.refetch()}
+              initialValues={{
+                data: selectedDate,
+                inicio: '',
+                fim: '',
+                observacao: '',
+              }}
+              registros={registros}
+              reservas={reservas}
+            />
+          </div>
+          <div style={{ flex: 1, minWidth: '280px' }}>
+            <RoomAvailabilityPanel sala={sala} eventos={eventosParaPanel} />
+          </div>
         </div>
       )}
 

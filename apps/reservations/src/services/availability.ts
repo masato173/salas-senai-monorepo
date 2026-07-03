@@ -158,3 +158,53 @@ export function getStatusParaHorario(
   if (temReserva) return 'reserva';
   return 'livre';
 }
+
+/**
+ * Retorna todos os eventos futuros de UMA sala — aulas + reservas.
+ * Usado pelo RoomAvailabilityPanel (S8) para exibir timeline completa.
+ * Filtra: sala, data >= dataMin, reservas não CANCELLED.
+ * Ordena: data ASC → inicio ASC.
+ * Usa TURNO_HORARIO do módulo (não duplicar).
+ */
+export function getEventosDaSala(
+  registros: RegistroLegado[],
+  reservas: CreatedReservationRow[],
+  sala: string,
+  dataMin: string, // YYYY-MM-DD inclusive
+): SalaEvento[] {
+  const eventos: SalaEvento[] = [];
+
+  // Aulas
+  for (const r of registros) {
+    if (r.sala !== sala) continue;
+    if (r.data < dataMin) continue;
+    const h = r.turno !== null ? TURNO_HORARIO[r.turno] : null;
+    eventos.push({
+      tipo: 'aula',
+      sala: r.sala,
+      data: r.data,
+      inicio: h?.inicio ?? '00:00',
+      fim: h?.fim ?? '23:59',
+      turno: r.turno,
+      turma: r.turma,
+    });
+  }
+
+  // Reservas (não CANCELLED)
+  for (const r of reservas) {
+    if (r.sala !== sala) continue;
+    if (r.data < dataMin) continue;
+    if (r.status === 'CANCELLED') continue;
+    eventos.push({
+      tipo: 'reserva',
+      sala: r.sala,
+      data: r.data,
+      inicio: r.inicio,
+      fim: r.fim,
+      professor: r.professor,
+      id: r.id,
+    });
+  }
+
+  return eventos.sort((a, b) => a.data.localeCompare(b.data) || a.inicio.localeCompare(b.inicio));
+}
