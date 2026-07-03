@@ -120,3 +120,41 @@ export function buildRoomAvailability(
     geradoEm: new Date().toISOString(),
   };
 }
+
+/**
+ * Retorna o status de UMA sala num horário específico.
+ * Diferente de buildRoomAvailability (dia inteiro) — verifica
+ * o intervalo exato inicio-fim para uso no preview de período.
+ *
+ * Fórmula canônica (via overlaps): newIni < existingFim && newFim > existingIni.
+ * Reusa o TURNO_HORARIO já declarado no topo do módulo.
+ */
+export function getStatusParaHorario(
+  registros: RegistroLegado[],
+  reservas: CreatedReservationRow[],
+  sala: string,
+  data: string,
+  inicio: string,
+  fim: string,
+): RoomStatus {
+  const registrosDia = registros.filter(r => r.data === data && r.sala === sala);
+  const reservasDia = reservas.filter(
+    r => r.data === data && r.sala === sala && r.status !== 'CANCELLED',
+  );
+
+  const req = { inicio, fim };
+
+  const temAula = registrosDia.some(r => {
+    // turno=null → bloqueia dia inteiro (mesma política conservadora do mapper).
+    const h = r.turno !== null ? TURNO_HORARIO[r.turno] : null;
+    const aulaSlot = h ?? { inicio: '00:00', fim: '23:59' };
+    return overlaps(req, aulaSlot);
+  });
+
+  const temReserva = reservasDia.some(r => overlaps(req, r));
+
+  if (temAula && temReserva) return 'conflito';
+  if (temAula) return 'aula';
+  if (temReserva) return 'reserva';
+  return 'livre';
+}

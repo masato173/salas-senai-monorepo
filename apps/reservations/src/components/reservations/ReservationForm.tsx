@@ -19,42 +19,58 @@ import type {
   UpdateReservationResponse,
   UpdateReservationGroupRequest,
   UpdateReservationGroupResponse,
+  CreatedReservationRow,
 } from '../../services/appsScript';
-import type { CreateReservationInput, Turno, Reservation } from '../../types';
+import type {
+  CreateReservationInput,
+  Turno,
+  Reservation,
+  RegistroLegado,
+  RoomStatus,
+} from '../../types';
+import { getStatusParaHorario } from '../../services/availability';
 
 export interface ReservationFormService {
-  createReservation:      (req: CreateReservationRequest)      => Promise<CreateReservationResponse>;
-  createReservationRange: (req: CreateReservationRangeRequest) => Promise<CreateReservationRangeResponse>;
-  updateReservation:      (req: UpdateReservationRequest)      => Promise<UpdateReservationResponse>;
-  updateReservationGroup: (req: UpdateReservationGroupRequest) => Promise<UpdateReservationGroupResponse>;
+  createReservation: (req: CreateReservationRequest) => Promise<CreateReservationResponse>;
+  createReservationRange: (
+    req: CreateReservationRangeRequest,
+  ) => Promise<CreateReservationRangeResponse>;
+  updateReservation: (req: UpdateReservationRequest) => Promise<UpdateReservationResponse>;
+  updateReservationGroup: (
+    req: UpdateReservationGroupRequest,
+  ) => Promise<UpdateReservationGroupResponse>;
 }
 
 // Sprint 4 D2 — valores iniciais pro modo edit. D3 (modal) preenche.
 export interface ReservationFormInitialValues {
-  id?:         string;     // obrigatorio se mode==='edit-single'
-  groupId?:    string;     // obrigatorio se mode==='edit-group'
-  data?:       string;     // YYYY-MM-DD (usado em edit-single)
-  inicio:      string;     // HH:MM
-  fim:         string;     // HH:MM
-  observacao:  string;
-  groupDates?: string[];   // obrigatorio se mode==='edit-group' — display read-only + validacao de horario
+  id?: string; // obrigatorio se mode==='edit-single'
+  groupId?: string; // obrigatorio se mode==='edit-group'
+  data?: string; // YYYY-MM-DD (usado em edit-single)
+  inicio: string; // HH:MM
+  fim: string; // HH:MM
+  observacao: string;
+  groupDates?: string[]; // obrigatorio se mode==='edit-group' — display read-only + validacao de horario
 }
 
 export type ReservationFormMode = 'create' | 'edit-single' | 'edit-group';
 
 interface ReservationFormProps {
-  roomId:         string;
-  salaName:       string; // nome real da sala que o backend espera ("603 Sala")
-  userId:         string;
-  userEmail:      string;
-  professor:      string;
-  turma:          string;
-  service:        ReservationFormService;
-  onSuccess?:     (reservation?: Reservation) => void;
-  onCancel?:      () => void;
+  roomId: string;
+  salaName: string; // nome real da sala que o backend espera ("603 Sala")
+  userId: string;
+  userEmail: string;
+  professor: string;
+  turma: string;
+  service: ReservationFormService;
+  onSuccess?: (reservation?: Reservation) => void;
+  onCancel?: () => void;
   // Sprint 4 D2 — modo edit. Default 'create' preserva chamadas existentes.
-  mode?:          ReservationFormMode;
+  mode?: ReservationFormMode;
   initialValues?: ReservationFormInitialValues;
+  // Sprint Disponibilidade S7 — dados para status inline por data no preview
+  // de período. Ausentes = fallback silencioso (RangePreview sem badges).
+  registros?: RegistroLegado[];
+  reservas?: CreatedReservationRow[];
 }
 
 // Turno inferido automaticamente a partir do horário de início
@@ -66,18 +82,27 @@ function inferTurno(start: string): Turno {
 }
 
 export function ReservationForm({
-  roomId, salaName, userId, userEmail, professor, turma,
-  service, onSuccess, onCancel,
+  roomId,
+  salaName,
+  userId,
+  userEmail,
+  professor,
+  turma,
+  service,
+  onSuccess,
+  onCancel,
   mode = 'create',
   initialValues,
+  registros,
+  reservas,
 }: ReservationFormProps) {
   const { addReservation, removeReservation, reservations } = useReservationStore();
-  const mutation            = useCreateReservation(useMemo(() => service, [service]));
-  const rangeMutation       = useCreateReservationRange(useMemo(() => service, [service]));
-  const updateMutation      = useUpdateReservation(useMemo(() => service, [service]));
+  const mutation = useCreateReservation(useMemo(() => service, [service]));
+  const rangeMutation = useCreateReservationRange(useMemo(() => service, [service]));
+  const updateMutation = useUpdateReservation(useMemo(() => service, [service]));
   const updateGroupMutation = useUpdateReservationGroup(useMemo(() => service, [service]));
 
-  const isEditing   = mode === 'edit-single' || mode === 'edit-group';
+  const isEditing = mode === 'edit-single' || mode === 'edit-group';
   const isEditGroup = mode === 'edit-group';
 
   // Estado interno renomeado de 'mode' → 'period' na Fase D2 pra nao colidir
@@ -89,16 +114,16 @@ export function ReservationForm({
   const period = isEditing ? 'single' : periodState;
 
   const [form, setForm] = useState({
-    date:   initialValues?.data       ?? '',
-    start:  initialValues?.inicio     ?? '',
-    end:    initialValues?.fim        ?? '',
+    date: initialValues?.data ?? '',
+    start: initialValues?.inicio ?? '',
+    end: initialValues?.fim ?? '',
     reason: initialValues?.observacao ?? '',
   });
 
   const [dateStart, setDateStart] = useState('');
-  const [dateEnd,   setDateEnd]   = useState('');
-  const [weekdays,  setWeekdays]  = useState<number[]>([]); // 0=dom..6=sab — mesma convenção do backend
-  const [errors,    setErrors]    = useState<string[]>([]);
+  const [dateEnd, setDateEnd] = useState('');
+  const [weekdays, setWeekdays] = useState<number[]>([]); // 0=dom..6=sab — mesma convenção do backend
+  const [errors, setErrors] = useState<string[]>([]);
   const [conflicts, setConflicts] = useState<Reservation[]>([]);
   const [submitted, setSubmitted] = useState(false);
   const [submittedCount, setSubmittedCount] = useState<number | null>(null);
@@ -109,30 +134,48 @@ export function ReservationForm({
     return expandDateRange(dateStart, dateEnd, weekdays);
   }, [dateStart, dateEnd, weekdays]);
 
+  // Sprint Disponibilidade S7 — status por data no preview de período.
+  // Só calculado se registros/reservas foram passados E horário está preenchido.
+  // Fallback: undefined → RangePreview mantém comportamento original.
+  const dateStatuses = useMemo<Record<string, RoomStatus> | undefined>(() => {
+    if (!registros || !reservas) return undefined;
+    if (!form.start || !form.end || expandedDates.length === 0) return undefined;
+    const map: Record<string, RoomStatus> = {};
+    for (const data of expandedDates) {
+      map[data] = getStatusParaHorario(registros, reservas, salaName, data, form.start, form.end);
+    }
+    return map;
+  }, [registros, reservas, expandedDates, salaName, form.start, form.end]);
+
   const anyLoading =
     mutation.status === 'loading' ||
     rangeMutation.status === 'loading' ||
     updateMutation.status === 'loading' ||
     updateGroupMutation.status === 'loading';
 
-  const rangeCount      = expandedDates.length;
+  const rangeCount = expandedDates.length;
   const rangeCountValid = rangeCount >= 1 && rangeCount <= 60;
   const submitLabel = anyLoading
     ? 'Enviando…'
     : isEditing
       ? 'Salvar alterações'
       : period === 'range'
-        ? (rangeCountValid ? `Solicitar ${rangeCount} reserva${rangeCount === 1 ? '' : 's'}` : 'Solicitar reservas')
+        ? rangeCountValid
+          ? `Solicitar ${rangeCount} reserva${rangeCount === 1 ? '' : 's'}`
+          : 'Solicitar reservas'
         : 'Solicitar reserva';
 
   // Validação inline em tempo real — só mostra erro depois de sair do campo (blur)
   const [touched, setTouched] = useState<Record<string, boolean>>({});
 
-  const inlineError = useCallback((field: 'start' | 'end') => {
-    if (!touched[field] || !form.start || !form.end || !form.date) return null;
-    const r = validateTimeInput({ start: form.start, end: form.end, date: form.date });
-    return r.ok ? null : r.error ?? null;
-  }, [touched, form]);
+  const inlineError = useCallback(
+    (field: 'start' | 'end') => {
+      if (!touched[field] || !form.start || !form.end || !form.date) return null;
+      const r = validateTimeInput({ start: form.start, end: form.end, date: form.date });
+      return r.ok ? null : (r.error ?? null);
+    },
+    [touched, form],
+  );
 
   // ─────────────────────────────────────────────────────────────
   // handleSubmitCreate — Sprint 4 D2: ramo CREATE movido LITERAL do submit
@@ -159,7 +202,11 @@ export function ReservationForm({
         return;
       }
       const referenceDate = expandedDates[0] ?? dateStart;
-      const timeResult = validateTimeInput({ start: form.start, end: form.end, date: referenceDate });
+      const timeResult = validateTimeInput({
+        start: form.start,
+        end: form.end,
+        date: referenceDate,
+      });
       if (!timeResult.ok) {
         setErrors([timeResult.error!]);
         return;
@@ -177,12 +224,12 @@ export function ReservationForm({
         const res = await rangeMutation.mutate({
           userEmail,
           payload: {
-            sala:       salaName,
+            sala: salaName,
             dataInicio: dateStart,
-            dataFim:    dateEnd,
+            dataFim: dateEnd,
             diasSemana: weekdays,
-            inicio:     form.start,
-            fim:        form.end,
+            inicio: form.start,
+            fim: form.end,
             professor,
             turma,
             observacao: form.reason,
@@ -225,10 +272,11 @@ export function ReservationForm({
     const turno = inferTurno(form.start);
 
     const input: CreateReservationInput = {
-      roomId, userId,
-      date:   form.date,
-      start:  form.start,
-      end:    form.end,
+      roomId,
+      userId,
+      date: form.date,
+      start: form.start,
+      end: form.end,
       turno,
       reason: form.reason,
     };
@@ -258,10 +306,10 @@ export function ReservationForm({
     const res = await mutation.mutate({
       userEmail,
       payload: {
-        sala:       salaName,
-        data:       form.date,
-        inicio:     form.start,
-        fim:        form.end,
+        sala: salaName,
+        data: form.date,
+        inicio: form.start,
+        fim: form.end,
         professor,
         turma,
         observacao: form.reason,
@@ -285,9 +333,24 @@ export function ReservationForm({
       setErrors(['Falha desconhecida ao criar reserva.']);
     }
   }, [
-    period, form, roomId, userId, userEmail, salaName, professor, turma,
-    dateStart, dateEnd, weekdays, expandedDates,
-    addReservation, removeReservation, mutation, rangeMutation, reservations, onSuccess,
+    period,
+    form,
+    roomId,
+    userId,
+    userEmail,
+    salaName,
+    professor,
+    turma,
+    dateStart,
+    dateEnd,
+    weekdays,
+    expandedDates,
+    addReservation,
+    removeReservation,
+    mutation,
+    rangeMutation,
+    reservations,
+    onSuccess,
   ]);
 
   // ─────────────────────────────────────────────────────────────
@@ -399,26 +462,35 @@ export function ReservationForm({
   }, [form, initialValues, salaName, turma, userEmail, updateGroupMutation, onSuccess]);
 
   // Despachante.
-  const handleSubmit = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrors([]);
-    setConflicts([]);
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      setErrors([]);
+      setConflicts([]);
 
-    if (mode === 'edit-single') return handleSubmitEditSingle();
-    if (mode === 'edit-group')  return handleSubmitEditGroup();
-    return handleSubmitCreate();
-  }, [mode, handleSubmitCreate, handleSubmitEditSingle, handleSubmitEditGroup]);
+      if (mode === 'edit-single') return handleSubmitEditSingle();
+      if (mode === 'edit-group') return handleSubmitEditGroup();
+      return handleSubmitCreate();
+    },
+    [mode, handleSubmitCreate, handleSubmitEditSingle, handleSubmitEditGroup],
+  );
 
   if (submitted) {
     return (
-      <div style={{
-        borderRadius: 'var(--radius)', border: '1px solid var(--color-green)',
-        background: 'var(--color-green-l)', padding: '24px', textAlign: 'center',
-      }}>
+      <div
+        style={{
+          borderRadius: 'var(--radius)',
+          border: '1px solid var(--color-green)',
+          background: 'var(--color-green-l)',
+          padding: '24px',
+          textAlign: 'center',
+        }}
+      >
         <p style={{ fontWeight: 600, color: 'var(--color-green)', fontSize: '14px' }}>
-          ✓ {submittedCount !== null && submittedCount !== 1
-              ? `${submittedCount} reservas criadas com sucesso!`
-              : 'Reserva enviada com sucesso!'}
+          ✓{' '}
+          {submittedCount !== null && submittedCount !== 1
+            ? `${submittedCount} reservas criadas com sucesso!`
+            : 'Reserva enviada com sucesso!'}
         </p>
         <p style={{ fontSize: '12px', color: 'var(--color-muted)', marginTop: '4px' }}>
           Aguardando aprovação do coordenador.
@@ -430,12 +502,19 @@ export function ReservationForm({
   const timeError = inlineError('start') ?? inlineError('end');
 
   return (
-    <form onSubmit={handleSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-
+    <form
+      onSubmit={handleSubmit}
+      noValidate
+      style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
+    >
       {!isEditing && (
         <ModeToggle
           period={period}
-          onChange={(m) => { setPeriodState(m); setErrors([]); setConflicts([]); }}
+          onChange={m => {
+            setPeriodState(m);
+            setErrors([]);
+            setConflicts([]);
+          }}
           disabled={anyLoading}
         />
       )}
@@ -443,14 +522,26 @@ export function ReservationForm({
       {!isEditing && <ConflictAlert conflicts={conflicts} onDismiss={() => setConflicts([])} />}
 
       {errors.length > 0 && (
-        <div role="alert" style={{
-          borderRadius: 'var(--radius-s)', border: '1px solid var(--color-red)',
-          background: 'var(--color-red-l)', padding: '10px 14px',
-          display: 'flex', gap: '8px', alignItems: 'flex-start',
-        }}>
-          <AlertCircle size={14} style={{ color: 'var(--color-red)', flexShrink: 0, marginTop: '1px' }} />
+        <div
+          role="alert"
+          style={{
+            borderRadius: 'var(--radius-s)',
+            border: '1px solid var(--color-red)',
+            background: 'var(--color-red-l)',
+            padding: '10px 14px',
+            display: 'flex',
+            gap: '8px',
+            alignItems: 'flex-start',
+          }}
+        >
+          <AlertCircle
+            size={14}
+            style={{ color: 'var(--color-red)', flexShrink: 0, marginTop: '1px' }}
+          />
           <ul style={{ listStyle: 'none', fontSize: '12px', color: 'var(--color-red)' }}>
-            {errors.map((e, i) => <li key={i}>{e}</li>)}
+            {errors.map((e, i) => (
+              <li key={i}>{e}</li>
+            ))}
           </ul>
         </div>
       )}
@@ -461,7 +552,8 @@ export function ReservationForm({
           <div
             id="res-group-dates"
             style={{
-              fontSize: 12, padding: '8px 12px',
+              fontSize: 12,
+              padding: '8px 12px',
               borderRadius: 'var(--radius-s)',
               background: 'var(--color-bg)',
               border: '1px dashed var(--color-border)',
@@ -470,7 +562,9 @@ export function ReservationForm({
           >
             {initialValues?.groupDates && initialValues.groupDates.length > 0
               ? initialValues.groupDates.slice(0, 10).map(isoToBR).join(', ') +
-                (initialValues.groupDates.length > 10 ? ` (+${initialValues.groupDates.length - 10} mais)` : '')
+                (initialValues.groupDates.length > 10
+                  ? ` (+${initialValues.groupDates.length - 10} mais)`
+                  : '')
               : '—'}
           </div>
         </Field>
@@ -525,6 +619,7 @@ export function ReservationForm({
             dates={expandedDates}
             maxAllowed={60}
             inputsReady={!!(dateStart && dateEnd && weekdays.length > 0)}
+            {...(dateStatuses !== undefined && { dateStatuses })}
           />
         </>
       )}
@@ -533,11 +628,17 @@ export function ReservationForm({
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
         <Field label="Início *" htmlFor="res-start" hint="HH:MM">
           <div style={{ position: 'relative' }}>
-            <Clock size={13} style={{
-              position: 'absolute', left: '10px', top: '50%',
-              transform: 'translateY(-50%)', color: 'var(--color-muted)',
-              pointerEvents: 'none',
-            }} />
+            <Clock
+              size={13}
+              style={{
+                position: 'absolute',
+                left: '10px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: 'var(--color-muted)',
+                pointerEvents: 'none',
+              }}
+            />
             <input
               id="res-start"
               type="time"
@@ -552,11 +653,17 @@ export function ReservationForm({
 
         <Field label="Fim *" htmlFor="res-end" hint="HH:MM">
           <div style={{ position: 'relative' }}>
-            <Clock size={13} style={{
-              position: 'absolute', left: '10px', top: '50%',
-              transform: 'translateY(-50%)', color: 'var(--color-muted)',
-              pointerEvents: 'none',
-            }} />
+            <Clock
+              size={13}
+              style={{
+                position: 'absolute',
+                left: '10px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: 'var(--color-muted)',
+                pointerEvents: 'none',
+              }}
+            />
             <input
               id="res-end"
               type="time"
@@ -579,20 +686,23 @@ export function ReservationForm({
 
       {/* Preview do turno inferido */}
       {form.start && (
-        <div style={{
-          fontSize: '11px', color: 'var(--color-muted)',
-          display: 'flex', alignItems: 'center', gap: '6px',
-          marginTop: '-8px',
-        }}>
+        <div
+          style={{
+            fontSize: '11px',
+            color: 'var(--color-muted)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            marginTop: '-8px',
+          }}
+        >
           <span>Turno detectado:</span>
           <TurnoPreview turno={inferTurno(form.start)} />
         </div>
       )}
 
       {/* Duração calculada */}
-      {form.start && form.end && (
-        <DurationPreview start={form.start} end={form.end} />
-      )}
+      {form.start && form.end && <DurationPreview start={form.start} end={form.end} />}
 
       {/* Motivo */}
       <Field label="Motivo" htmlFor="res-reason">
@@ -605,7 +715,14 @@ export function ReservationForm({
           placeholder="Ex: Aula de ADM, Laboratório CLP..."
           style={inputStyle}
         />
-        <span style={{ fontSize: '10px', color: 'var(--color-subtle)', marginTop: '2px', display: 'block' }}>
+        <span
+          style={{
+            fontSize: '10px',
+            color: 'var(--color-subtle)',
+            marginTop: '2px',
+            display: 'block',
+          }}
+        >
           {form.reason.length}/200
         </span>
       </Field>
@@ -616,9 +733,15 @@ export function ReservationForm({
           type="submit"
           disabled={anyLoading}
           style={{
-            flex: 1, height: '38px', borderRadius: 'var(--radius-s)',
-            background: 'var(--color-brand)', color: '#fff', border: 'none',
-            fontFamily: 'inherit', fontSize: '13px', fontWeight: 600,
+            flex: 1,
+            height: '38px',
+            borderRadius: 'var(--radius-s)',
+            background: 'var(--color-brand)',
+            color: '#fff',
+            border: 'none',
+            fontFamily: 'inherit',
+            fontSize: '13px',
+            fontWeight: 600,
             cursor: anyLoading ? 'wait' : 'pointer',
             opacity: anyLoading ? 0.7 : 1,
           }}
@@ -631,10 +754,16 @@ export function ReservationForm({
             onClick={onCancel}
             disabled={anyLoading}
             style={{
-              height: '38px', padding: '0 16px', borderRadius: 'var(--radius-s)',
-              background: 'none', border: '1px solid var(--color-border)',
-              color: 'var(--color-muted)', fontFamily: 'inherit',
-              fontSize: '13px', fontWeight: 500, cursor: 'pointer',
+              height: '38px',
+              padding: '0 16px',
+              borderRadius: 'var(--radius-s)',
+              background: 'none',
+              border: '1px solid var(--color-border)',
+              color: 'var(--color-muted)',
+              fontFamily: 'inherit',
+              fontSize: '13px',
+              fontWeight: 500,
+              cursor: 'pointer',
             }}
           >
             Cancelar
@@ -650,27 +779,38 @@ export function ReservationForm({
 const WEEKDAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']; // 0..6 — mesma convenção do backend
 
 function WeekdayPicker({
-  value, onChange,
+  value,
+  onChange,
 }: {
-  value:    number[];
+  value: number[];
   onChange: (next: number[]) => void;
 }) {
   function toggle(day: number) {
     if (value.includes(day)) onChange(value.filter(d => d !== day));
-    else                     onChange([...value, day].sort((a, b) => a - b));
+    else onChange([...value, day].sort((a, b) => a - b));
   }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <label style={{
-        fontSize: '11px', fontWeight: 600,
-        color: 'var(--color-muted)',
-        textTransform: 'uppercase', letterSpacing: '.05em',
-      }}>
+      <label
+        style={{
+          fontSize: '11px',
+          fontWeight: 600,
+          color: 'var(--color-muted)',
+          textTransform: 'uppercase',
+          letterSpacing: '.05em',
+        }}
+      >
         Dias da semana *
       </label>
-      <div role="group" aria-label="Dias da semana" style={{
-        display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6,
-      }}>
+      <div
+        role="group"
+        aria-label="Dias da semana"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(7, 1fr)',
+          gap: 6,
+        }}
+      >
         {WEEKDAY_LABELS.map((label, day) => {
           const on = value.includes(day);
           return (
@@ -685,8 +825,10 @@ function WeekdayPicker({
                 height: 34,
                 border: '1px solid var(--color-border)',
                 background: on ? 'var(--color-brand)' : 'var(--color-surface)',
-                color:      on ? '#fff'              : 'var(--color-text)',
-                fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
+                color: on ? '#fff' : 'var(--color-text)',
+                fontFamily: 'inherit',
+                fontSize: 11,
+                fontWeight: 700,
                 borderRadius: 'var(--radius-s)',
                 cursor: 'pointer',
                 transition: 'background .12s, color .12s',
@@ -701,42 +843,94 @@ function WeekdayPicker({
   );
 }
 
+const STATUS_BADGE: Record<RoomStatus, { label: string; color: string; bg: string }> = {
+  livre: { label: 'livre', color: 'var(--color-green)', bg: 'var(--color-green-l)' },
+  aula: { label: 'aula', color: 'var(--color-amber)', bg: 'var(--color-amber-l)' },
+  reserva: { label: 'reserva', color: 'var(--color-blue)', bg: 'var(--color-blue-l)' },
+  conflito: { label: 'conflito', color: 'var(--color-red)', bg: 'var(--color-red-l)' },
+};
+
 function RangePreview({
-  dates, maxAllowed, inputsReady,
+  dates,
+  maxAllowed,
+  inputsReady,
+  dateStatuses,
 }: {
-  dates:       string[];
-  maxAllowed:  number;
+  dates: string[];
+  maxAllowed: number;
   inputsReady: boolean;
+  dateStatuses?: Record<string, RoomStatus>;
 }) {
   if (dates.length === 0) {
     return (
-      <div style={{
-        fontSize: 11, padding: '6px 10px', borderRadius: 'var(--radius-s)',
-        background: 'var(--color-bg)', color: 'var(--color-muted)',
-        border: '1px dashed var(--color-border)',
-      }}>
+      <div
+        style={{
+          fontSize: 11,
+          padding: '6px 10px',
+          borderRadius: 'var(--radius-s)',
+          background: 'var(--color-bg)',
+          color: 'var(--color-muted)',
+          border: '1px dashed var(--color-border)',
+        }}
+      >
         {inputsReady
           ? 'Nenhuma data no período bate com os dias selecionados.'
           : 'Preencha o período e selecione ao menos um dia da semana.'}
       </div>
     );
   }
-  const exceeded  = dates.length > maxAllowed;
-  const shown     = dates.slice(0, 10).map(isoToBR).join(', ');
+  const exceeded = dates.length > maxAllowed;
   const moreCount = dates.length - 10;
+  const shownDates = dates.slice(0, 10);
   return (
-    <div style={{
-      fontSize: 11, padding: '8px 12px', borderRadius: 'var(--radius-s)',
-      background: exceeded ? 'var(--color-red-l)' : 'var(--color-green-l)',
-      color:      exceeded ? 'var(--color-red)'   : 'var(--color-green)',
-      display: 'flex', flexDirection: 'column', gap: 4,
-    }}>
+    <div
+      style={{
+        fontSize: 11,
+        padding: '8px 12px',
+        borderRadius: 'var(--radius-s)',
+        background: exceeded ? 'var(--color-red-l)' : 'var(--color-green-l)',
+        color: exceeded ? 'var(--color-red)' : 'var(--color-green)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 4,
+      }}
+    >
       <strong style={{ fontSize: 12 }}>
         {exceeded
           ? `Excede o limite de ${maxAllowed} reservas. Reduza o período ou os dias selecionados.`
           : `${dates.length} ${dates.length === 1 ? 'reserva será criada' : 'reservas serão criadas'}.`}
       </strong>
-      <span>{shown}{moreCount > 0 ? `, +${moreCount} mais` : ''}</span>
+      {dateStatuses ? (
+        <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {shownDates.map(d => {
+            const s = STATUS_BADGE[dateStatuses[d] ?? 'livre'];
+            return (
+              <span
+                key={d}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '1px 6px',
+                  borderRadius: 10,
+                  background: s.bg,
+                  color: s.color,
+                  fontWeight: 600,
+                }}
+              >
+                {isoToBR(d)}
+                <span style={{ fontWeight: 500, opacity: 0.85 }}>· {s.label}</span>
+              </span>
+            );
+          })}
+          {moreCount > 0 && <span style={{ opacity: 0.85 }}>+{moreCount} mais</span>}
+        </span>
+      ) : (
+        <span>
+          {shownDates.map(isoToBR).join(', ')}
+          {moreCount > 0 ? `, +${moreCount} mais` : ''}
+        </span>
+      )}
     </div>
   );
 }
@@ -747,19 +941,27 @@ function isoToBR(iso: string): string {
 }
 
 function ModeToggle({
-  period, onChange, disabled,
+  period,
+  onChange,
+  disabled,
 }: {
-  period:   'single' | 'range';
+  period: 'single' | 'range';
   onChange: (m: 'single' | 'range') => void;
   disabled: boolean;
 }) {
   return (
-    <div role="tablist" aria-label="Tipo de reserva" style={{
-      display: 'flex', gap: 4, padding: 4,
-      background: 'var(--color-bg)',
-      border: '1px solid var(--color-border)',
-      borderRadius: 'var(--radius-s)',
-    }}>
+    <div
+      role="tablist"
+      aria-label="Tipo de reserva"
+      style={{
+        display: 'flex',
+        gap: 4,
+        padding: 4,
+        background: 'var(--color-bg)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 'var(--radius-s)',
+      }}
+    >
       {(['single', 'range'] as const).map(opt => {
         const active = period === opt;
         return (
@@ -771,11 +973,14 @@ function ModeToggle({
             disabled={disabled}
             onClick={() => onChange(opt)}
             style={{
-              flex: 1, height: 30,
+              flex: 1,
+              height: 30,
               border: 'none',
               background: active ? 'var(--color-surface)' : 'transparent',
-              color:      active ? 'var(--color-text)'    : 'var(--color-muted)',
-              fontFamily: 'inherit', fontSize: 12, fontWeight: 600,
+              color: active ? 'var(--color-text)' : 'var(--color-muted)',
+              fontFamily: 'inherit',
+              fontSize: 12,
+              fontWeight: 600,
               borderRadius: 6,
               boxShadow: active ? 'var(--shadow-s)' : 'none',
               cursor: disabled ? 'not-allowed' : 'pointer',
@@ -791,23 +996,32 @@ function ModeToggle({
 }
 
 interface FieldProps {
-  label:    string;
-  htmlFor:  string;
-  hint?:    string;
+  label: string;
+  htmlFor: string;
+  hint?: string;
   children: React.ReactNode;
 }
 
 function Field({ label, htmlFor, hint, children }: FieldProps) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-      <label htmlFor={htmlFor} style={{
-        fontSize: '11px', fontWeight: 600,
-        color: 'var(--color-muted)',
-        textTransform: 'uppercase', letterSpacing: '.05em',
-        display: 'flex', alignItems: 'center', gap: '6px',
-      }}>
+      <label
+        htmlFor={htmlFor}
+        style={{
+          fontSize: '11px',
+          fontWeight: 600,
+          color: 'var(--color-muted)',
+          textTransform: 'uppercase',
+          letterSpacing: '.05em',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+        }}
+      >
         {label}
-        {hint && <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>({hint})</span>}
+        {hint && (
+          <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>({hint})</span>
+        )}
       </label>
       {children}
     </div>
@@ -815,19 +1029,24 @@ function Field({ label, htmlFor, hint, children }: FieldProps) {
 }
 
 const TURNO_STYLE: Record<Turno, { bg: string; color: string; label: string }> = {
-  M: { bg: 'var(--color-amber-l)',  color: 'var(--color-amber)',  label: '☀ Matutino'   },
-  V: { bg: 'var(--color-green-l)',  color: 'var(--color-green)',  label: '🌤 Vespertino' },
-  N: { bg: '#ede9fe',               color: '#4c1d95',             label: '🌙 Noturno'    },
+  M: { bg: 'var(--color-amber-l)', color: 'var(--color-amber)', label: '☀ Matutino' },
+  V: { bg: 'var(--color-green-l)', color: 'var(--color-green)', label: '🌤 Vespertino' },
+  N: { bg: '#ede9fe', color: '#4c1d95', label: '🌙 Noturno' },
 };
 
 function TurnoPreview({ turno }: { turno: Turno }) {
   const s = TURNO_STYLE[turno];
   return (
-    <span style={{
-      fontSize: '10px', fontWeight: 700,
-      padding: '2px 8px', borderRadius: '20px',
-      background: s.bg, color: s.color,
-    }}>
+    <span
+      style={{
+        fontSize: '10px',
+        fontWeight: 700,
+        padding: '2px 8px',
+        borderRadius: '20px',
+        background: s.bg,
+        color: s.color,
+      }}
+    >
       {s.label}
     </span>
   );
@@ -835,8 +1054,8 @@ function TurnoPreview({ turno }: { turno: Turno }) {
 
 function DurationPreview({ start, end }: { start: string; end: string }) {
   const startMin = parseInt(start.split(':')[0]) * 60 + parseInt(start.split(':')[1]);
-  const endMin   = parseInt(end.split(':')[0])   * 60 + parseInt(end.split(':')[1]);
-  const dur      = endMin - startMin;
+  const endMin = parseInt(end.split(':')[0]) * 60 + parseInt(end.split(':')[1]);
+  const dur = endMin - startMin;
   if (dur <= 0) return null;
 
   const h = Math.floor(dur / 60);
@@ -845,27 +1064,36 @@ function DurationPreview({ start, end }: { start: string; end: string }) {
   const ok = dur >= 30 && dur <= 240;
 
   return (
-    <div style={{
-      fontSize: '11px', padding: '6px 10px', borderRadius: 'var(--radius-s)',
-      background: ok ? 'var(--color-green-l)' : 'var(--color-red-l)',
-      color: ok ? 'var(--color-green)' : 'var(--color-red)',
-      display: 'flex', alignItems: 'center', gap: '5px',
-      marginTop: '-8px',
-    }}>
+    <div
+      style={{
+        fontSize: '11px',
+        padding: '6px 10px',
+        borderRadius: 'var(--radius-s)',
+        background: ok ? 'var(--color-green-l)' : 'var(--color-red-l)',
+        color: ok ? 'var(--color-green)' : 'var(--color-red)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '5px',
+        marginTop: '-8px',
+      }}
+    >
       <Clock size={11} />
       Duração: <strong>{label}</strong>
       {!ok && dur > 240 && ' — máximo 4 horas'}
-      {!ok && dur < 30  && ' — mínimo 30 minutos'}
+      {!ok && dur < 30 && ' — mínimo 30 minutos'}
     </div>
   );
 }
 
 const inputStyle: React.CSSProperties = {
-  height: '38px', padding: '0 12px',
+  height: '38px',
+  padding: '0 12px',
   border: '1px solid var(--color-border)',
   borderRadius: 'var(--radius-s)',
   background: 'var(--color-surface)',
   color: 'var(--color-text)',
-  fontFamily: 'inherit', fontSize: '13px',
-  outline: 'none', width: '100%',
+  fontFamily: 'inherit',
+  fontSize: '13px',
+  outline: 'none',
+  width: '100%',
 };

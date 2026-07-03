@@ -235,6 +235,8 @@ export default function ReservasPage() {
               fim: '',
               observacao: '',
             }}
+            registros={registros}
+            reservas={reservas}
           />
         </div>
       )}
