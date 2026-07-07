@@ -1,0 +1,66 @@
+import { PrismaClient, RoomType } from '@prisma/client';
+
+const prisma = new PrismaClient();
+
+// 34 salas confirmadas em apps/reservations/src/config.ts
+// Nome exato = o que o backend grava na planilha (preservar trailing spaces)
+const SALAS: Array<{ name: string; type: RoomType }> = [
+  { name: '01 Sala', type: 'SALA_COMUM' },
+  { name: '02 Lab. Elétrica', type: 'LAB_ELETRICA' },
+  { name: '03 Sala', type: 'SALA_COMUM' },
+  { name: '04 Lab. Eletrônica', type: 'LAB_ELETRONICA' },
+  { name: '05 Sala', type: 'SALA_COMUM' },
+  { name: '06 Sala', type: 'SALA_COMUM' },
+  { name: '33 Lab. SMT', type: 'LAB_SMT' },
+  { name: '35 Lab', type: 'LAB_GERAL' },
+  { name: '36 Lab', type: 'LAB_GERAL' },
+  { name: '37 Lab', type: 'LAB_GERAL' },
+  { name: '600/602 Sala', type: 'SALA_COMUM' },
+  { name: '601 Sala', type: 'SALA_COMUM' },
+  { name: '603 Sala', type: 'SALA_COMUM' },
+  { name: '605 Sala', type: 'SALA_COMUM' },
+  { name: '606/604 Sala', type: 'SALA_COMUM' },
+  { name: '607 Sala', type: 'SALA_COMUM' },
+  { name: '608 Sala', type: 'SALA_COMUM' },
+  { name: '609 Sala', type: 'SALA_COMUM' },
+  { name: '610 Lab. Inf.', type: 'LAB_INFORMATICA' },
+  { name: '611 Lab. Inf.', type: 'LAB_INFORMATICA' },
+  { name: '701 Sala', type: 'SALA_COMUM' },
+  { name: '702 Sala', type: 'SALA_COMUM' },
+  { name: '703 Sala', type: 'SALA_COMUM' },
+  { name: '706 Sala', type: 'SALA_COMUM' },
+  { name: '707 Sala', type: 'SALA_COMUM' },
+  { name: '708 Lab. CLP', type: 'LAB_CLP' },
+  { name: '709 Lab. TBO', type: 'LAB_GERAL' },
+  { name: '710 Lab. CLP', type: 'LAB_CLP' },
+  { name: '711 Lab. Elétrica', type: 'LAB_ELETRICA' },
+  { name: '713 Lab. Eletrônica ', type: 'LAB_ELETRONICA' }, // espaço preservado
+  { name: '500 Lab. Inf.', type: 'LAB_INFORMATICA' },
+  { name: '503 Lab. Inf.', type: 'LAB_INFORMATICA' },
+  { name: '505 Lab. Inf.', type: 'LAB_INFORMATICA' },
+  { name: '507 Lab. Inf.', type: 'LAB_INFORMATICA' },
+];
+
+async function main(): Promise<void> {
+  console.log('Seeding rooms...');
+
+  for (const sala of SALAS) {
+    await prisma.room.upsert({
+      where: { name: sala.name },
+      update: { type: sala.type },
+      create: { name: sala.name, type: sala.type },
+    });
+  }
+
+  const count = await prisma.room.count();
+  console.log(`Done. ${count} rooms in database.`);
+}
+
+main()
+  .catch(e => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(() => {
+    void prisma.$disconnect();
+  });

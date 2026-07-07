@@ -1,0 +1,114 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum Role {
+  PROFESSOR
+  COORDENADOR
+  ADMIN
+}
+
+enum RoomType {
+  SALA_COMUM
+  LAB_GERAL
+  LAB_INFORMATICA
+  LAB_CLP
+  LAB_ELETRICA
+  LAB_SMT
+  LAB_ELETRONICA
+}
+
+enum ReservationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+// ─── Models ──────────────────────────────────────────────────────────────────
+
+model User {
+  id           String        @id @default(cuid())
+  name         String
+  email        String        @unique
+  passwordHash String
+  role         Role          @default(PROFESSOR)
+  active       Boolean       @default(true)
+  reservations Reservation[]
+  auditLogs    AuditLog[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  deletedAt    DateTime?
+}
+
+model Room {
+  id           String        @id @default(cuid())
+  name         String        @unique
+  type         RoomType
+  capacity     Int?
+  floor        Int?
+  available    Boolean       @default(true)
+  reservations Reservation[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+// Sem campo `turno` — reservas têm inicio/fim livres (06:00-23:00).
+// Turno M/V/N pertence apenas a Schedule (aulas do legado). Decisão F4.0 Opção A.
+model Reservation {
+  id              String            @id @default(cuid())
+  userId          String
+  roomId          String
+  groupId         String?
+  date            String            // YYYY-MM-DD — string pra paridade com legado
+  inicio          String            // HH:MM
+  fim             String            // HH:MM
+  status          ReservationStatus @default(PENDING)
+  notes           String?
+  clientRequestId String?           @unique
+  user            User              @relation(fields: [userId], references: [id])
+  room            Room              @relation(fields: [roomId], references: [id])
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  deletedAt       DateTime?
+
+  @@index([roomId, date])
+  @@index([userId])
+  @@index([status])
+  @@index([groupId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  action     String
+  entityType String
+  entityId   String
+  userId     String
+  before     Json?
+  after      Json?
+  ip         String?
+  user       User     @relation(fields: [userId], references: [id])
+  timestamp  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([userId])
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}

@@ -4,6 +4,9 @@
   "private": true,
   "description": "NestJS backend — SENAI Salas (F4.0 scaffolding)",
   "main": "dist/main.js",
+  "prisma": {
+    "seed": "node_modules/.bin/ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
+  },
   "scripts": {
     "prebuild": "rimraf dist tsconfig.build.tsbuildinfo tsconfig.tsbuildinfo",
     "build": "node node_modules/typescript/bin/tsc -p tsconfig.build.json",
@@ -20,6 +23,7 @@
   },
   "dependencies": {
     "@nestjs/common": "^10.3.10",
+    "@prisma/client": "^5.22.0",
     "@nestjs/config": "^3.2.3",
     "@nestjs/core": "^10.3.10",
     "@nestjs/platform-express": "^10.3.10",
@@ -31,6 +35,7 @@
   },
   "devDependencies": {
     "@nestjs/cli": "^10.4.5",
+    "prisma": "^5.22.0",
     "@nestjs/schematics": "^10.1.4",
     "@nestjs/testing": "^10.3.10",
     "@salas-senai/eslint-config": "workspace:*",
