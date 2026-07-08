@@ -10,6 +10,7 @@ import { useListReservations } from '../../hooks/useListReservations';
 import { useCancelReservation } from '../../hooks/useCancelReservation';
 import { useSchedule } from '../../hooks/useSchedule';
 import { useAvailability } from '../../hooks/useAvailability';
+import { useAvailabilityBackend, BACKEND_DRIVER_ENABLED } from '../../hooks/useAvailabilityBackend';
 import { todayYmd } from '../../components/dashboard/scheduleDateUtils';
 import {
   reservationToEvent,
@@ -48,7 +49,14 @@ export default function ReservasPage() {
     [schedule.data],
   );
   const reservas = useMemo(() => list.data?.reservations ?? [], [list.data]);
-  const disp = useAvailability(registros, reservas, selectedDate, SALAS);
+  const localDisp = useAvailability(registros, reservas, selectedDate, SALAS);
+  // F4.7b: quando VITE_BACKEND_DRIVER=true, usa GET /availability do NestJS.
+  // Fallback para legado enquanto carrega ou se flag desligada.
+  const backendDispRes = useAvailabilityBackend(selectedDate, undefined, {
+    enabled: BACKEND_DRIVER_ENABLED,
+  });
+  const disp =
+    BACKEND_DRIVER_ENABLED && backendDispRes.data !== null ? backendDispRes.data : localDisp;
 
   // Sprint Disponibilidade S8 — eventos futuros da sala selecionada pro painel.
   // todayYmd() é estável no dia → não entra nas deps do useMemo.

@@ -5,6 +5,7 @@ import { APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN, SALAS } from '../../config';
 import { useSchedule } from '../../hooks/useSchedule';
 import { useListReservations } from '../../hooks/useListReservations';
 import { useAvailability } from '../../hooks/useAvailability';
+import { useAvailabilityBackend, BACKEND_DRIVER_ENABLED } from '../../hooks/useAvailabilityBackend';
 import {
   applyScheduleFilters,
   type ScheduleFilterState,
@@ -71,7 +72,14 @@ export function DashboardPage(): JSX.Element {
   const hoje = todayYmd();
 
   // S5 — disponibilidade de hoje: aulas + reservas (não CANCELLED).
-  const disponibilidade = useAvailability(registros, reservas, hoje, SALAS);
+  const localDisp = useAvailability(registros, reservas, hoje, SALAS);
+  // F4.7b: quando VITE_BACKEND_DRIVER=true, usa GET /availability do NestJS.
+  // Fallback para legado enquanto carrega ou se flag desligada.
+  const backendDispDash = useAvailabilityBackend(hoje, undefined, {
+    enabled: BACKEND_DRIVER_ENABLED,
+  });
+  const disponibilidade =
+    BACKEND_DRIVER_ENABLED && backendDispDash.data !== null ? backendDispDash.data : localDisp;
 
   return (
     <div>
