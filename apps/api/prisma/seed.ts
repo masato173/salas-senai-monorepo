@@ -1,6 +1,11 @@
 import { PrismaClient, RoomType } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 
-const prisma = new PrismaClient();
+const directUrl = process.env['DIRECT_URL'];
+if (!directUrl) throw new Error('DIRECT_URL nao configurada');
+const prisma = new PrismaClient({
+  datasources: { db: { url: directUrl } },
+});
 
 // 34 salas confirmadas em apps/reservations/src/config.ts
 // Nome exato = o que o backend grava na planilha (preservar trailing spaces)
@@ -54,6 +59,16 @@ async function main(): Promise<void> {
 
   const count = await prisma.room.count();
   console.log(`Done. ${count} rooms in database.`);
+
+  // Usuário admin para desenvolvimento — trocar senha em produção
+  console.log('Seeding admin user...');
+  const passwordHash = await bcrypt.hash('admin@senai2026', 12);
+  await prisma.user.upsert({
+    where: { email: 'admin@senai.edu' },
+    update: {},
+    create: { name: 'Admin SENAI', email: 'admin@senai.edu', passwordHash, role: 'ADMIN' },
+  });
+  console.log('Admin: admin@senai.edu / admin@senai2026');
 }
 
 main()
