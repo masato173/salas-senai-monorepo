@@ -10,7 +10,7 @@ export default defineConfig({
   // Serve o legado como estático para o iframe do Dashboard
   publicDir: 'public',
   server: {
-    port: 3000,
+    port: 5173,
     // Proxy legado em dev
   },
   build: {

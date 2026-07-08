@@ -1,0 +1,8 @@
+# Arquivos locais de ambiente (nunca commitar)
+.env.local
+.env.*.local
+
+# Build e cache
+dist
+node_modules
+.turbo
