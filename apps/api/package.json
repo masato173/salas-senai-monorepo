@@ -15,6 +15,7 @@
     "start:debug": "node --inspect dist/main.js",
     "start:prod": "node dist/main.js",
     "test": "vitest run --config test/vitest.config.ts",
+    "test:unit": "vitest run --config test/vitest.unit.config.ts",
     "test:watch": "vitest --config test/vitest.config.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src test --ext .ts",
