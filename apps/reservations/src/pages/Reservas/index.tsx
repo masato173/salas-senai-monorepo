@@ -6,6 +6,7 @@ import { ReservationForm } from '../../components/reservations/ReservationForm';
 import { ReservationCalendar } from '../../components/reservations/ReservationCalendar';
 import { ReservationDetailsModal } from '../../components/reservations/ReservationDetailsModal';
 import { createAppsScriptService } from '../../services/appsScript';
+import { createNestjsApiService } from '../../services/nestjsApiService';
 import { useListReservations } from '../../hooks/useListReservations';
 import { useCancelReservation } from '../../hooks/useCancelReservation';
 import { useSchedule } from '../../hooks/useSchedule';
@@ -29,10 +30,13 @@ export default function ReservasPage() {
   const [selectedDate, setSelectedDate] = useState<string>(todayYmd);
   const [selectedReservation, setSelectedReservation] = useState<ReservationDetails | null>(null);
 
-  const service = useMemo(
-    () => createAppsScriptService({ url: APPS_SCRIPT_URL, token: APPS_SCRIPT_TOKEN }),
-    [],
-  );
+  // F5.4-F5.6: quando BACKEND_DRIVER_ENABLED=true, usa NestJS para
+  // listReservations, createReservation e cancelReservation.
+  // fetchSchedule e operações de grupo ainda delegam ao Apps Script (fallback).
+  const service = useMemo(() => {
+    const appsScript = createAppsScriptService({ url: APPS_SCRIPT_URL, token: APPS_SCRIPT_TOKEN });
+    return BACKEND_DRIVER_ENABLED ? createNestjsApiService(appsScript) : appsScript;
+  }, []);
 
   // Lista de reservas pro calendário (auto-fetch no mount via hook default).
   const list = useListReservations(service);

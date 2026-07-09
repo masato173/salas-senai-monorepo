@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 
 import { createAppsScriptService } from '../../services/appsScript';
+import { createNestjsApiService } from '../../services/nestjsApiService';
 import { APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN, SALAS } from '../../config';
 import { useSchedule } from '../../hooks/useSchedule';
 import { useListReservations } from '../../hooks/useListReservations';
@@ -28,10 +29,12 @@ const ESTADO_INICIAL_FILTROS: ScheduleFilterState = {
 };
 
 export function DashboardPage(): JSX.Element {
-  const service = useMemo(
-    () => createAppsScriptService({ url: APPS_SCRIPT_URL, token: APPS_SCRIPT_TOKEN }),
-    [],
-  );
+  // F5.4-F5.6: quando BACKEND_DRIVER_ENABLED=true, usa NestJS para
+  // listReservations. fetchSchedule ainda delega ao Apps Script (fallback).
+  const service = useMemo(() => {
+    const appsScript = createAppsScriptService({ url: APPS_SCRIPT_URL, token: APPS_SCRIPT_TOKEN });
+    return BACKEND_DRIVER_ENABLED ? createNestjsApiService(appsScript) : appsScript;
+  }, []);
   const schedule = useSchedule(service);
   const list = useListReservations(service);
   const reservas = useMemo<CreatedReservationRow[]>(
