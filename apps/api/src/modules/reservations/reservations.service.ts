@@ -204,6 +204,44 @@ export class ReservationsService {
     });
   }
 
+  async updateStatus(
+    id: string,
+    status: ReservationStatus,
+    currentUser: RequestUser,
+  ): Promise<Reservation> {
+    const reservation = await this.prisma.reservation.findUnique({ where: { id } });
+
+    if (!reservation || reservation.deletedAt !== null) {
+      throw new NotFoundException(`Reserva "${id}" não encontrada.`);
+    }
+
+    if (reservation.status === ReservationStatus.CANCELLED) {
+      throw new BadRequestException('Não é possível alterar o status de uma reserva cancelada.');
+    }
+
+    const action =
+      status === ReservationStatus.APPROVED
+        ? ('APPROVE_RESERVATION' as const)
+        : ('REJECT_RESERVATION' as const);
+
+    return this.prisma.$transaction(async tx => {
+      const updated = await tx.reservation.update({
+        where: { id },
+        data: { status },
+      });
+
+      await this.auditService.log(tx, {
+        action,
+        entityId: id,
+        userId: currentUser.userId,
+        before: reservation,
+        after: updated,
+      });
+
+      return updated;
+    });
+  }
+
   private assertValidTimes(inicio: string, fim: string): void {
     if (inicio >= fim) {
       throw new BadRequestException('O horário de início deve ser anterior ao horário de fim.');

@@ -15,6 +15,7 @@ import { ReservationStatus, Role } from '@prisma/client';
 import { ReservationsService } from './reservations.service';
 import { CreateReservationDto } from './dtos/create-reservation.dto';
 import { UpdateReservationDto } from './dtos/update-reservation.dto';
+import { UpdateStatusDto } from './dtos/update-status.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import type { RequestUser } from '../auth/strategies/jwt.strategy';
 import type { Reservation } from '@prisma/client';
@@ -63,6 +64,18 @@ export class ReservationsController {
     @Request() req: AuthenticatedRequest,
   ): Promise<Reservation> {
     return this.reservationsService.create(dto, req.user);
+  }
+
+  // CRÍTICO: :id/status declarado ANTES de :id para evitar captura pelo param
+  @Roles(Role.COORDENADOR, Role.ADMIN)
+  @Patch(':id/status')
+  @HttpCode(HttpStatus.OK)
+  updateStatus(
+    @Param('id') id: string,
+    @Body() dto: UpdateStatusDto,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<Reservation> {
+    return this.reservationsService.updateStatus(id, dto.status, req.user);
   }
 
   @Patch(':id')

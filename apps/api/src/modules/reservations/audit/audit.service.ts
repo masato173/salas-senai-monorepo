@@ -5,7 +5,9 @@ import type { Reservation } from '@prisma/client';
 export type ReservationAuditAction =
   | 'CREATE_RESERVATION'
   | 'UPDATE_RESERVATION'
-  | 'DELETE_RESERVATION';
+  | 'DELETE_RESERVATION'
+  | 'APPROVE_RESERVATION'
+  | 'REJECT_RESERVATION';
 
 interface AuditParams {
   action: ReservationAuditAction;
