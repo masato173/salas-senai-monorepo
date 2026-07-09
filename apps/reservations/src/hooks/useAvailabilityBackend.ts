@@ -79,9 +79,7 @@ export function useAvailabilityBackend(
   useEffect(() => {
     if (!autoFetch) return;
     doFetch();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    // Intencional: doFetch encapsula date, turno e enabled.
-    // refetch() é o mecanismo explícito para nova busca.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- doFetch encapsula date, turno e enabled; refetch() é o mecanismo explícito
   }, [date, turno, enabled]);
 
   return { data, loading, error, refetch: doFetch };
