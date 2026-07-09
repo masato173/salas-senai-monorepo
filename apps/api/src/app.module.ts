@@ -9,6 +9,7 @@ import { RoomsModule } from './modules/rooms/rooms.module';
 import { ReservationsModule } from './modules/reservations/reservations.module';
 import { AvailabilityModule } from './modules/availability/availability.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { RealtimeModule } from './modules/realtime/realtime.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 
@@ -23,6 +24,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     ReservationsModule,
     AvailabilityModule,
     AuditModule,
+    RealtimeModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

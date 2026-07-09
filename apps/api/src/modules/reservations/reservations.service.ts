@@ -13,6 +13,7 @@ import { AuditService } from './audit/audit.service';
 import type { CreateReservationDto } from './dtos/create-reservation.dto';
 import type { UpdateReservationDto } from './dtos/update-reservation.dto';
 import type { RequestUser } from '../auth/strategies/jwt.strategy';
+import { RealtimeService } from '../realtime/realtime.service';
 
 interface FindAllParams {
   roomId?: string | undefined;
@@ -29,6 +30,7 @@ export class ReservationsService {
     private readonly conflictService: ConflictService,
     private readonly ownershipService: OwnershipService,
     private readonly auditService: AuditService,
+    private readonly realtimeService: RealtimeService,
   ) {}
 
   async findAll(params: FindAllParams): Promise<Reservation[]> {
@@ -73,7 +75,7 @@ export class ReservationsService {
   async create(dto: CreateReservationDto, currentUser: RequestUser): Promise<Reservation> {
     this.assertValidTimes(dto.inicio, dto.fim);
 
-    return this.prisma.$transaction(async tx => {
+    const createdRes = await this.prisma.$transaction(async tx => {
       // Advisory lock por (roomId, date): serializa escritas concorrentes
       // na mesma sala+dia, evitando race conditions.
       await tx.$executeRaw`
@@ -117,6 +119,8 @@ export class ReservationsService {
 
       return reservation;
     });
+    this.realtimeService.reservationCreated(createdRes);
+    return createdRes;
   }
 
   async update(
@@ -133,7 +137,7 @@ export class ReservationsService {
     const resolvedRoomId = dto.roomId ?? existing.roomId;
     const resolvedDate = dto.date ?? existing.date;
 
-    return this.prisma.$transaction(async tx => {
+    const updatedRes = await this.prisma.$transaction(async tx => {
       await tx.$executeRaw`
         SELECT pg_advisory_xact_lock(hashtext(${resolvedRoomId}), hashtext(${resolvedDate}))
       `;
@@ -173,6 +177,8 @@ export class ReservationsService {
 
       return updated;
     });
+    this.realtimeService.reservationUpdated(updatedRes);
+    return updatedRes;
   }
 
   async cancel(id: string, currentUser: RequestUser): Promise<Reservation> {
@@ -183,7 +189,7 @@ export class ReservationsService {
     // Reserva ativa — assertCanModify verifica existência e ownership normalmente
     const existing = await this.ownershipService.assertCanModify(id, currentUser);
 
-    return this.prisma.$transaction(async tx => {
+    const cancelledRes = await this.prisma.$transaction(async tx => {
       const cancelled = await tx.reservation.update({
         where: { id },
         data: {
@@ -202,6 +208,8 @@ export class ReservationsService {
 
       return cancelled;
     });
+    this.realtimeService.reservationCancelled(cancelledRes);
+    return cancelledRes;
   }
 
   async updateStatus(
@@ -224,7 +232,7 @@ export class ReservationsService {
         ? ('APPROVE_RESERVATION' as const)
         : ('REJECT_RESERVATION' as const);
 
-    return this.prisma.$transaction(async tx => {
+    const statusRes = await this.prisma.$transaction(async tx => {
       const updated = await tx.reservation.update({
         where: { id },
         data: { status },
@@ -240,6 +248,12 @@ export class ReservationsService {
 
       return updated;
     });
+    if (status === ReservationStatus.APPROVED) {
+      this.realtimeService.reservationApproved(statusRes);
+    } else {
+      this.realtimeService.reservationRejected(statusRes);
+    }
+    return statusRes;
   }
 
   private assertValidTimes(inicio: string, fim: string): void {
