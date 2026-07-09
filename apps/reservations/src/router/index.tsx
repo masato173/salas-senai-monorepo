@@ -3,6 +3,7 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { AppLayout } from '../layouts/AppLayout';
 import { RouteLoader } from './RouteLoader';
 import { ProtectedRoute } from './ProtectedRoute';
+const LoginPage = lazy(() => import('../pages/Login'));
 
 // ─────────────────────────────────────────────────────────────
 // Lazy loading — cada página carrega só quando visitada
@@ -20,6 +21,15 @@ const ConfiguracoesPage = lazy(() => import('../pages/Configuracoes'));
 const NotFoundPage = lazy(() => import('../pages/NotFound'));
 
 export const router = createBrowserRouter([
+  {
+    // Login fora do AppLayout — sem sidebar, sem topbar
+    path: '/login',
+    element: (
+      <Suspense fallback={<RouteLoader />}>
+        <LoginPage />
+      </Suspense>
+    ),
+  },
   {
     path: '/',
     element: <AppLayout />,
