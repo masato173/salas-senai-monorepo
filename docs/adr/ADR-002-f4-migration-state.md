@@ -95,40 +95,45 @@ estiverem entregues e validados em produção:
 
 ### Frontend
 
-- [ ] `useListReservations` consumindo `GET /reservations` do NestJS
-- [ ] `useCreateReservation` consumindo `POST /reservations` do NestJS
-- [ ] `useCancelReservation` consumindo `DELETE /reservations/:id` do NestJS
-- [ ] `useSchedule` substituído por sincronização de aulas no NestJS
-      (SyncModule F4.5 ou equivalente)
-- [ ] `CURRENT_USER` hardcoded substituído por autenticação JWT real
+- [x] `useListReservations` consumindo `GET /reservations` do NestJS — F5.4
+- [x] `useCreateReservation` consumindo `POST /reservations` do NestJS — F5.5
+- [x] `useCancelReservation` consumindo `DELETE /reservations/:id` do NestJS — F5.6
+- [x] `useSchedule` substituído por `GET /schedules` do NestJS (SyncModule) — F5.7
+- [x] `CURRENT_USER` hardcoded substituído por autenticação JWT real — F5.1
 
 ### Backend
 
-- [ ] SyncModule: importação dos registros do Google Sheets para PostgreSQL
-      (ou descontinuação da funcionalidade de aulas no frontend)
-- [ ] Endpoint de autenticação integrado ao sistema de usuários SENAI
+- [x] SyncModule: importação dos registros do Google Sheets para PostgreSQL — F5.7
+- [ ] Autenticação integrada ao sistema institucional SENAI (SSO/LDAP) — futuro
 
 ### Operacional
 
-- [ ] Testes E2E cobrindo todos os fluxos acima com o NestJS como backend
-- [ ] `VITE_BACKEND_DRIVER=true` como padrão de produção validado
-- [ ] Apps Script configurado em modo read-only (sem escritas)
-- [ ] Monitoramento básico no NestJS (health + logs estruturados)
-- [ ] Plano de rollback documentado e testado
+- [ ] Testes E2E cobrindo todos os fluxos com NestJS como backend — futuro
+- [x] `VITE_BACKEND_DRIVER=true` como padrão de produção — F5.8
+- [x] Apps Script em modo read-only (apenas fonte de sync de aulas) — F5.8
+- [x] Monitoramento básico (GET /health ativo desde F4.0)
+- [x] Plano de rollback documentado (seção Rollback de emergência neste ADR)
 
 ---
 
 ## Decisão
 
-**O cutover oficial está adiado para a Fase 5.**
+**O cutover oficial foi executado na Fase 5 (F5.8).**
 
-A Fase 4 é declarada completa como fase de **infraestrutura e coexistência**:
-o NestJS está em produção para disponibilidade e pronto para receber os
-demais fluxos, mas o Apps Script permanece como backend operacional principal
-até que todos os pré-requisitos acima sejam atendidos.
+A Fase 5 entregou a migração completa dos hooks do frontend para o NestJS.
+O NestJS é o backend oficial da aplicação a partir de F5.8.
 
-`VITE_BACKEND_DRIVER=true` NÃO será definido como padrão nesta fase para
-não criar a percepção incorreta de que o NestJS já é o backend oficial.
+O Apps Script permanece **apenas** como fonte temporária de sincronização
+de aulas (via `POST /sync/schedules`). Não recebe mais nenhuma escrita
+direta do frontend.
+
+`VITE_BACKEND_DRIVER=true` é o padrão de produção desde F5.8.
+
+Itens pendentes para sprints futuras:
+
+- Autenticação integrada ao sistema institucional SENAI (SSO/LDAP)
+- Testes E2E cobrindo todos os fluxos no NestJS
+- Remoção completa do Apps Script (quando sync de aulas for interno)
 
 ---
 
