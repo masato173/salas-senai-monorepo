@@ -112,3 +112,18 @@ model RefreshToken {
 
   @@index([userId])
 }
+
+// Aulas importadas do Apps Script via POST /sync/schedules.
+// Sem FK para Room: sala é string-name do legado (pode ter variações).
+// Sincronização: full-replace (DELETE + INSERT) a cada sync manual.
+model Schedule {
+  id    String  @id @default(cuid())
+  date  String  // YYYY-MM-DD
+  sala  String  // nome da sala (paridade com Apps Script)
+  turma String
+  mes   String
+  turno String? // 'M' | 'V' | 'N' ou null
+
+  @@index([date])
+  @@index([sala, date])
+}

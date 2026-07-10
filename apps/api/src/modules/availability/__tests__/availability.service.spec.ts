@@ -5,9 +5,11 @@ import { AvailabilityService } from '../availability.service';
 
 const mockRoomDelegate = { findMany: vi.fn() };
 const mockReservationDelegate = { findMany: vi.fn() };
+const mockScheduleDelegate = { findMany: vi.fn().mockResolvedValue([]) };
 const mockPrisma = {
   room: mockRoomDelegate,
   reservation: mockReservationDelegate,
+  schedule: mockScheduleDelegate,
 };
 
 function makeService(): AvailabilityService {

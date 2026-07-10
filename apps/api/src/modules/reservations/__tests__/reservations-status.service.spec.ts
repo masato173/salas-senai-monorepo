@@ -21,6 +21,13 @@ const mockPrisma = {
 const mockConflictService = { hasConflict: vi.fn() };
 const mockOwnershipService = { assertCanModify: vi.fn() };
 const mockAuditService = { log: vi.fn() };
+const mockRealtimeService = {
+  reservationCreated: vi.fn(),
+  reservationUpdated: vi.fn(),
+  reservationCancelled: vi.fn(),
+  reservationApproved: vi.fn(),
+  reservationRejected: vi.fn(),
+};
 
 function makeService(): ReservationsService {
   return new ReservationsService(
@@ -28,6 +35,7 @@ function makeService(): ReservationsService {
     mockConflictService as never,
     mockOwnershipService as never,
     mockAuditService as never,
+    mockRealtimeService as never,
   );
 }
 

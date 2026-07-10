@@ -11,6 +11,7 @@ import type {
   CreatedReservationRow,
   ListReservationsOptions,
   ListReservationsResponse,
+  ScheduleResult,
 } from './appsScript';
 
 // ─────────────────────────────────────────────────────────────
@@ -149,8 +150,16 @@ export function clearRoomCache(): void {
 // ─── Factory ──────────────────────────────────────────────────
 export function createNestjsApiService(fallback: AppsScriptService): AppsScriptService {
   return {
-    // ── Não migrado — delega ao Apps Script ─────────────────
-    fetchSchedule: () => fallback.fetchSchedule(),
+    // ── Migrado: GET /schedules ──────────────────────────────
+    // Apps Script não é mais chamado para aulas após F5.7.
+    async fetchSchedule(): Promise<ScheduleResult> {
+      try {
+        return await apiFetch<ScheduleResult>('/schedules');
+      } catch {
+        // Fallback para Apps Script se NestJS falhar (ex: Schedule vazio)
+        return fallback.fetchSchedule();
+      }
+    },
     createReservationRange: req => fallback.createReservationRange(req),
     updateReservation: req => fallback.updateReservation(req),
     updateReservationGroup: req => fallback.updateReservationGroup(req),

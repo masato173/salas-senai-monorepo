@@ -45,6 +45,11 @@ function toMinutes(hhmm: string): number {
   return h * 60 + m;
 }
 
+// Type guard para valores válidos de Turno
+function isTurno(t: string | null): t is Turno {
+  return t === 'M' || t === 'V' || t === 'N';
+}
+
 // Verifica sobreposição. Paridade exata com overlaps() do frontend.
 // Fórmula canônica: inicio1 < fim2 && fim1 > inicio2
 // Bordas iguais NÃO conflitam (tangência).
@@ -82,17 +87,45 @@ export class AvailabilityService {
       },
     });
 
-    const salas: DisponibilidadeSala[] = rooms.map(room => {
-      // Reservas desta sala
-      const roomReservations = reservations.filter(r => r.roomId === room.id);
+    // Aulas do dia (Schedule) — filtradas por turno se especificado.
+    // Paridade com buildRoomAvailability do frontend:
+    //   turno especificado → só aulas daquele turno (null excluído)
+    //   sem turno → todas as aulas do dia
+    const schedules = await this.prisma.schedule.findMany({
+      where: {
+        date,
+        ...(turno !== undefined ? { turno } : {}),
+      },
+    });
 
-      // Aplicar filtro de turno: só inclui reservas que sobrepõem a faixa
-      const eventos: SalaEvento[] = roomReservations
-        .filter(r => {
-          if (turno === undefined) return true;
-          return overlaps({ inicio: r.inicio, fim: r.fim }, TURNO_HORARIO[turno]);
-        })
-        .map(r => ({
+    const salas: DisponibilidadeSala[] = rooms.map(room => {
+      const roomReservations = reservations.filter(r => r.roomId === room.id);
+      const roomSchedules = schedules.filter(s => s.sala === room.name);
+
+      const eventos: SalaEvento[] = [];
+
+      // Aulas (tipo: 'aula')
+      for (const s of roomSchedules) {
+        const horario = isTurno(s.turno) ? TURNO_HORARIO[s.turno] : null;
+        eventos.push({
+          tipo: 'aula' as const,
+          sala: room.name,
+          data: date,
+          inicio: horario?.inicio ?? '00:00',
+          fim: horario?.fim ?? '23:59',
+          turno: isTurno(s.turno) ? s.turno : null,
+          turma: s.turma,
+        });
+      }
+
+      // Reservas (tipo: 'reserva') — filtradas por turno se especificado
+      const filteredReservations = roomReservations.filter(r => {
+        if (turno === undefined) return true;
+        return overlaps({ inicio: r.inicio, fim: r.fim }, TURNO_HORARIO[turno]);
+      });
+
+      for (const r of filteredReservations) {
+        eventos.push({
           tipo: 'reserva' as const,
           sala: room.name,
           data: r.date,
@@ -100,11 +133,16 @@ export class AvailabilityService {
           fim: r.fim,
           professor: r.user.name,
           id: r.id,
-        }));
+        });
+      }
 
-      // Status dominante. 'aula' e 'conflito' requerem dados do Sheets (F4.5).
-      // Nesta fase: apenas 'livre' e 'reserva'.
-      const status: RoomStatus = eventos.length > 0 ? 'reserva' : 'livre';
+      // Status dominante (pior caso: conflito > aula > reserva > livre)
+      const temAula = eventos.some(e => e.tipo === 'aula');
+      const temReserva = eventos.some(e => e.tipo === 'reserva');
+      let status: RoomStatus = 'livre';
+      if (temAula && temReserva) status = 'conflito';
+      else if (temAula) status = 'aula';
+      else if (temReserva) status = 'reserva';
 
       return { sala: room.name, status, eventos };
     });

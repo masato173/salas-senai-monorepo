@@ -27,6 +27,13 @@ const mockPrisma = {
 const mockConflictService = { hasConflict: vi.fn() };
 const mockOwnershipService = { assertCanModify: vi.fn() };
 const mockAuditService = { log: vi.fn() };
+const mockRealtimeService = {
+  reservationCreated: vi.fn(),
+  reservationUpdated: vi.fn(),
+  reservationCancelled: vi.fn(),
+  reservationApproved: vi.fn(),
+  reservationRejected: vi.fn(),
+};
 
 function makeService(): ReservationsService {
   return new ReservationsService(
@@ -34,6 +41,7 @@ function makeService(): ReservationsService {
     mockConflictService as never,
     mockOwnershipService as never,
     mockAuditService as never,
+    mockRealtimeService as never,
   );
 }
 
@@ -156,6 +164,8 @@ describe('ReservationsService', () => {
   describe('cancel()', () => {
     beforeEach(() => {
       mockOwnershipService.assertCanModify.mockResolvedValue(baseReservation);
+      // reset: quickLookup retorna PENDING por padrão — idempotência sobreescreve para CANCELLED
+      mockPrisma.reservation.findUnique.mockResolvedValue(baseReservation);
       mockTx.reservation.update.mockResolvedValue({
         ...baseReservation,
         status: ReservationStatus.CANCELLED,
@@ -175,7 +185,8 @@ describe('ReservationsService', () => {
     it('retorna reserva já cancelada sem erro (idempotência)', async () => {
       const cancelled = { ...baseReservation, status: ReservationStatus.CANCELLED };
       mockOwnershipService.assertCanModify.mockResolvedValue(cancelled);
-
+      // quickLookup (findUnique direto) roda ANTES de assertCanModify no cancel()
+      mockPrisma.reservation.findUnique.mockResolvedValue(cancelled);
       const result = await makeService().cancel('res-1', adminUser);
       expect(result.status).toBe(ReservationStatus.CANCELLED);
       expect(mockPrisma.$transaction).not.toHaveBeenCalled(); // não abre tx desnecessária
