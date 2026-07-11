@@ -14,6 +14,7 @@ import { DashboardPage } from '../pages/Dashboard';
 
 const AgendamentosPage = lazy(() => import('../pages/Agendamentos'));
 const ReservasPage = lazy(() => import('../pages/Reservas'));
+const AprovacoesPage = lazy(() => import('../pages/Aprovacoes'));
 const SalasPage = lazy(() => import('../pages/Salas'));
 const TurmasPage = lazy(() => import('../pages/Turmas'));
 const RelatoriosPage = lazy(() => import('../pages/Relatorios'));
@@ -52,6 +53,16 @@ export const router = createBrowserRouter([
           <ProtectedRoute>
             <Suspense fallback={<RouteLoader />}>
               <ReservasPage />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'aprovacoes',
+        element: (
+          <ProtectedRoute requiredRole="COORDENADOR">
+            <Suspense fallback={<RouteLoader />}>
+              <AprovacoesPage />
             </Suspense>
           </ProtectedRoute>
         ),
