@@ -1,28 +1,29 @@
 import { describe, it, expect } from 'vitest';
-import {
-  ROUTES, ROUTE_SECTIONS,
-  getRouteByPath, getBreadcrumbs,
-  hasAccess,
-} from '../config';
+import { ROUTES, ROUTE_SECTIONS, getRouteByPath, getBreadcrumbs, hasAccess } from '../config';
 
 describe('ROUTES config', () => {
-  it('tem exatamente 7 rotas', () => {
-    expect(ROUTES).toHaveLength(7);
-  });
-
-  it('contém todas as 7 rotas esperadas', () => {
+  it('contém todas as rotas essenciais', () => {
     const paths = ROUTES.map(r => r.path);
-    for (const p of ['/', '/agendamentos', '/reservas', '/salas', '/turmas', '/relatorios', '/configuracoes']) {
-      expect(paths).toContain(p);
+    for (const p of [
+      '/',
+      '/agendamentos',
+      '/reservas',
+      '/aprovacoes',
+      '/salas',
+      '/turmas',
+      '/relatorios',
+      '/configuracoes',
+    ]) {
+      expect(paths, `rota ${p} ausente em ROUTES`).toContain(p);
     }
   });
 
   it('cada rota tem label, icon, pageTitle e section', () => {
     for (const r of ROUTES) {
-      expect(r.label,     `${r.path}: falta label`).toBeTruthy();
-      expect(r.icon,      `${r.path}: falta icon`).toBeTruthy();
+      expect(r.label, `${r.path}: falta label`).toBeTruthy();
+      expect(r.icon, `${r.path}: falta icon`).toBeTruthy();
       expect(r.pageTitle, `${r.path}: falta pageTitle`).toBeTruthy();
-      expect(r.section,   `${r.path}: falta section`).toBeTruthy();
+      expect(r.section, `${r.path}: falta section`).toBeTruthy();
     }
   });
 
@@ -46,6 +47,12 @@ describe('ROUTES config', () => {
     expect(r?.requiredRole).toBe('PROFESSOR');
   });
 
+  it('aprovacoes requer role COORDENADOR', () => {
+    const r = ROUTES.find(r => r.path === '/aprovacoes');
+    expect(r?.requiresAuth).toBe(true);
+    expect(r?.requiredRole).toBe('COORDENADOR');
+  });
+
   it('configuracoes requer role ADMIN', () => {
     expect(ROUTES.find(r => r.path === '/configuracoes')?.requiredRole).toBe('ADMIN');
   });
@@ -59,8 +66,9 @@ describe('ROUTE_SECTIONS', () => {
     expect(paths).toContain('/reservas');
   });
 
-  it('seção gestao tem Salas e Turmas', () => {
+  it('seção gestao tem Aprovações, Salas e Turmas', () => {
     const paths = ROUTE_SECTIONS.gestao.map(r => r.path);
+    expect(paths).toContain('/aprovacoes');
     expect(paths).toContain('/salas');
     expect(paths).toContain('/turmas');
   });

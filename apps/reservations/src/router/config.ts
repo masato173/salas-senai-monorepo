@@ -4,83 +4,92 @@
 // ─────────────────────────────────────────────────────────────
 
 export interface RouteConfig {
-  path:         string;
-  label:        string;
-  pageTitle:    string;
-  icon:         string;         // nome do ícone Lucide
-  section:      'principal' | 'gestao' | 'sistema';
+  path: string;
+  label: string;
+  pageTitle: string;
+  icon: string; // nome do ícone Lucide
+  section: 'principal' | 'gestao' | 'sistema';
   requiresAuth: boolean;
   requiredRole?: 'PROFESSOR' | 'COORDENADOR' | 'ADMIN';
-  featureFlag?: string;         // para feature flags futuras
+  featureFlag?: string; // para feature flags futuras
 }
 
 export interface Breadcrumb {
   label: string;
-  path:  string;
+  path: string;
 }
 
 export const ROUTES: RouteConfig[] = [
   // ── Principal ───────────────────────────────────────────
   {
-    path:         '/',
-    label:        'Dashboard',
-    pageTitle:    'Dashboard · SENAI Salas',
-    icon:         'LayoutDashboard',
-    section:      'principal',
+    path: '/',
+    label: 'Dashboard',
+    pageTitle: 'Dashboard · SENAI Salas',
+    icon: 'LayoutDashboard',
+    section: 'principal',
     requiresAuth: false,
   },
   {
-    path:         '/agendamentos',
-    label:        'Agendamentos',
-    pageTitle:    'Agendamentos · SENAI Salas',
-    icon:         'Calendar',
-    section:      'principal',
+    path: '/agendamentos',
+    label: 'Agendamentos',
+    pageTitle: 'Agendamentos · SENAI Salas',
+    icon: 'Calendar',
+    section: 'principal',
     requiresAuth: false,
   },
   {
-    path:         '/reservas',
-    label:        'Reservas',
-    pageTitle:    'Reservas · SENAI Salas',
-    icon:         'FileText',
-    section:      'principal',
+    path: '/reservas',
+    label: 'Reservas',
+    pageTitle: 'Reservas · SENAI Salas',
+    icon: 'FileText',
+    section: 'principal',
     requiresAuth: true,
     requiredRole: 'PROFESSOR',
   },
   // ── Gestão ──────────────────────────────────────────────
   {
-    path:         '/salas',
-    label:        'Salas',
-    pageTitle:    'Salas · SENAI Salas',
-    icon:         'Building2',
-    section:      'gestao',
+    path: '/aprovacoes',
+    label: 'Aprovações',
+    pageTitle: 'Aprovações · SENAI Salas',
+    icon: 'ClipboardCheck',
+    section: 'gestao',
     requiresAuth: true,
     requiredRole: 'COORDENADOR',
   },
   {
-    path:         '/turmas',
-    label:        'Turmas',
-    pageTitle:    'Turmas · SENAI Salas',
-    icon:         'Users',
-    section:      'gestao',
+    path: '/salas',
+    label: 'Salas',
+    pageTitle: 'Salas · SENAI Salas',
+    icon: 'Building2',
+    section: 'gestao',
+    requiresAuth: true,
+    requiredRole: 'COORDENADOR',
+  },
+  {
+    path: '/turmas',
+    label: 'Turmas',
+    pageTitle: 'Turmas · SENAI Salas',
+    icon: 'Users',
+    section: 'gestao',
     requiresAuth: true,
     requiredRole: 'COORDENADOR',
   },
   // ── Sistema ─────────────────────────────────────────────
   {
-    path:         '/relatorios',
-    label:        'Relatórios',
-    pageTitle:    'Relatórios · SENAI Salas',
-    icon:         'BarChart3',
-    section:      'sistema',
+    path: '/relatorios',
+    label: 'Relatórios',
+    pageTitle: 'Relatórios · SENAI Salas',
+    icon: 'BarChart3',
+    section: 'sistema',
     requiresAuth: true,
     requiredRole: 'COORDENADOR',
   },
   {
-    path:         '/configuracoes',
-    label:        'Configurações',
-    pageTitle:    'Configurações · SENAI Salas',
-    icon:         'Settings',
-    section:      'sistema',
+    path: '/configuracoes',
+    label: 'Configurações',
+    pageTitle: 'Configurações · SENAI Salas',
+    icon: 'Settings',
+    section: 'sistema',
     requiresAuth: true,
     requiredRole: 'ADMIN',
   },
@@ -117,6 +126,6 @@ export function hasAccess(path: string, isAuthenticated: boolean): boolean {
 
 export const ROUTE_SECTIONS = {
   principal: ROUTES.filter(r => r.section === 'principal'),
-  gestao:    ROUTES.filter(r => r.section === 'gestao'),
-  sistema:   ROUTES.filter(r => r.section === 'sistema'),
+  gestao: ROUTES.filter(r => r.section === 'gestao'),
+  sistema: ROUTES.filter(r => r.section === 'sistema'),
 };

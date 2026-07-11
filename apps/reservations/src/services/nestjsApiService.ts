@@ -2,6 +2,7 @@ import { apiFetch } from './apiClient';
 import { useAuthStore, selectUser } from '../store/authStore';
 import { createAppsScriptService } from './appsScript';
 import type {
+  BackendEnvelope,
   BackendError,
   BackendErrorCode,
   CancelReservationRequest,
@@ -130,6 +131,34 @@ function toRow(r: NestReservation): CreatedReservationRow {
   };
 }
 
+// ─── Tipos admin (F6.1) ───────────────────────────────────────
+// Contrato das funcionalidades administrativas exclusivas do NestJS.
+// Não altera AppsScriptService — mantém compatibilidade com legado.
+// Filtros preparados para crescimento: F6.1 usa só status; os demais
+// serão passados ao backend quando os endpoints suportarem.
+export interface ReservationAdminFilters {
+  status?: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+  professor?: string; // client-side em F6.1
+  sala?: string; // futuro: roomId=
+  data?: string; // futuro: date=
+}
+
+export interface ReservationAdminApi {
+  listPendingReservations(filters?: ReservationAdminFilters): Promise<ListReservationsResponse>;
+  updateStatus(
+    id: string,
+    status: 'APPROVED' | 'REJECTED',
+  ): Promise<BackendEnvelope<CreatedReservationRow>>;
+}
+
+// ─── Row mapper admin ─────────────────────────────────────────
+// Variante do toRow que preserva o status bruto do NestJS.
+// listPendingReservations usa esta função para que a UI de aprovações
+// veja 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' — não 'ACTIVE'.
+function toAdminRow(r: NestReservation): CreatedReservationRow {
+  return { ...toRow(r), status: r.status };
+}
+
 // ─── Room cache ───────────────────────────────────────────────
 // GET /rooms é @Public — não requer auth. Cache por sessão.
 let roomCache: Map<string, string> | null = null;
@@ -148,7 +177,9 @@ export function clearRoomCache(): void {
 }
 
 // ─── Factory ──────────────────────────────────────────────────
-export function createNestjsApiService(fallback: AppsScriptService): AppsScriptService {
+export function createNestjsApiService(
+  fallback: AppsScriptService,
+): AppsScriptService & ReservationAdminApi {
   return {
     // ── Migrado: GET /schedules ──────────────────────────────
     // Apps Script não é mais chamado para aulas após F5.7.
@@ -250,6 +281,46 @@ export function createNestjsApiService(fallback: AppsScriptService): AppsScriptS
         // 3. Monta row com os dados pré-cancelamento + status atualizado
         const row = toRow({ ...existing, status: 'CANCELLED' });
         return { ok: true, data: row, error: null };
+      } catch (e) {
+        return { ok: false, data: null, error: toBackendError(e) };
+      }
+    },
+
+    // ── F6.1: listPendingReservations ────────────────────────
+    // Usa toAdminRow (status bruto) para que a UI de aprovações veja
+    // PENDING/APPROVED/REJECTED/CANCELLED em vez de ACTIVE.
+    // professor é filtro client-side — backend não tem esse parâmetro.
+    async listPendingReservations(
+      filters?: ReservationAdminFilters,
+    ): Promise<ListReservationsResponse> {
+      try {
+        const params = new URLSearchParams();
+        if (filters?.status) params.set('status', filters.status);
+        if (filters?.data) params.set('date', filters.data);
+        const query = params.toString();
+        const raw = await apiFetch<NestReservation[]>(
+          query ? `/reservations?${query}` : '/reservations',
+        );
+        const reservations = raw.map(toAdminRow);
+        return { ok: true, data: { count: reservations.length, reservations }, error: null };
+      } catch (e) {
+        return { ok: false, data: null, error: toBackendError(e) };
+      }
+    },
+
+    // ── F6.1: updateStatus ───────────────────────────────────
+    // PATCH /reservations/:id/status — aprovação e rejeição.
+    // Retorna o status bruto (sem mapper) para o adapter admin.
+    async updateStatus(
+      id: string,
+      status: 'APPROVED' | 'REJECTED',
+    ): Promise<BackendEnvelope<CreatedReservationRow>> {
+      try {
+        const updated = await apiFetch<NestReservation>(`/reservations/${id}/status`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status }),
+        });
+        return { ok: true, data: toAdminRow(updated), error: null };
       } catch (e) {
         return { ok: false, data: null, error: toBackendError(e) };
       }

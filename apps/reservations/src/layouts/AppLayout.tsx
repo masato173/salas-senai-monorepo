@@ -1,24 +1,40 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Calendar, FileText, Building2,
-  Users, BarChart3, Settings, ChevronsLeft, Menu, X,
-  Sun, Moon,
+  LayoutDashboard,
+  Calendar,
+  FileText,
+  Building2,
+  Users,
+  BarChart3,
+  Settings,
+  ClipboardCheck,
+  ChevronsLeft,
+  Menu,
+  X,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { PageTransition } from '../router/PageTransition';
 import { ROUTES, getBreadcrumbs, ROUTE_SECTIONS } from '../router/config';
 
 const ICON_MAP = {
-  LayoutDashboard, Calendar, FileText, Building2,
-  Users, BarChart3, Settings,
+  LayoutDashboard,
+  Calendar,
+  FileText,
+  Building2,
+  Users,
+  BarChart3,
+  Settings,
+  ClipboardCheck,
 } as const;
 
 type IconName = keyof typeof ICON_MAP;
 
 const SECTION_LABELS = {
   principal: 'Principal',
-  gestao:    'Gestão',
-  sistema:   'Sistema',
+  gestao: 'Gestão',
+  sistema: 'Sistema',
 } as const;
 
 // ─────────────────────────────────────────────────────────────
@@ -28,8 +44,8 @@ export function AppLayout() {
   const location = useLocation();
 
   // Sidebar state
-  const [collapsed,   setCollapsed]   = useState(() => ls('sidebar-collapsed') === '1');
-  const [mobileOpen,  setMobileOpen]  = useState(false);
+  const [collapsed, setCollapsed] = useState(() => ls('sidebar-collapsed') === '1');
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   // Theme state
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -48,7 +64,9 @@ export function AppLayout() {
   }, [collapsed]);
 
   // Fecha sidebar mobile em mudança de rota
-  useEffect(() => { setMobileOpen(false); }, [location.pathname]);
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
 
   // Atualiza page title
   const currentRoute = ROUTES.find(r => r.path === location.pathname);
@@ -57,11 +75,10 @@ export function AppLayout() {
   }, [currentRoute]);
 
   const breadcrumbs = getBreadcrumbs(location.pathname);
-  const toggleTheme = useCallback(() => setTheme(t => t === 'dark' ? 'light' : 'dark'), []);
+  const toggleTheme = useCallback(() => setTheme(t => (t === 'dark' ? 'light' : 'dark')), []);
 
   return (
     <div className="app-shell">
-
       {/* ── Overlay mobile ──────────────────────────────── */}
       {mobileOpen && (
         <div
@@ -72,8 +89,9 @@ export function AppLayout() {
       )}
 
       {/* ── Sidebar ─────────────────────────────────────── */}
-      <aside className={`sidebar ${collapsed ? 'collapsed' : ''} ${mobileOpen ? 'mobile-open' : ''}`}>
-
+      <aside
+        className={`sidebar ${collapsed ? 'collapsed' : ''} ${mobileOpen ? 'mobile-open' : ''}`}
+      >
         {/* Logo */}
         <div className="sidebar-logo">
           <div className="sidebar-logo-icon">SS</div>
@@ -96,9 +114,7 @@ export function AppLayout() {
                     to={route.path}
                     end={route.path === '/'}
                     data-label={route.label}
-                    className={({ isActive }) =>
-                      `sidebar-item${isActive ? ' active' : ''}`
-                    }
+                    className={({ isActive }) => `sidebar-item${isActive ? ' active' : ''}`}
                   >
                     <span className="sidebar-icon" aria-hidden="true">
                       {Icon && <Icon size={16} strokeWidth={1.75} />}
@@ -128,7 +144,6 @@ export function AppLayout() {
 
       {/* ── Main wrap ───────────────────────────────────── */}
       <div className={`main-wrap ${collapsed ? 'collapsed' : ''}`}>
-
         {/* Topbar */}
         <header className="topbar">
           <button
@@ -143,7 +158,11 @@ export function AppLayout() {
           <nav className="topbar-breadcrumb" aria-label="Breadcrumb">
             {breadcrumbs.map((crumb, i) => (
               <React.Fragment key={crumb.path}>
-                {i > 0 && <span className="topbar-breadcrumb-sep" aria-hidden="true">›</span>}
+                {i > 0 && (
+                  <span className="topbar-breadcrumb-sep" aria-hidden="true">
+                    ›
+                  </span>
+                )}
                 {i < breadcrumbs.length - 1 ? (
                   <NavLink to={crumb.path} className="topbar-breadcrumb-root">
                     {crumb.label}
@@ -163,12 +182,15 @@ export function AppLayout() {
               aria-label="Alternar tema"
               title={theme === 'dark' ? 'Modo claro' : 'Modo escuro'}
             >
-              {theme === 'dark'
-                ? <Sun  size={15} strokeWidth={1.75} />
-                : <Moon size={15} strokeWidth={1.75} />
-              }
+              {theme === 'dark' ? (
+                <Sun size={15} strokeWidth={1.75} />
+              ) : (
+                <Moon size={15} strokeWidth={1.75} />
+              )}
             </button>
-            <div className="topbar-avatar" title="Usuário">U</div>
+            <div className="topbar-avatar" title="Usuário">
+              U
+            </div>
           </div>
         </header>
 
@@ -178,7 +200,6 @@ export function AppLayout() {
             <Outlet />
           </PageTransition>
         </main>
-
       </div>
     </div>
   );
@@ -186,8 +207,16 @@ export function AppLayout() {
 
 // Helpers localStorage seguros
 function ls(key: string): string {
-  try { return localStorage.getItem(key) ?? ''; } catch { return ''; }
+  try {
+    return localStorage.getItem(key) ?? '';
+  } catch {
+    return '';
+  }
 }
 function lsSave(key: string, value: string): void {
-  try { localStorage.setItem(key, value); } catch { /* noop */ }
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* noop */
+  }
 }
