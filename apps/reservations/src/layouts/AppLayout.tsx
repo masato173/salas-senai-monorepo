@@ -14,9 +14,18 @@ import {
   X,
   Sun,
   Moon,
+  UserCog,
+  ShieldCheck,
+  ScrollText,
+  RefreshCw,
+  Server,
+  SlidersHorizontal,
+  Braces,
+  HeartPulse,
 } from 'lucide-react';
 import { PageTransition } from '../router/PageTransition';
 import { ROUTES, getBreadcrumbs, ROUTE_SECTIONS } from '../router/config';
+import { useAuthStore } from '../store/authStore';
 
 const ICON_MAP = {
   LayoutDashboard,
@@ -27,6 +36,14 @@ const ICON_MAP = {
   BarChart3,
   Settings,
   ClipboardCheck,
+  UserCog,
+  ShieldCheck,
+  ScrollText,
+  RefreshCw,
+  Server,
+  SlidersHorizontal,
+  Braces,
+  HeartPulse,
 } as const;
 
 type IconName = keyof typeof ICON_MAP;
@@ -35,6 +52,7 @@ const SECTION_LABELS = {
   principal: 'Principal',
   gestao: 'Gestão',
   sistema: 'Sistema',
+  admin: 'Admin',
 } as const;
 
 // ─────────────────────────────────────────────────────────────
@@ -42,6 +60,7 @@ const SECTION_LABELS = {
 // ─────────────────────────────────────────────────────────────
 export function AppLayout() {
   const location = useLocation();
+  const userRole = useAuthStore(s => s.user?.role ?? '');
 
   // Sidebar state
   const [collapsed, setCollapsed] = useState(() => ls('sidebar-collapsed') === '1');
@@ -103,28 +122,32 @@ export function AppLayout() {
 
         {/* Nav sections */}
         <nav className="sidebar-nav" aria-label="Navegação principal">
-          {(['principal', 'gestao', 'sistema'] as const).map(section => (
-            <div key={section}>
-              <div className="sidebar-section-label">{SECTION_LABELS[section]}</div>
-              {ROUTE_SECTIONS[section].map(route => {
-                const Icon = ICON_MAP[route.icon as IconName];
-                return (
-                  <NavLink
-                    key={route.path}
-                    to={route.path}
-                    end={route.path === '/'}
-                    data-label={route.label}
-                    className={({ isActive }) => `sidebar-item${isActive ? ' active' : ''}`}
-                  >
-                    <span className="sidebar-icon" aria-hidden="true">
-                      {Icon && <Icon size={16} strokeWidth={1.75} />}
-                    </span>
-                    <span className="sidebar-label">{route.label}</span>
-                  </NavLink>
-                );
-              })}
-            </div>
-          ))}
+          {(['principal', 'gestao', 'sistema'] as const as string[])
+            .concat(userRole === 'ADMIN' ? ['admin'] : [])
+            .map(section => (
+              <div key={section}>
+                <div className="sidebar-section-label">
+                  {SECTION_LABELS[section as keyof typeof SECTION_LABELS]}
+                </div>
+                {ROUTE_SECTIONS[section as keyof typeof ROUTE_SECTIONS].map(route => {
+                  const Icon = ICON_MAP[route.icon as IconName];
+                  return (
+                    <NavLink
+                      key={route.path}
+                      to={route.path}
+                      end={route.path === '/'}
+                      data-label={route.label}
+                      className={({ isActive }) => `sidebar-item${isActive ? ' active' : ''}`}
+                    >
+                      <span className="sidebar-icon" aria-hidden="true">
+                        {Icon && <Icon size={16} strokeWidth={1.75} />}
+                      </span>
+                      <span className="sidebar-label">{route.label}</span>
+                    </NavLink>
+                  );
+                })}
+              </div>
+            ))}
         </nav>
 
         {/* Collapse toggle */}

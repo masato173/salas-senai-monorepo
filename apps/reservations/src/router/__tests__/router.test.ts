@@ -13,6 +13,9 @@ describe('ROUTES config', () => {
       '/turmas',
       '/relatorios',
       '/configuracoes',
+      '/admin',
+      '/admin/usuarios',
+      '/admin/auditoria',
     ]) {
       expect(paths, `rota ${p} ausente em ROUTES`).toContain(p);
     }
@@ -53,6 +56,14 @@ describe('ROUTES config', () => {
     expect(r?.requiredRole).toBe('COORDENADOR');
   });
 
+  it('rotas admin requerem role ADMIN', () => {
+    const adminRoutes = ROUTES.filter(r => r.section === 'admin');
+    expect(adminRoutes.length).toBe(10);
+    for (const r of adminRoutes) {
+      expect(r.requiredRole, `${r.path} deve requerer ADMIN`).toBe('ADMIN');
+    }
+  });
+
   it('configuracoes requer role ADMIN', () => {
     expect(ROUTES.find(r => r.path === '/configuracoes')?.requiredRole).toBe('ADMIN');
   });
@@ -84,6 +95,7 @@ describe('ROUTE_SECTIONS', () => {
       ...ROUTE_SECTIONS.principal,
       ...ROUTE_SECTIONS.gestao,
       ...ROUTE_SECTIONS.sistema,
+      ...ROUTE_SECTIONS.admin,
     ].map(r => r.path);
     for (const r of ROUTES) {
       expect(inSections).toContain(r.path);
