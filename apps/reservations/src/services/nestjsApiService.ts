@@ -143,12 +143,34 @@ export interface ReservationAdminFilters {
   data?: string; // futuro: date=
 }
 
+// ─── Tipos admin F6.3 ────────────────────────────────────────
+// Shape real de GET /health (health.controller.ts confirmado)
+interface NestHealthResponse {
+  status: 'ok';
+  timestamp: string;
+  uptime: number; // segundos desde start do servidor
+  version: string;
+}
+
+// Shape de um registro de AuditLog (GET /audit)
+interface NestAuditLog {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  userId: string;
+  timestamp: string;
+}
+
 export interface ReservationAdminApi {
   listPendingReservations(filters?: ReservationAdminFilters): Promise<ListReservationsResponse>;
   updateStatus(
     id: string,
     status: 'APPROVED' | 'REJECTED',
   ): Promise<BackendEnvelope<CreatedReservationRow>>;
+  // F6.3 — Dashboard Admin
+  fetchHealth(): Promise<BackendEnvelope<NestHealthResponse>>;
+  fetchAuditLastSync(): Promise<BackendEnvelope<NestAuditLog | null>>;
 }
 
 // ─── Row mapper admin ─────────────────────────────────────────
@@ -321,6 +343,31 @@ export function createNestjsApiService(
           body: JSON.stringify({ status }),
         });
         return { ok: true, data: toAdminRow(updated), error: null };
+      } catch (e) {
+        return { ok: false, data: null, error: toBackendError(e) };
+      }
+    },
+
+    // ── F6.3: fetchHealth ─────────────────────────────────────
+    // GET /health é @Public — JWT enviado mas ignorado pelo backend.
+    async fetchHealth(): Promise<BackendEnvelope<NestHealthResponse>> {
+      try {
+        const data = await apiFetch<NestHealthResponse>('/health');
+        return { ok: true, data, error: null };
+      } catch (e) {
+        return { ok: false, data: null, error: toBackendError(e) };
+      }
+    },
+
+    // ── F6.3: fetchAuditLastSync ──────────────────────────────
+    // GET /audit?action=SYNC_SCHEDULES&limit=1 — requer ADMIN JWT.
+    // Retorna o último registro de sync ou null se nunca sincronizou.
+    async fetchAuditLastSync(): Promise<BackendEnvelope<NestAuditLog | null>> {
+      try {
+        const res = await apiFetch<{ data: NestAuditLog[]; total: number }>(
+          '/audit?action=SYNC_SCHEDULES&limit=1',
+        );
+        return { ok: true, data: res.data[0] ?? null, error: null };
       } catch (e) {
         return { ok: false, data: null, error: toBackendError(e) };
       }
