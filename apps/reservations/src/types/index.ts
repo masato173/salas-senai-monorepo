@@ -125,3 +125,36 @@ export interface AvailabilityResult {
   salas: DisponibilidadeSala[];
   geradoEm: string; // new Date().toISOString()
 }
+
+// ─── Paginação genérica — F6.4 ────────────────────────────────
+// Reutilizável em Usuários (F6.7), Sync logs (F6.5), Relatórios.
+export interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+// AuditLog público — espelha AuditListResult do backend
+export interface AuditLog {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  userId: string;
+  before: unknown;
+  after: unknown;
+  ip: string | null;
+  timestamp: string;
+  user: { id: string; name: string; email: string };
+}
+
+// Query tipada para GET /audit
+export interface AuditQuery {
+  action?: string;
+  entityType?: string;
+  from?: string; // YYYY-MM-DD
+  to?: string; // YYYY-MM-DD
+  page: number;
+  limit: number;
+}

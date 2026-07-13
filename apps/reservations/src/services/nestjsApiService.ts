@@ -1,4 +1,5 @@
 import { apiFetch } from './apiClient';
+import type { PaginatedResponse, AuditLog, AuditQuery } from '../types';
 import { useAuthStore, selectUser } from '../store/authStore';
 import { createAppsScriptService } from './appsScript';
 import type {
@@ -153,13 +154,18 @@ interface NestHealthResponse {
 }
 
 // Shape de um registro de AuditLog (GET /audit)
+// user sempre presente via include no AuditService.findAll
 interface NestAuditLog {
   id: string;
   action: string;
   entityType: string;
   entityId: string;
   userId: string;
+  before: unknown;
+  after: unknown;
+  ip: string | null;
   timestamp: string;
+  user: { id: string; name: string; email: string };
 }
 
 export interface ReservationAdminApi {
@@ -171,6 +177,12 @@ export interface ReservationAdminApi {
   // F6.3 — Dashboard Admin
   fetchHealth(): Promise<BackendEnvelope<NestHealthResponse>>;
   fetchAuditLastSync(): Promise<BackendEnvelope<NestAuditLog | null>>;
+  // F6.4 — Auditoria
+  // TODO: renomear ReservationAdminApi → AdminApi pós-F6.8 quando split for feito
+  listAuditLogs(
+    q: AuditQuery,
+    signal?: AbortSignal,
+  ): Promise<BackendEnvelope<PaginatedResponse<AuditLog>>>;
 }
 
 // ─── Row mapper admin ─────────────────────────────────────────
@@ -355,6 +367,37 @@ export function createNestjsApiService(
         const data = await apiFetch<NestHealthResponse>('/health');
         return { ok: true, data, error: null };
       } catch (e) {
+        return { ok: false, data: null, error: toBackendError(e) };
+      }
+    },
+
+    // ── F6.4: listAuditLogs ───────────────────────────────────
+    // GET /audit com filtros server-side + paginação.
+    // signal suportado nativamente pelo fetch (AbortController no hook).
+    async listAuditLogs(
+      q: AuditQuery,
+      signal?: AbortSignal,
+    ): Promise<BackendEnvelope<PaginatedResponse<AuditLog>>> {
+      try {
+        const params = new URLSearchParams();
+        if (q.action) params.set('action', q.action);
+        if (q.entityType) params.set('entityType', q.entityType);
+        if (q.from) params.set('from', q.from);
+        if (q.to) params.set('to', q.to);
+        params.set('page', String(q.page));
+        params.set('limit', String(q.limit));
+        const raw = await apiFetch<PaginatedResponse<NestAuditLog>>(
+          `/audit?${params.toString()}`,
+          signal ? { signal } : undefined,
+        );
+        // NestAuditLog e AuditLog têm o mesmo shape — cast seguro
+        const data = raw.data as unknown as AuditLog[];
+        return { ok: true, data: { ...raw, data }, error: null };
+      } catch (e) {
+        // AbortError é cancelamento intencional — não é erro real
+        if (e instanceof Error && e.name === 'AbortError') {
+          return { ok: false, data: null, error: { code: 'INTERNAL', message: 'ABORTED' } };
+        }
         return { ok: false, data: null, error: toBackendError(e) };
       }
     },
