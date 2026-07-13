@@ -158,3 +158,23 @@ export interface AuditQuery {
   page: number;
   limit: number;
 }
+
+// ─── Usuários — F6.7 ─────────────────────────────────────────
+// Espelha UserPublicDto do backend (sem passwordHash).
+// createdAt é string porque JSON serializa Date → ISO string.
+export interface AdminUser {
+  id: string;
+  name: string;
+  email: string;
+  role: 'PROFESSOR' | 'COORDENADOR' | 'ADMIN';
+  active: boolean;
+  createdAt: string; // ISO string
+}
+
+export interface UserListParams {
+  role?: AdminUser['role'];
+  search?: string;
+  isActive?: boolean;
+  page: number;
+  limit: number;
+}

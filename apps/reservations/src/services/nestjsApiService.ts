@@ -1,5 +1,5 @@
 import { apiFetch } from './apiClient';
-import type { PaginatedResponse, AuditLog, AuditQuery } from '../types';
+import type { PaginatedResponse, AuditLog, AuditQuery, AdminUser, UserListParams } from '../types';
 import type { SyncResult } from '@salas-senai/shared';
 import { useAuthStore, selectUser } from '../store/authStore';
 import { createAppsScriptService } from './appsScript';
@@ -186,6 +186,13 @@ export interface ReservationAdminApi {
   ): Promise<BackendEnvelope<PaginatedResponse<AuditLog>>>;
   // F6.5 — Sincronização
   triggerSync(): Promise<BackendEnvelope<SyncResult>>;
+  // F6.7 — Usuários
+  listUsers(
+    params: UserListParams,
+    signal?: AbortSignal,
+  ): Promise<BackendEnvelope<PaginatedResponse<AdminUser>>>;
+  updateUserRole(id: string, role: AdminUser['role']): Promise<BackendEnvelope<AdminUser>>;
+  setUserActive(id: string, isActive: boolean): Promise<BackendEnvelope<AdminUser>>;
 }
 
 // ─── Row mapper admin ─────────────────────────────────────────
@@ -425,6 +432,60 @@ export function createNestjsApiService(
     async triggerSync(): Promise<BackendEnvelope<SyncResult>> {
       try {
         const data = await apiFetch<SyncResult>('/sync/schedules', { method: 'POST' });
+        return { ok: true, data, error: null };
+      } catch (e) {
+        return { ok: false, data: null, error: toBackendError(e) };
+      }
+    },
+
+    // ── F6.7: listUsers ───────────────────────────────────────
+    // GET /users — ADMIN only.
+    async listUsers(
+      params: UserListParams,
+      signal?: AbortSignal,
+    ): Promise<BackendEnvelope<PaginatedResponse<AdminUser>>> {
+      try {
+        const q = new URLSearchParams();
+        if (params.role !== undefined) q.set('role', params.role);
+        if (params.search !== undefined) q.set('search', params.search);
+        if (params.isActive !== undefined) q.set('isActive', String(params.isActive));
+        q.set('page', String(params.page));
+        q.set('limit', String(params.limit));
+        const data = await apiFetch<PaginatedResponse<AdminUser>>(
+          `/users?${q.toString()}`,
+          signal !== undefined ? { signal } : undefined,
+        );
+        return { ok: true, data, error: null };
+      } catch (e) {
+        if (e instanceof Error && e.name === 'AbortError') {
+          return { ok: false, data: null, error: { code: 'INTERNAL', message: 'ABORTED' } };
+        }
+        return { ok: false, data: null, error: toBackendError(e) };
+      }
+    },
+
+    // ── F6.7: updateUserRole ──────────────────────────────────
+    // PATCH /users/:id/role — ADMIN only.
+    async updateUserRole(id: string, role: AdminUser['role']): Promise<BackendEnvelope<AdminUser>> {
+      try {
+        const data = await apiFetch<AdminUser>(`/users/${id}/role`, {
+          method: 'PATCH',
+          body: JSON.stringify({ role }),
+        });
+        return { ok: true, data, error: null };
+      } catch (e) {
+        return { ok: false, data: null, error: toBackendError(e) };
+      }
+    },
+
+    // ── F6.7: setUserActive ───────────────────────────────────
+    // PATCH /users/:id/active — ADMIN only.
+    async setUserActive(id: string, isActive: boolean): Promise<BackendEnvelope<AdminUser>> {
+      try {
+        const data = await apiFetch<AdminUser>(`/users/${id}/active`, {
+          method: 'PATCH',
+          body: JSON.stringify({ isActive }),
+        });
         return { ok: true, data, error: null };
       } catch (e) {
         return { ok: false, data: null, error: toBackendError(e) };
