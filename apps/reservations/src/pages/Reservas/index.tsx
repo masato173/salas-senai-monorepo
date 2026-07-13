@@ -19,10 +19,12 @@ import {
 } from '../../components/reservations/reservationToEvent';
 import { getEventosDaSala } from '../../services/availability';
 import { RoomAvailabilityPanel } from '../../components/reservations/RoomAvailabilityPanel';
-import { APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN, SALAS, CURRENT_USER } from '../../config';
+import { APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN, SALAS } from '../../config';
+import { useAuthStore, selectUser } from '../../store/authStore';
 import type { RegistroLegado, SalaEvento } from '../../types';
 
 export default function ReservasPage() {
+  const loggedUser = useAuthStore(selectUser);
   const { reservations } = useReservationStore();
   const [showForm, setShowForm] = useState(false);
   const [sala, setSala] = useState<string>(SALAS[6]); // "603 Sala"
@@ -116,7 +118,7 @@ export default function ReservasPage() {
   const cancelMutation = useCancelReservation(service);
   const handleConfirmCancel = async (id: string) => {
     const res = await cancelMutation.mutate({
-      userEmail: CURRENT_USER.userEmail,
+      userEmail: loggedUser?.email ?? '',
       payload: { id },
     });
     if (res.ok) {
@@ -253,9 +255,9 @@ export default function ReservasPage() {
               key={`${sala}-${selectedDate}`}
               roomId={sala}
               salaName={sala}
-              userId={CURRENT_USER.userId}
-              userEmail={CURRENT_USER.userEmail}
-              professor={CURRENT_USER.professor}
+              userId={loggedUser?.id ?? ''}
+              userEmail={loggedUser?.email ?? ''}
+              professor={loggedUser?.name ?? ''}
               turma={turma}
               service={service}
               onCancel={() => setShowForm(false)}
@@ -404,13 +406,13 @@ export default function ReservasPage() {
           setSelectedReservation(null);
           cancelMutation.reset();
         }}
-        currentUserEmail={CURRENT_USER.userEmail}
+        currentUserEmail={loggedUser?.email ?? ''}
         onConfirmCancel={handleConfirmCancel}
         cancelStatus={cancelMutation.status}
         cancelError={cancelMutation.error}
         onCancelReset={() => cancelMutation.reset()}
         service={service}
-        userId={CURRENT_USER.userId}
+        userId={loggedUser?.id ?? ''}
         {...(groupDates !== undefined && { groupDates })}
         {...(groupIdMap !== undefined && { groupIdMap })}
         onEditSuccess={() => {
