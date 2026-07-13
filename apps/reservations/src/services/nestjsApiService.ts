@@ -1,5 +1,6 @@
 import { apiFetch } from './apiClient';
 import type { PaginatedResponse, AuditLog, AuditQuery } from '../types';
+import type { SyncResult } from '@salas-senai/shared';
 import { useAuthStore, selectUser } from '../store/authStore';
 import { createAppsScriptService } from './appsScript';
 import type {
@@ -183,6 +184,8 @@ export interface ReservationAdminApi {
     q: AuditQuery,
     signal?: AbortSignal,
   ): Promise<BackendEnvelope<PaginatedResponse<AuditLog>>>;
+  // F6.5 — Sincronização
+  triggerSync(): Promise<BackendEnvelope<SyncResult>>;
 }
 
 // ─── Row mapper admin ─────────────────────────────────────────
@@ -411,6 +414,18 @@ export function createNestjsApiService(
           '/audit?action=SYNC_SCHEDULES&limit=1',
         );
         return { ok: true, data: res.data[0] ?? null, error: null };
+      } catch (e) {
+        return { ok: false, data: null, error: toBackendError(e) };
+      }
+    },
+
+    // ── F6.5: triggerSync ─────────────────────────────────────
+    // POST /sync/schedules — ADMIN only.
+    // Dispara sincronização Apps Script → banco. Pode levar 30-60s.
+    async triggerSync(): Promise<BackendEnvelope<SyncResult>> {
+      try {
+        const data = await apiFetch<SyncResult>('/sync/schedules', { method: 'POST' });
+        return { ok: true, data, error: null };
       } catch (e) {
         return { ok: false, data: null, error: toBackendError(e) };
       }
