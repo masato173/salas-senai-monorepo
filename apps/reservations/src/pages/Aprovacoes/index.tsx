@@ -3,6 +3,7 @@ import { AlertCircle } from 'lucide-react';
 import { createAppsScriptService } from '../../services/appsScript';
 import { createNestjsApiService } from '../../services/nestjsApiService';
 import { usePendingReservations } from '../../hooks/usePendingReservations';
+import { useRealtimeSocket } from '../../hooks/useRealtimeSocket';
 import { useApproveReservation } from '../../hooks/useApproveReservation';
 import { useRejectReservation } from '../../hooks/useRejectReservation';
 import { APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN } from '../../config';
@@ -32,6 +33,14 @@ export default function AprovacoesPage(): JSX.Element {
   // Busca o conjunto completo uma vez — toggle e busca filtram client-side.
   // Preparado para Socket.IO — F6.2 adicionará socket.on('reservation.*', refetch)
   const { data, status, error, refetch } = usePendingReservations(service);
+
+  // F7.3b — realtime: recarrega aprovações quando evento chega.
+  // Aprovação/rejeição dispara reservation.approved ou reservation.rejected.
+  useRealtimeSocket({
+    onReservationEvent: (_event, _payload) => {
+      void refetch();
+    },
+  });
   const approver = useApproveReservation(service);
   const rejecter = useRejectReservation(service);
 

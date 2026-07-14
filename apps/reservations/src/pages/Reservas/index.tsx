@@ -8,6 +8,7 @@ import { ReservationDetailsModal } from '../../components/reservations/Reservati
 import { createAppsScriptService } from '../../services/appsScript';
 import { createNestjsApiService } from '../../services/nestjsApiService';
 import { useListReservations } from '../../hooks/useListReservations';
+import { useRealtimeSocket } from '../../hooks/useRealtimeSocket';
 import { useCancelReservation } from '../../hooks/useCancelReservation';
 import { useSchedule } from '../../hooks/useSchedule';
 import { useAvailability } from '../../hooks/useAvailability';
@@ -42,6 +43,14 @@ export default function ReservasPage() {
 
   // Lista de reservas pro calendário (auto-fetch no mount via hook default).
   const list = useListReservations(service);
+
+  // F7.3b — realtime: invalida lista quando evento de reserva chega via WebSocket.
+  // O AppLayout mantém a conexão ativa; esta página apenas reage aos eventos.
+  useRealtimeSocket({
+    onReservationEvent: (_event, _payload) => {
+      void list.refetch();
+    },
+  });
   const events = useMemo(
     () => (list.data?.reservations ?? []).map(reservationToEvent),
     [list.data],

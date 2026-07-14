@@ -5,6 +5,7 @@ import { createNestjsApiService } from '../../services/nestjsApiService';
 import { APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN, SALAS } from '../../config';
 import { useSchedule } from '../../hooks/useSchedule';
 import { useListReservations } from '../../hooks/useListReservations';
+import { useRealtimeSocket } from '../../hooks/useRealtimeSocket';
 import { useAvailability } from '../../hooks/useAvailability';
 import { useAvailabilityBackend, BACKEND_DRIVER_ENABLED } from '../../hooks/useAvailabilityBackend';
 import {
@@ -37,6 +38,14 @@ export function DashboardPage(): JSX.Element {
   }, []);
   const schedule = useSchedule(service);
   const list = useListReservations(service);
+
+  // F7.3b — realtime: atualiza dashboard quando reservas mudam.
+  useRealtimeSocket({
+    onReservationEvent: (_event, _payload) => {
+      void list.refetch();
+    },
+  });
+
   const reservas = useMemo<CreatedReservationRow[]>(
     () => list.data?.reservations ?? [],
     [list.data],
