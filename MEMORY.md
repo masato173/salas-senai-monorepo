@@ -78,10 +78,10 @@ ProtectedRoute requiredRole=COORDENADOR
 ⏳ F6.6 Sistema
 ⏳ F6.7 Usuários + Permissões (requer backend: UsersController não existe)
 ⏳ F6.8 Configurações + Logs + API + Health (placeholders)
-🔄 F7.1 Remover CURRENT_USER hardcoded
-⏳ F7.2 Cron de sync (@nestjs/schedule)
-⏳ F7.3 Socket.IO client no frontend
-⏳ F7.4 Testes E2E com Playwright
+✅ F7.1 Remover CURRENT_USER hardcoded
+✅ F7.2 Cron de sync (@nestjs/schedule)
+✅ F7.3 Socket.IO client no frontend
+✅ F7.4 Testes E2E com Playwright
 
 ---
 
