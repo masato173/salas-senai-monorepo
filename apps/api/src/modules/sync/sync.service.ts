@@ -1,4 +1,9 @@
-import { Injectable, InternalServerErrorException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  ConflictException,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
@@ -26,6 +31,7 @@ export class SyncService {
   // Lock in-memory — evita execuções simultâneas.
   // Single-instance: suficiente para ambiente atual.
   // Multi-instance requereria lock no banco.
+  private readonly logger = new Logger(SyncService.name);
   private static isRunning = false;
 
   constructor(
@@ -41,6 +47,7 @@ export class SyncService {
     }
     SyncService.isRunning = true;
     const syncId = randomUUID();
+    this.logger.log(`Sync iniciado (syncId: ${syncId}, userId: ${userId}).`);
     const startedAt = new Date().toISOString();
     const startMs = Date.now();
     try {
