@@ -25,7 +25,8 @@ import {
 } from 'lucide-react';
 import { PageTransition } from '../router/PageTransition';
 import { ROUTES, getBreadcrumbs, ROUTE_SECTIONS } from '../router/config';
-import { useAuthStore } from '../store/authStore';
+import { useAuthStore, selectAccessToken } from '../store/authStore';
+import { getSocket, disconnectSocket } from '../services/socketClient';
 
 const ICON_MAP = {
   LayoutDashboard,
@@ -61,6 +62,18 @@ const SECTION_LABELS = {
 export function AppLayout() {
   const location = useLocation();
   const userRole = useAuthStore(s => s.user?.role ?? '');
+  const accessToken = useAuthStore(selectAccessToken);
+
+  // F7.3 — Socket.IO: abre/fecha conexão conforme o token.
+  // AppLayout gerencia apenas ciclo de vida.
+  // Páginas subscrevem eventos via useRealtimeSocket({ onReservationEvent }).
+  useEffect(() => {
+    if (accessToken !== null) {
+      getSocket(accessToken);
+    } else {
+      disconnectSocket();
+    }
+  }, [accessToken]);
 
   // Sidebar state
   const [collapsed, setCollapsed] = useState(() => ls('sidebar-collapsed') === '1');

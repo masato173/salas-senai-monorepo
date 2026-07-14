@@ -22,7 +22,7 @@ import {
 //   ProtectedRoute → navegação
 // ─────────────────────────────────────────────────────────────
 
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+import { API_BASE } from '../config/api';
 
 // Erro HTTP tipado — F5.3 captura e converte para BackendEnvelope
 export class ApiError extends Error {
