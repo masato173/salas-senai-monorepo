@@ -2,10 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { setupRealtimeSubscription } from '../useRealtimeSocket';
 import type { ReservationEvent, ReservationEventPayload } from '../useRealtimeSocket';
 
-// Mock do socketClient
-const mockUnsubscribe = vi.fn();
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const mockSubscribe = vi.fn<any, any>(() => mockUnsubscribe);
+// vi.hoisted garante que as variaveis existam quando vi.mock e hoisted para o topo
+const { mockUnsubscribe, mockSubscribe } = vi.hoisted(() => {
+  const mockUnsubscribe = vi.fn();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mockSubscribe = vi.fn<any, any>(() => mockUnsubscribe);
+  return { mockUnsubscribe, mockSubscribe };
+});
 
 vi.mock('../../services/socketClient', () => ({
   subscribeToReservationEvents: mockSubscribe,
