@@ -52,7 +52,9 @@ export default function ReservasPage() {
     },
   });
   const events = useMemo(
-    () => (list.data?.reservations ?? []).map(reservationToEvent),
+    // Calendário exibe apenas APPROVED — PENDING aguarda aprovação, REJECTED/CANCELLED não aparecem.
+    () =>
+      (list.data?.reservations ?? []).filter(r => r.status === 'APPROVED').map(reservationToEvent),
     [list.data],
   );
 
