@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { FileText, Clock, CheckCircle2, XCircle, Plus } from 'lucide-react';
 import { useReservationStore } from '../../store/reservationStore';
 import { ReservationList } from '../../components/reservations/ReservationList';
@@ -79,22 +79,24 @@ export default function ReservasPage() {
     () => getEventosDaSala(registros, reservas, sala, todayYmd()),
     [registros, reservas, sala],
   );
+  // F-fix — Turmas que usam a sala selecionada (derivado do schedule).
+  // Reage quando sala ou registros mudam.
+  const turmasDaSala = useMemo(() => {
+    const seen = new Set<string>();
+    for (const r of registros) {
+      if (r.sala === sala && r.turma) seen.add(r.turma);
+    }
+    return [...seen].sort();
+  }, [registros, sala]);
 
   // Status da sala na data selecionada. Default 'livre' se não achar.
   function statusDaSala(nomeSala: string): 'livre' | 'aula' | 'reserva' | 'conflito' {
     return disp.salas.find(s => s.sala === nomeSala)?.status ?? 'livre';
   }
 
-  // Se a data mudar e a sala atual ficar ocupada, resetar pra primeira sala
-  // livre. Se nenhuma estiver livre, mantém a atual (usuário vê o disabled).
-  useEffect(() => {
-    if (statusDaSala(sala) !== 'livre') {
-      const primeiraLivre = SALAS.find(s => statusDaSala(s) === 'livre');
-      if (primeiraLivre) setSala(primeiraLivre);
-    }
-    // disp muda quando selectedDate muda; não precisa listar todas as deps.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDate, disp]);
+  // F-fix: auto-troca de sala removida — bloqueava salas com aula parcial
+  // (ex: aula M e N marcava sala como indisponível mesmo com tarde livre).
+  // O backend é a fonte de verdade para conflitos de horário.
 
   // Sprint 4 D3 — datas do grupo da reserva selecionada, derivadas da lista
   // já carregada (sem nova query). Filtra ACTIVE pra espelhar o backend C2.
@@ -230,14 +232,19 @@ export default function ReservasPage() {
                 <select
                   id="sel-sala"
                   value={sala}
-                  onChange={e => setSala(e.target.value)}
+                  onChange={e => {
+                    setSala(e.target.value);
+                    setTurma(''); // reset turma ao trocar de sala
+                  }}
                   style={inputStyle}
                 >
                   {SALAS.map(s => {
                     const st = statusDaSala(s);
                     const ocupada = st !== 'livre';
                     return (
-                      <option key={s} value={s} disabled={ocupada}>
+                      // Sala não é desabilitada — status é informativo.
+                      // Conflito de horário é validado pelo backend.
+                      <option key={s} value={s}>
                         {s}
                         {ocupada ? ` (${st})` : ''}
                       </option>
@@ -249,14 +256,22 @@ export default function ReservasPage() {
                 <label htmlFor="sel-turma" style={labelStyle}>
                   Turma
                 </label>
+                {/* Combobox nativo: permite escolher da lista OU digitar livremente. */}
                 <input
                   id="sel-turma"
                   type="text"
+                  list="turmas-da-sala"
                   value={turma}
                   onChange={e => setTurma(e.target.value)}
-                  placeholder="Ex: ADS-2A"
+                  placeholder="Selecione ou digite a turma"
                   style={inputStyle}
+                  autoComplete="off"
                 />
+                <datalist id="turmas-da-sala">
+                  {turmasDaSala.map(t => (
+                    <option key={t} value={t} />
+                  ))}
+                </datalist>
               </div>
             </div>
 

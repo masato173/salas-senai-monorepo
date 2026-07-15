@@ -288,6 +288,34 @@ export function ReservationForm({
       return;
     }
 
+    // 2.5 — Verificação de conflito com aulas (registros do schedule).
+    // detectConflicts do store só compara reservas locais — não cobre aulas.
+    // getStatusParaHorario cruza registros + reservas pelo horário exato.
+    if (registros && registros.length > 0) {
+      const statusLocal = getStatusParaHorario(
+        registros,
+        reservas ?? [],
+        salaName,
+        form.date,
+        form.start,
+        form.end,
+      );
+      if (statusLocal === 'aula') {
+        setErrors(['Esta sala já possui aula neste horário. Escolha outro horário ou sala.']);
+        return;
+      }
+      if (statusLocal === 'reserva') {
+        setErrors(['Esta sala já possui reserva neste horário. Escolha outro horário ou sala.']);
+        return;
+      }
+      if (statusLocal === 'conflito') {
+        setErrors([
+          'Esta sala possui aula e reserva neste horário. Escolha outro horário ou sala.',
+        ]);
+        return;
+      }
+    }
+
     // 3. Optimistic update no store (conflito local detectado aqui também)
     const optimistic = addReservation(input);
     if (!optimistic.ok || !optimistic.reservation) {
@@ -351,6 +379,8 @@ export function ReservationForm({
     rangeMutation,
     reservations,
     onSuccess,
+    registros,
+    reservas,
   ]);
 
   // ─────────────────────────────────────────────────────────────

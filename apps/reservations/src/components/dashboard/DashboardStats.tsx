@@ -2,6 +2,7 @@ import { useMemo, type CSSProperties } from 'react';
 
 import { SALAS } from '../../config';
 import type { RegistroLegado, Turno, AvailabilityResult } from '../../types';
+import { formatDataBR, todayYmd } from './scheduleDateUtils';
 
 // Sprint A3.3 — cards de resumo do Dashboard. Componente PURO de apresentação:
 // recebe `filtered` (mesmo array que alimenta a tabela em OccupancyDashboard)
@@ -69,6 +70,8 @@ export function DashboardStats({
   }, [filtered, hoje, disponibilidade]);
 
   const totalOficial = SALAS.length;
+  // Label dinâmico: "hoje" quando a data é hoje, "DD/MM/AAAA" quando filtrada.
+  const dataLabel = hoje === todayYmd() ? 'hoje' : formatDataBR(hoje);
 
   return (
     <section style={gridStyle} aria-label="Resumo da ocupação">
@@ -79,7 +82,7 @@ export function DashboardStats({
       />
 
       <Card
-        label="Ocupações hoje"
+        label={`Ocupações ${dataLabel}`}
         value={stats.ocupacoesHoje}
         sub={`em ${stats.salasHoje} sala${stats.salasHoje === 1 ? '' : 's'}`}
       />
@@ -92,12 +95,16 @@ export function DashboardStats({
       {disponibilidade && (
         <>
           <Card
-            label="Salas livres hoje"
+            label={`Salas livres ${dataLabel}`}
             value={stats.salasLivres}
             sub={`de ${totalOficial} salas`}
           />
-          <Card label="Com aula hoje" value={stats.salasComAula} sub="salas ocupadas" />
-          <Card label="Com reserva hoje" value={stats.salasComReserva} sub="salas reservadas" />
+          <Card label={`Com aula ${dataLabel}`} value={stats.salasComAula} sub="salas ocupadas" />
+          <Card
+            label={`Com reserva ${dataLabel}`}
+            value={stats.salasComReserva}
+            sub="salas reservadas"
+          />
         </>
       )}
     </section>

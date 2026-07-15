@@ -82,12 +82,14 @@ export function DashboardPage(): JSX.Element {
   const mesesUnicos = useMemo<string[]>(() => [...new Set(registros.map(r => r.mes))], [registros]);
 
   const hoje = todayYmd();
-
-  // S5 — disponibilidade de hoje: aulas + reservas (não CANCELLED).
-  const localDisp = useAvailability(registros, reservas, hoje, SALAS);
+  // dataStats: usa a data do filtro quando ativa, senão hoje.
+  // Corrige bug onde cards de disponibilidade ficavam travados em hoje.
+  const dataStats = filtros.data || hoje;
+  // S5 — disponibilidade da data ativa: aulas + reservas (não CANCELLED).
+  const localDisp = useAvailability(registros, reservas, dataStats, SALAS);
   // F4.7b: quando VITE_BACKEND_DRIVER=true, usa GET /availability do NestJS.
   // Fallback para legado enquanto carrega ou se flag desligada.
-  const backendDispDash = useAvailabilityBackend(hoje, undefined, {
+  const backendDispDash = useAvailabilityBackend(dataStats, undefined, {
     enabled: BACKEND_DRIVER_ENABLED,
   });
   const disponibilidade =
@@ -103,7 +105,7 @@ export function DashboardPage(): JSX.Element {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <DashboardStats filtered={filtered} hoje={hoje} disponibilidade={disponibilidade} />
+        <DashboardStats filtered={filtered} hoje={dataStats} disponibilidade={disponibilidade} />
         <OccupancyDashboard
           filtered={filtered}
           filtros={filtros}
