@@ -69,6 +69,36 @@ async function main(): Promise<void> {
     create: { name: 'Admin SENAI', email: 'admin@senai.edu', passwordHash, role: 'ADMIN' },
   });
   console.log('Admin: admin@senai.edu / admin@senai2026');
+
+  // Professor para testes
+  console.log('Seeding professor user...');
+  const professorHash = await bcrypt.hash('professor@senai2026', 12);
+  await prisma.user.upsert({
+    where: { email: 'professor@senai.edu' },
+    update: {},
+    create: {
+      name: 'Professor SENAI',
+      email: 'professor@senai.edu',
+      passwordHash: professorHash,
+      role: 'PROFESSOR',
+    },
+  });
+  console.log('Professor: professor@senai.edu / professor@senai2026');
+
+  // Coordenador para testes
+  console.log('Seeding coordenador user...');
+  const coordenadorHash = await bcrypt.hash('coordenador@senai2026', 12);
+  await prisma.user.upsert({
+    where: { email: 'coordenador@senai.edu' },
+    update: {},
+    create: {
+      name: 'Coordenador SENAI',
+      email: 'coordenador@senai.edu',
+      passwordHash: coordenadorHash,
+      role: 'COORDENADOR',
+    },
+  });
+  console.log('Coordenador: coordenador@senai.edu / coordenador@senai2026');
 }
 
 main()
