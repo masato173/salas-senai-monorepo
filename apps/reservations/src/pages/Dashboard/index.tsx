@@ -124,71 +124,74 @@ export function DashboardPage(): JSX.Element {
         />
 
         {/* Reservas recentes — atualiza em tempo real via F7.3b */}
-        {reservas.length > 0 && (
-          <div
-            style={{
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius)',
-              boxShadow: 'var(--shadow-s)',
-              overflow: 'hidden',
-            }}
-          >
+        {(() => {
+          const reservasAprovadas = reservas
+            .filter(r => r.status === 'APPROVED' && r.data >= hoje)
+            .sort((a, b) => a.data.localeCompare(b.data) || a.inicio.localeCompare(b.inicio))
+            .slice(0, 10);
+          return reservasAprovadas.length > 0 ? (
             <div
               style={{
-                padding: '12px 16px',
-                borderBottom: '1px solid var(--color-border)',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius)',
+                boxShadow: 'var(--shadow-s)',
+                overflow: 'hidden',
               }}
             >
-              <span style={{ fontWeight: 600, fontSize: '13px' }}>Reservas recentes</span>
-              <span
+              <div
                 style={{
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  padding: '3px 10px',
-                  borderRadius: 20,
-                  background: 'var(--color-blue-l)',
-                  color: 'var(--color-blue)',
+                  padding: '12px 16px',
+                  borderBottom: '1px solid var(--color-border)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
                 }}
               >
-                {reservas.length} {reservas.length === 1 ? 'reserva' : 'reservas'}
-              </span>
-            </div>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                <thead>
-                  <tr
-                    style={{
-                      background: 'var(--color-surface-2)',
-                      borderBottom: '1px solid var(--color-border)',
-                    }}
-                  >
-                    {['Data', 'Sala', 'Professor', 'Turma', 'Horário', 'Status'].map(h => (
-                      <th
-                        key={h}
-                        style={{
-                          padding: '8px 12px',
-                          textAlign: 'left',
-                          fontSize: 11,
-                          fontWeight: 600,
-                          color: 'var(--color-muted)',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.04em',
-                        }}
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...reservas]
-                    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-                    .slice(0, 10)
-                    .map(r => {
+                <span style={{ fontWeight: 600, fontSize: '13px' }}>Reservas recentes</span>
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    padding: '3px 10px',
+                    borderRadius: 20,
+                    background: 'var(--color-blue-l)',
+                    color: 'var(--color-blue)',
+                  }}
+                >
+                  {reservasAprovadas.length}{' '}
+                  {reservasAprovadas.length === 1 ? 'reserva' : 'reservas'}
+                </span>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr
+                      style={{
+                        background: 'var(--color-surface-2)',
+                        borderBottom: '1px solid var(--color-border)',
+                      }}
+                    >
+                      {['Data', 'Sala', 'Professor', 'Turma', 'Horário', 'Status'].map(h => (
+                        <th
+                          key={h}
+                          style={{
+                            padding: '8px 12px',
+                            textAlign: 'left',
+                            fontSize: 11,
+                            fontWeight: 600,
+                            color: 'var(--color-muted)',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.04em',
+                          }}
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reservasAprovadas.map(r => {
                       const statusColors: Record<string, { bg: string; color: string }> = {
                         PENDING: { bg: 'var(--color-amber-l)', color: 'var(--color-amber)' },
                         APPROVED: { bg: 'var(--color-green-l)', color: 'var(--color-green)' },
@@ -242,11 +245,12 @@ export function DashboardPage(): JSX.Element {
                         </tr>
                       );
                     })}
-                </tbody>
-              </table>
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        )}
+          ) : null;
+        })()}
       </div>
     </div>
   );

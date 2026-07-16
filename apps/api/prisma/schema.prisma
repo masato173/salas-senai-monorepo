@@ -72,6 +72,7 @@ model Reservation {
   inicio          String            // HH:MM
   fim             String            // HH:MM
   status          ReservationStatus @default(PENDING)
+  turma           String?
   notes           String?
   clientRequestId String?           @unique
   user            User              @relation(fields: [userId], references: [id])

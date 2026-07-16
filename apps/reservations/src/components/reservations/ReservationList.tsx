@@ -59,6 +59,7 @@ export function ReservationList({
 
   const grouped = useMemo(() => {
     const items = (reservations ?? [])
+      .filter(r => r.status === 'APPROVED')
       .filter(r => !userId || r.createdBy === userId)
       .sort((a, b) => a.data.localeCompare(b.data) || a.inicio.localeCompare(b.inicio));
 

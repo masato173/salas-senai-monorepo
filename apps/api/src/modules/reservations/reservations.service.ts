@@ -105,6 +105,7 @@ export class ReservationsService {
           date: dto.date,
           inicio: dto.inicio,
           fim: dto.fim,
+          turma: dto.turma ?? null,
           notes: dto.notes ?? null,
           status: ReservationStatus.PENDING,
         },

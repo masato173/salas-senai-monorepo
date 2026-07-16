@@ -19,6 +19,11 @@ export class CreateReservationDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(100)
+  turma?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(500)
   notes?: string;
 }

@@ -60,6 +60,7 @@ interface NestReservation {
   inicio: string;
   fim: string;
   status: string;
+  turma: string | null;
   notes: string | null;
   clientRequestId: string | null;
   createdAt: string;
@@ -121,7 +122,7 @@ function toRow(r: NestReservation): CreatedReservationRow {
     inicio: r.inicio,
     fim: r.fim,
     professor: r.user?.name ?? '',
-    turma: '', // F5.3: campo legado sem equivalente no NestJS (Decisão B)
+    turma: r.turma ?? '',
     observacao: r.notes ?? '',
     status: mapStatus(r.status),
     createdBy: r.user?.email ?? '',
@@ -272,6 +273,7 @@ export function createNestjsApiService(
             date: req.payload.data,
             inicio: req.payload.inicio,
             fim: req.payload.fim,
+            turma: req.payload.turma !== '' ? req.payload.turma : undefined,
             notes: req.payload.observacao !== '' ? req.payload.observacao : undefined,
           }),
         });
@@ -285,7 +287,7 @@ export function createNestjsApiService(
           inicio: created.inicio,
           fim: created.fim,
           professor: authUser?.name ?? req.payload.professor,
-          turma: '',
+          turma: req.payload.turma ?? '',
           observacao: created.notes ?? '',
           status: mapStatus(created.status),
           createdBy: authUser?.email ?? req.userEmail,
