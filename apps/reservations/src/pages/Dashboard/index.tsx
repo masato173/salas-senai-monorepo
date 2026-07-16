@@ -14,7 +14,7 @@ import {
 } from '../../components/dashboard/applyScheduleFilters';
 import { DashboardStats } from '../../components/dashboard/DashboardStats';
 import { OccupancyDashboard } from '../../components/dashboard/OccupancyDashboard';
-import { todayYmd } from '../../components/dashboard/scheduleDateUtils';
+import { todayYmd, formatDataBR } from '../../components/dashboard/scheduleDateUtils';
 import type { RegistroLegado } from '../../types';
 import type { CreatedReservationRow } from '../../services/appsScript';
 
@@ -122,6 +122,131 @@ export function DashboardPage(): JSX.Element {
           onReset={resetFiltros}
           hoje={hoje}
         />
+
+        {/* Reservas recentes — atualiza em tempo real via F7.3b */}
+        {reservas.length > 0 && (
+          <div
+            style={{
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius)',
+              boxShadow: 'var(--shadow-s)',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                padding: '12px 16px',
+                borderBottom: '1px solid var(--color-border)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <span style={{ fontWeight: 600, fontSize: '13px' }}>Reservas recentes</span>
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  padding: '3px 10px',
+                  borderRadius: 20,
+                  background: 'var(--color-blue-l)',
+                  color: 'var(--color-blue)',
+                }}
+              >
+                {reservas.length} {reservas.length === 1 ? 'reserva' : 'reservas'}
+              </span>
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr
+                    style={{
+                      background: 'var(--color-surface-2)',
+                      borderBottom: '1px solid var(--color-border)',
+                    }}
+                  >
+                    {['Data', 'Sala', 'Professor', 'Turma', 'Horário', 'Status'].map(h => (
+                      <th
+                        key={h}
+                        style={{
+                          padding: '8px 12px',
+                          textAlign: 'left',
+                          fontSize: 11,
+                          fontWeight: 600,
+                          color: 'var(--color-muted)',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.04em',
+                        }}
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...reservas]
+                    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+                    .slice(0, 10)
+                    .map(r => {
+                      const statusColors: Record<string, { bg: string; color: string }> = {
+                        PENDING: { bg: 'var(--color-amber-l)', color: 'var(--color-amber)' },
+                        APPROVED: { bg: 'var(--color-green-l)', color: 'var(--color-green)' },
+                        REJECTED: { bg: 'var(--color-red-l)', color: 'var(--color-red)' },
+                        CANCELLED: { bg: 'var(--color-surface-2)', color: 'var(--color-subtle)' },
+                      };
+                      const statusLabel: Record<string, string> = {
+                        PENDING: 'Pendente',
+                        APPROVED: 'Aprovada',
+                        REJECTED: 'Rejeitada',
+                        CANCELLED: 'Cancelada',
+                      };
+                      const sc = statusColors[r.status] ?? statusColors['PENDING'];
+                      return (
+                        <tr key={r.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                          <td style={{ padding: '8px 12px', color: 'var(--color-text)' }}>
+                            {formatDataBR(r.data)}
+                          </td>
+                          <td style={{ padding: '8px 12px', color: 'var(--color-text)' }}>
+                            {r.sala}
+                          </td>
+                          <td style={{ padding: '8px 12px', color: 'var(--color-muted)' }}>
+                            {r.professor || '—'}
+                          </td>
+                          <td style={{ padding: '8px 12px', color: 'var(--color-muted)' }}>
+                            {r.turma || '—'}
+                          </td>
+                          <td
+                            style={{
+                              padding: '8px 12px',
+                              color: 'var(--color-text)',
+                              fontVariantNumeric: 'tabular-nums',
+                            }}
+                          >
+                            {r.inicio}–{r.fim}
+                          </td>
+                          <td style={{ padding: '8px 12px' }}>
+                            <span
+                              style={{
+                                padding: '2px 8px',
+                                borderRadius: 10,
+                                fontSize: 11,
+                                fontWeight: 600,
+                                background: sc.bg,
+                                color: sc.color,
+                              }}
+                            >
+                              {statusLabel[r.status] ?? r.status}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

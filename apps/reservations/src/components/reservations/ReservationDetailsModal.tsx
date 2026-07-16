@@ -52,6 +52,8 @@ interface ReservationDetailsModalProps {
   // aceitar groupIdMap={undefined} na chamada sem violar exactOptionalPropertyTypes.
   groupIdMap?: Record<string, string> | undefined;
   onEditSuccess: () => void; // página dispara list.refetch()
+  // Role do usuário logado — COORDENADOR e ADMIN podem cancelar/editar qualquer reserva
+  userRole?: string;
 }
 
 export function ReservationDetailsModal({
@@ -67,6 +69,7 @@ export function ReservationDetailsModal({
   groupDates,
   groupIdMap,
   onEditSuccess,
+  userRole,
 }: ReservationDetailsModalProps) {
   const [confirming, setConfirming] = useState(false);
   const [view, setView] = useState<ModalView>('details');
@@ -101,10 +104,11 @@ export function ReservationDetailsModal({
   const { id, sala, data, inicio, fim, professor, turma, observacao, createdBy, groupId } =
     reservation;
   const isOwner = createdBy === currentUserEmail;
+  // COORDENADOR e ADMIN podem cancelar/editar qualquer reserva
+  const canManage = isOwner || userRole === 'COORDENADOR' || userRole === 'ADMIN';
   const isLoading = cancelStatus === 'loading';
   const isRange = id !== undefined && isRangeReservation(id, groupId);
-
-  const editDisabled = !isOwner || isLoading || !id;
+  const editDisabled = !canManage || isLoading || !id;
 
   function handleEdit(): void {
     if (editDisabled) return;
@@ -384,7 +388,7 @@ export function ReservationDetailsModal({
                     onClick={handleEdit}
                     disabled={editDisabled}
                     title={
-                      !isOwner ? 'Só quem criou pode editar' : isLoading ? 'Aguarde…' : undefined
+                      !canManage ? 'Sem permissão para editar' : isLoading ? 'Aguarde…' : undefined
                     }
                     style={{
                       ...primaryButtonStyle,
@@ -400,12 +404,12 @@ export function ReservationDetailsModal({
                       onCancelReset();
                       setConfirming(true);
                     }}
-                    disabled={!isOwner || isLoading || !id}
-                    title={!isOwner ? 'Só quem criou pode cancelar' : undefined}
+                    disabled={!canManage || isLoading || !id}
+                    title={!canManage ? 'Sem permissão para cancelar' : undefined}
                     style={{
                       ...cancelIntentButtonStyle,
-                      cursor: !isOwner || isLoading ? 'not-allowed' : 'pointer',
-                      opacity: !isOwner || isLoading ? 0.5 : 1,
+                      cursor: !canManage || isLoading ? 'not-allowed' : 'pointer',
+                      opacity: !canManage || isLoading ? 0.5 : 1,
                     }}
                   >
                     Cancelar reserva

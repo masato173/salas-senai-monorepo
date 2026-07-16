@@ -1,88 +1,185 @@
-import { useReservationStore } from '../../store/reservationStore';
-import { StatusBadge, TurnoBadge } from '../ui/StatusBadge';
+import { useMemo, type CSSProperties } from 'react';
+import type { CreatedReservationRow } from '../../services/appsScript';
 
 interface ReservationListProps {
-  userId?: string; // filtra por usuário se fornecido
-  showApproval?: boolean; // exibe botões de aprovação (coordenador)
+  reservations?: CreatedReservationRow[];
+  showApproval?: boolean;
+  userId?: string;
 }
 
-export function ReservationList({ userId, showApproval = false }: ReservationListProps) {
-  const { reservations, cancelReservation, approveReservation, rejectReservation } =
-    useReservationStore();
+type Turno = 'M' | 'V' | 'N';
 
-  const filtered = userId ? reservations.filter(r => r.userId === userId) : reservations;
+function inferirTurno(inicio: string): Turno {
+  const h = parseInt(inicio.split(':')[0], 10);
+  if (h < 13) return 'M';
+  if (h < 18) return 'V';
+  return 'N';
+}
 
-  if (filtered.length === 0) {
+const TURNO_ORDER: Turno[] = ['M', 'V', 'N'];
+
+const TURNO_LABEL: Record<Turno, string> = {
+  M: 'Matutino',
+  V: 'Vespertino',
+  N: 'Noturno',
+};
+
+const TURNO_COLOR: Record<Turno, { bg: string; color: string }> = {
+  M: { bg: 'var(--color-green-l)', color: 'var(--color-green)' },
+  V: { bg: 'var(--color-amber-l)', color: 'var(--color-amber)' },
+  N: { bg: 'var(--color-blue-l)', color: 'var(--color-blue)' },
+};
+
+const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
+  PENDING: { bg: 'var(--color-amber-l)', color: 'var(--color-amber)' },
+  APPROVED: { bg: 'var(--color-green-l)', color: 'var(--color-green)' },
+  REJECTED: { bg: 'var(--color-red-l)', color: 'var(--color-red)' },
+  CANCELLED: { bg: 'var(--color-surface-2)', color: 'var(--color-subtle)' },
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  PENDING: 'Pendente',
+  APPROVED: 'Aprovada',
+  REJECTED: 'Rejeitada',
+  CANCELLED: 'Cancelada',
+};
+
+function formatDataBR(iso: string): string {
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+export function ReservationList({
+  reservations,
+  showApproval = false,
+  userId,
+}: ReservationListProps) {
+  // showApproval mantido na interface para backward compat — aprovação via /aprovacoes
+  void showApproval;
+
+  const grouped = useMemo(() => {
+    const items = (reservations ?? [])
+      .filter(r => !userId || r.createdBy === userId)
+      .sort((a, b) => a.data.localeCompare(b.data) || a.inicio.localeCompare(b.inicio));
+
+    const map: Record<string, CreatedReservationRow[]> = { M: [], V: [], N: [] };
+    for (const r of items) {
+      const turno = inferirTurno(r.inicio);
+      map[turno].push(r);
+    }
+    return TURNO_ORDER.filter(t => map[t].length > 0).map(t => ({
+      turno: t,
+      label: TURNO_LABEL[t],
+      color: TURNO_COLOR[t],
+      items: map[t],
+    }));
+  }, [reservations, userId]);
+
+  if (grouped.length === 0) {
     return (
-      <div className="text-center py-12 text-gray-400">
-        <p className="text-4xl mb-3">📅</p>
-        <p className="font-medium">Nenhuma reserva encontrada</p>
+      <div
+        style={{
+          padding: '32px 16px',
+          textAlign: 'center',
+          color: 'var(--color-muted)',
+          fontSize: '13px',
+        }}
+      >
+        Nenhuma reserva encontrada.
       </div>
     );
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
-            <th className="text-left py-3 px-4 font-semibold">Data</th>
-            <th className="text-left py-3 px-4 font-semibold">Sala</th>
-            <th className="text-left py-3 px-4 font-semibold">Horário</th>
-            <th className="text-left py-3 px-4 font-semibold">Turno</th>
-            <th className="text-left py-3 px-4 font-semibold">Status</th>
-            <th className="text-left py-3 px-4 font-semibold">Ações</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-          {filtered.map(r => (
-            <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-              <td className="py-3 px-4 font-medium">{r.date}</td>
-              <td className="py-3 px-4 text-gray-600 dark:text-gray-300">{r.roomId}</td>
-              <td className="py-3 px-4 text-gray-600 dark:text-gray-300">
-                {r.start}–{r.end}
-              </td>
-              <td className="py-3 px-4">
-                <TurnoBadge turno={r.turno} />
-              </td>
-              <td className="py-3 px-4">
-                <StatusBadge status={r.status} />
-              </td>
-              <td className="py-3 px-4">
-                <div className="flex gap-2">
-                  {showApproval && r.status === 'PENDING' && (
-                    <>
-                      <button
-                        onClick={() => approveReservation(r.id)}
-                        className="text-xs px-2 py-1 rounded bg-green-100 text-green-700 hover:bg-green-200 font-medium"
-                        aria-label={`Aprovar reserva ${r.id}`}
-                      >
-                        Aprovar
-                      </button>
-                      <button
-                        onClick={() => rejectReservation(r.id)}
-                        className="text-xs px-2 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200 font-medium"
-                        aria-label={`Rejeitar reserva ${r.id}`}
-                      >
-                        Rejeitar
-                      </button>
-                    </>
-                  )}
-                  {!showApproval && r.status === 'PENDING' && r.userId === userId && (
-                    <button
-                      onClick={() => cancelReservation(r.id, r.userId)}
-                      className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-600 hover:bg-gray-200 font-medium"
-                      aria-label={`Cancelar reserva ${r.id}`}
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      {grouped.map(({ turno, label, color, items }) => (
+        <div key={turno}>
+          <div
+            style={{
+              padding: '8px 16px',
+              background: 'var(--color-surface-2)',
+              borderBottom: '1px solid var(--color-border)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            <span
+              style={{
+                fontSize: '11px',
+                fontWeight: 700,
+                padding: '2px 10px',
+                borderRadius: 20,
+                background: color.bg,
+                color: color.color,
+              }}
+            >
+              {label}
+            </span>
+            <span style={{ fontSize: '11px', color: 'var(--color-muted)' }}>
+              {items.length} {items.length === 1 ? 'reserva' : 'reservas'}
+            </span>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
+                  {['Data', 'Sala', 'Turma', 'Horário', 'Status'].map(h => (
+                    <th
+                      key={h}
+                      style={{
+                        padding: '8px 12px',
+                        textAlign: 'left',
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: 'var(--color-muted)',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.04em',
+                      }}
                     >
-                      Cancelar
-                    </button>
-                  )}
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {items.map(r => {
+                  const sc = STATUS_COLORS[r.status] ?? STATUS_COLORS['PENDING'];
+                  return (
+                    <tr key={r.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                      <td style={tdStyle}>{formatDataBR(r.data)}</td>
+                      <td style={tdStyle}>{r.sala}</td>
+                      <td style={{ ...tdStyle, color: 'var(--color-muted)' }}>{r.turma || '—'}</td>
+                      <td style={{ ...tdStyle, fontVariantNumeric: 'tabular-nums' }}>
+                        {r.inicio}–{r.fim}
+                      </td>
+                      <td style={tdStyle}>
+                        <span
+                          style={{
+                            padding: '2px 8px',
+                            borderRadius: 10,
+                            fontSize: 11,
+                            fontWeight: 600,
+                            background: sc.bg,
+                            color: sc.color,
+                          }}
+                        >
+                          {STATUS_LABEL[r.status] ?? r.status}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
+
+const tdStyle: CSSProperties = {
+  padding: '8px 12px',
+  color: 'var(--color-text)',
+};

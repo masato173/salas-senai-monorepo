@@ -413,7 +413,7 @@ export default function ReservasPage() {
             {reservations.length} registros
           </span>
         </div>
-        <ReservationList showApproval />
+        <ReservationList reservations={list.data?.reservations ?? []} showApproval />
       </div>
 
       {/* Calendário (sub-etapa 4.1a — lê via useListReservations) */}
@@ -433,6 +433,7 @@ export default function ReservasPage() {
           cancelMutation.reset();
         }}
         currentUserEmail={loggedUser?.email ?? ''}
+        userRole={loggedUser?.role ?? ''}
         onConfirmCancel={handleConfirmCancel}
         cancelStatus={cancelMutation.status}
         cancelError={cancelMutation.error}
