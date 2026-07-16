@@ -69,11 +69,10 @@ interface NestReservation {
   user?: NestUser;
 }
 
-// ─── Status mapper ────────────────────────────────────────────
-// PENDING | APPROVED → 'ACTIVE' (paridade com Apps Script)
-// REJECTED | CANCELLED → passam direto
+// ─── Status mapper ─────────────────────────────────────────────
+// Preserva o status real do backend (PENDING/APPROVED/REJECTED/CANCELLED).
+// Mantido como função para facilitar extensão futura.
 function mapStatus(s: string): string {
-  if (s === 'PENDING' || s === 'APPROVED') return 'ACTIVE';
   return s;
 }
 

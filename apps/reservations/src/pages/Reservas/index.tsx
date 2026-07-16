@@ -107,7 +107,7 @@ export default function ReservasPage() {
     const gid = selectedReservation?.groupId;
     if (!gid || !list.data?.reservations) return undefined;
     return list.data.reservations
-      .filter(r => r.groupId === gid && r.status === 'ACTIVE')
+      .filter(r => r.groupId === gid && r.status === 'APPROVED')
       .map(r => r.data)
       .sort();
   }, [selectedReservation?.groupId, list.data?.reservations]);
@@ -120,7 +120,7 @@ export default function ReservasPage() {
     if (!gid || !list.data?.reservations) return undefined;
     const map: Record<string, string> = {};
     for (const r of list.data.reservations) {
-      if (r.groupId === gid && r.status === 'ACTIVE') {
+      if (r.groupId === gid && r.status === 'APPROVED') {
         map[r.data] = r.id;
       }
     }

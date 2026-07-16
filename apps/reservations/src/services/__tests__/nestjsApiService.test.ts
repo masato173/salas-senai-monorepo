@@ -103,16 +103,15 @@ describe('nestjsApiService', () => {
       expect(row?.createdBy).toBe('prof@senai.edu');
     });
 
-    it('PENDING → ACTIVE no status', async () => {
+    it('PENDING preserva status PENDING', async () => {
       mockApiFetch.mockResolvedValue([{ ...MOCK_NEST_RESERVATION, status: 'PENDING' }]);
       const result = await createNestjsApiService(fallback).listReservations();
-      expect(result.data?.reservations[0]?.status).toBe('ACTIVE');
+      expect(result.data?.reservations[0]?.status).toBe('PENDING');
     });
-
-    it('APPROVED → ACTIVE no status', async () => {
+    it('APPROVED preserva status APPROVED', async () => {
       mockApiFetch.mockResolvedValue([{ ...MOCK_NEST_RESERVATION, status: 'APPROVED' }]);
       const result = await createNestjsApiService(fallback).listReservations();
-      expect(result.data?.reservations[0]?.status).toBe('ACTIVE');
+      expect(result.data?.reservations[0]?.status).toBe('APPROVED');
     });
 
     it('CANCELLED → CANCELLED no status', async () => {

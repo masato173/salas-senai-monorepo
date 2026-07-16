@@ -139,7 +139,7 @@ export function getStatusParaHorario(
 ): RoomStatus {
   const registrosDia = registros.filter(r => r.data === data && r.sala === sala);
   const reservasDia = reservas.filter(
-    r => r.data === data && r.sala === sala && r.status !== 'CANCELLED',
+    r => r.data === data && r.sala === sala && r.status !== 'CANCELLED' && r.status !== 'REJECTED',
   );
 
   const req = { inicio, fim };
