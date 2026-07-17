@@ -228,12 +228,10 @@ export function createNestjsApiService(
     // ── Migrado: GET /schedules ──────────────────────────────
     // Apps Script não é mais chamado para aulas após F5.7.
     async fetchSchedule(): Promise<ScheduleResult> {
-      try {
-        return await apiFetch<ScheduleResult>('/schedules');
-      } catch {
-        // Fallback para Apps Script se NestJS falhar (ex: Schedule vazio)
-        return fallback.fetchSchedule();
-      }
+      // F8.6 — NestJS é fonte única de verdade para Schedule.
+      // Fallback para Apps Script removido: banco tem 1.522 registros sincronizados.
+      // Se falhar, lança erro — useSchedule retentar automaticamente (maxRetries=2).
+      return await apiFetch<ScheduleResult>('/schedules');
     },
     async createReservationRange(req) {
       try {
