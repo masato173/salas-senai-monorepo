@@ -220,14 +220,24 @@ describe('nestjsApiService', () => {
   });
 
   // ── fallback ────────────────────────────────────────────────
-  describe('métodos não migrados', () => {
-    it('fetchSchedule delega ao fallback', async () => {
-      (fallback.fetchSchedule as ReturnType<typeof vi.fn>).mockResolvedValue({
-        registros: [],
-        turnoMap: {},
-      });
+  describe('fetchSchedule (F8.6 — NestJS direto)', () => {
+    it('chama apiFetch em /schedules', async () => {
+      mockApiFetch.mockResolvedValue({ registros: [], turnoMap: {} });
       await createNestjsApiService(fallback).fetchSchedule();
-      expect(fallback.fetchSchedule).toHaveBeenCalledTimes(1);
+      expect(mockApiFetch).toHaveBeenCalledWith('/schedules');
+    });
+
+    it('nao delega ao fallback quando NestJS responde', async () => {
+      mockApiFetch.mockResolvedValue({ registros: [], turnoMap: {} });
+      await createNestjsApiService(fallback).fetchSchedule();
+      expect(fallback.fetchSchedule).not.toHaveBeenCalled();
+    });
+
+    it('lanca erro quando apiFetch falha', async () => {
+      mockApiFetch.mockRejectedValue(new Error('Falha de rede'));
+      await expect(createNestjsApiService(fallback).fetchSchedule()).rejects.toThrow(
+        'Falha de rede',
+      );
     });
   });
 });
