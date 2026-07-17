@@ -244,6 +244,8 @@ export function createAppsScriptService(config: AppsScriptConfig): AppsScriptSer
           turma: esc(r.turma), // sanitiza contra XSS
           mes: esc(r.mes),
           turno,
+          inicio: null, // Apps Script legado não fornece horário exato
+          fim: null, // preenchido pelo NestJS via sync (F8.1)
         };
       });
 

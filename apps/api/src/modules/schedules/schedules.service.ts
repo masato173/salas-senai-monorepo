@@ -9,6 +9,8 @@ export interface RegistroLegado {
   turma: string;
   mes: string;
   turno: Turno | null;
+  inicio: string | null; // HH:MM — inferido do turno no sync (F8.1)
+  fim: string | null; // HH:MM — inferido do turno no sync (F8.1)
 }
 
 export interface ScheduleResult {
@@ -31,6 +33,8 @@ export class SchedulesService {
       turma: s.turma,
       mes: s.mes,
       turno: (s.turno as Turno | null) ?? null,
+      inicio: s.inicio ?? null,
+      fim: s.fim ?? null,
     }));
 
     // Reconstrói turnoMap a partir dos registros (turma → turno)

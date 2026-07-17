@@ -34,9 +34,9 @@ export interface AvailabilityResult {
 
 // Faixa de horário por turno — paridade exata com TURNO_HORARIO do frontend.
 const TURNO_HORARIO: Record<Turno, { inicio: string; fim: string }> = {
-  M: { inicio: '07:30', fim: '12:00' },
-  V: { inicio: '13:00', fim: '17:30' },
-  N: { inicio: '18:30', fim: '22:00' },
+  M: { inicio: '07:00', fim: '12:30' },
+  V: { inicio: '13:00', fim: '18:00' },
+  N: { inicio: '18:00', fim: '22:00' },
 };
 
 // HH:MM → minutos. Paridade exata com toMinutes() do frontend.
@@ -105,14 +105,18 @@ export class AvailabilityService {
       const eventos: SalaEvento[] = [];
 
       // Aulas (tipo: 'aula')
+      // Prioriza inicio/fim do banco (preenchidos no sync F8.1).
+      // Fallback para TURNO_HORARIO caso campos ainda sejam null (registros legados).
       for (const s of roomSchedules) {
         const horario = isTurno(s.turno) ? TURNO_HORARIO[s.turno] : null;
+        const inicio = s.inicio ?? horario?.inicio ?? '00:00';
+        const fim = s.fim ?? horario?.fim ?? '23:59';
         eventos.push({
           tipo: 'aula' as const,
           sala: room.name,
           data: date,
-          inicio: horario?.inicio ?? '00:00',
-          fim: horario?.fim ?? '23:59',
+          inicio,
+          fim,
           turno: isTurno(s.turno) ? s.turno : null,
           turma: s.turma,
         });

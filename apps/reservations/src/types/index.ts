@@ -29,6 +29,8 @@ export interface RegistroLegado {
   turma: string;
   mes: string;
   turno: Turno | null; // enriquecido via turnoMap
+  inicio: string | null; // HH:MM — inferido do turno no sync (F8.1); null em legado
+  fim: string | null; // HH:MM — inferido do turno no sync (F8.1); null em legado
 }
 
 // Mapa turma→turno vindo do Apps Script

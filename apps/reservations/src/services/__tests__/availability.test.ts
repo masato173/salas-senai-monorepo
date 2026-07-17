@@ -16,6 +16,8 @@ function makeRegistro(overrides: Partial<RegistroLegado> = {}): RegistroLegado {
     turma: 'APB.OPL.015',
     mes: 'Junho',
     turno: 'M',
+    inicio: null,
+    fim: null,
     ...overrides,
   };
 }
