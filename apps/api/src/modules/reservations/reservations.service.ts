@@ -12,6 +12,8 @@ import { OwnershipService } from './ownership.service';
 import { AuditService } from './audit/audit.service';
 import type { CreateReservationDto } from './dtos/create-reservation.dto';
 import type { UpdateReservationDto } from './dtos/update-reservation.dto';
+import type { UpdateReservationGroupDto } from './dtos/update-reservation-group.dto';
+import type { UpdateReservationSelectedDto } from './dtos/update-reservation-selected.dto';
 import type { RequestUser } from '../auth/strategies/jwt.strategy';
 import { RealtimeService } from '../realtime/realtime.service';
 import type { CreateReservationRangeDto } from './dtos/create-reservation-range.dto';
@@ -165,6 +167,7 @@ export class ReservationsService {
           ...(dto.date !== undefined ? { date: dto.date } : {}),
           ...(dto.inicio !== undefined ? { inicio: dto.inicio } : {}),
           ...(dto.fim !== undefined ? { fim: dto.fim } : {}),
+          ...(dto.turma !== undefined ? { turma: dto.turma } : {}),
           ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
         },
       });
@@ -256,6 +259,85 @@ export class ReservationsService {
       this.realtimeService.reservationRejected(statusRes);
     }
     return statusRes;
+  }
+
+  async updateGroup(
+    dto: UpdateReservationGroupDto,
+    currentUser: RequestUser,
+  ): Promise<{ count: number; reservations: Reservation[] }> {
+    const reservations = await this.prisma.reservation.findMany({
+      where: { groupId: dto.groupId, deletedAt: null },
+    });
+    if (reservations.length === 0) {
+      throw new NotFoundException(`Nenhuma reserva encontrada para o grupo "${dto.groupId}".`);
+    }
+    // Verifica permissão na primeira reserva do grupo
+    await this.ownershipService.assertCanModify(reservations[0].id, currentUser);
+    const updated: Reservation[] = [];
+    for (const r of reservations) {
+      const resolvedRoomId = dto.roomId ?? r.roomId;
+      const resolvedInicio = dto.inicio ?? r.inicio;
+      const resolvedFim = dto.fim ?? r.fim;
+      if (dto.inicio !== undefined || dto.fim !== undefined) {
+        this.assertValidTimes(resolvedInicio, resolvedFim);
+      }
+      const conflict = await this.conflictService.hasConflict({
+        roomId: resolvedRoomId,
+        date: r.date,
+        inicio: resolvedInicio,
+        fim: resolvedFim,
+        excludeId: r.id,
+      });
+      if (conflict) continue; // pula datas com conflito — não aborta o grupo todo
+      const u = await this.prisma.reservation.update({
+        where: { id: r.id },
+        data: {
+          ...(dto.roomId !== undefined ? { roomId: dto.roomId } : {}),
+          ...(dto.inicio !== undefined ? { inicio: dto.inicio } : {}),
+          ...(dto.fim !== undefined ? { fim: dto.fim } : {}),
+          ...(dto.turma !== undefined ? { turma: dto.turma } : {}),
+          ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
+        },
+      });
+      updated.push(u);
+    }
+    return { count: updated.length, reservations: updated };
+  }
+
+  async updateSelected(
+    dto: UpdateReservationSelectedDto,
+    currentUser: RequestUser,
+  ): Promise<{ count: number; reservations: Reservation[] }> {
+    const updated: Reservation[] = [];
+    for (const id of dto.ids) {
+      const r = await this.ownershipService.assertCanModify(id, currentUser);
+      const resolvedRoomId = dto.roomId ?? r.roomId;
+      const resolvedInicio = dto.inicio ?? r.inicio;
+      const resolvedFim = dto.fim ?? r.fim;
+      if (dto.inicio !== undefined || dto.fim !== undefined) {
+        this.assertValidTimes(resolvedInicio, resolvedFim);
+      }
+      const conflict = await this.conflictService.hasConflict({
+        roomId: resolvedRoomId,
+        date: r.date,
+        inicio: resolvedInicio,
+        fim: resolvedFim,
+        excludeId: id,
+      });
+      if (conflict) continue;
+      const u = await this.prisma.reservation.update({
+        where: { id },
+        data: {
+          ...(dto.roomId !== undefined ? { roomId: dto.roomId } : {}),
+          ...(dto.inicio !== undefined ? { inicio: dto.inicio } : {}),
+          ...(dto.fim !== undefined ? { fim: dto.fim } : {}),
+          ...(dto.turma !== undefined ? { turma: dto.turma } : {}),
+          ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
+        },
+      });
+      updated.push(u);
+    }
+    return { count: updated.length, reservations: updated };
   }
 
   private assertValidTimes(inicio: string, fim: string): void {

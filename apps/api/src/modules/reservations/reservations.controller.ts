@@ -15,6 +15,8 @@ import { ReservationStatus, Role } from '@prisma/client';
 import { ReservationsService } from './reservations.service';
 import { UpdateReservationDto } from './dtos/update-reservation.dto';
 import { UpdateStatusDto } from './dtos/update-status.dto';
+import { UpdateReservationGroupDto } from './dtos/update-reservation-group.dto';
+import { UpdateReservationSelectedDto } from './dtos/update-reservation-selected.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import type { RequestUser } from '../auth/strategies/jwt.strategy';
 import type { Reservation } from '@prisma/client';
@@ -76,6 +78,22 @@ export class ReservationsController {
     @Request() req: AuthenticatedRequest,
   ): Promise<Reservation> {
     return this.reservationsService.updateStatus(id, dto.status, req.user);
+  }
+
+  @Patch('group/:groupId')
+  @HttpCode(HttpStatus.OK)
+  updateGroup(
+    @Param('groupId') groupId: string,
+    @Body() dto: UpdateReservationGroupDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.reservationsService.updateGroup({ ...dto, groupId }, req.user);
+  }
+
+  @Patch('selected')
+  @HttpCode(HttpStatus.OK)
+  updateSelected(@Body() dto: UpdateReservationSelectedDto, @Request() req: AuthenticatedRequest) {
+    return this.reservationsService.updateSelected(dto, req.user);
   }
 
   @Patch(':id')

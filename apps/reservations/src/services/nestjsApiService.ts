@@ -15,6 +15,9 @@ import type {
   ListReservationsOptions,
   ListReservationsResponse,
   ScheduleResult,
+  UpdateReservationResponse,
+  UpdateReservationGroupResponse,
+  UpdateReservationSelectedResponse,
 } from './appsScript';
 
 // ─────────────────────────────────────────────────────────────
@@ -222,7 +225,7 @@ export function clearRoomCache(): void {
 
 // ─── Factory ──────────────────────────────────────────────────
 export function createNestjsApiService(
-  fallback: AppsScriptService,
+  _fallback: AppsScriptService,
 ): AppsScriptService & ReservationAdminApi {
   return {
     // ── Migrado: GET /schedules ──────────────────────────────
@@ -279,9 +282,92 @@ export function createNestjsApiService(
         return { ok: false, data: null, error: toBackendError(e) };
       }
     },
-    updateReservation: req => fallback.updateReservation(req),
-    updateReservationGroup: req => fallback.updateReservationGroup(req),
-    updateReservationSelected: req => fallback.updateReservationSelected(req),
+    async updateReservation(req): Promise<UpdateReservationResponse> {
+      try {
+        const roomId = req.payload.sala ? await resolveRoomId(req.payload.sala) : undefined;
+        const updated = await apiFetch<NestReservation>(`/reservations/${req.payload.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            ...(roomId !== null && roomId !== undefined ? { roomId } : {}),
+            date: req.payload.data,
+            inicio: req.payload.inicio,
+            fim: req.payload.fim,
+            turma: req.payload.turma !== '' ? req.payload.turma : undefined,
+            notes: req.payload.observacao !== '' ? req.payload.observacao : undefined,
+          }),
+        });
+        const authUser = selectUser(useAuthStore.getState());
+        const row: CreatedReservationRow = {
+          ...toRow(updated),
+          sala: req.payload.sala,
+          professor: authUser?.name ?? req.userEmail,
+          turma: req.payload.turma ?? '',
+          createdBy: authUser?.email ?? req.userEmail,
+        };
+        return { ok: true, data: row, error: null };
+      } catch (e) {
+        return { ok: false, data: null, error: toBackendError(e) };
+      }
+    },
+    async updateReservationGroup(req): Promise<UpdateReservationGroupResponse> {
+      try {
+        const roomId = req.payload.sala ? await resolveRoomId(req.payload.sala) : undefined;
+        const result = await apiFetch<{ count: number; reservations: NestReservation[] }>(
+          `/reservations/group/${req.payload.groupId}`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify({
+              ...(roomId !== null && roomId !== undefined ? { roomId } : {}),
+              inicio: req.payload.inicio,
+              fim: req.payload.fim,
+              turma: req.payload.turma !== '' ? req.payload.turma : undefined,
+              notes: req.payload.observacao !== '' ? req.payload.observacao : undefined,
+            }),
+          },
+        );
+        const authUser = selectUser(useAuthStore.getState());
+        const reservations = result.reservations.map(r => ({
+          ...toRow(r),
+          sala: req.payload.sala,
+          professor: authUser?.name ?? req.userEmail,
+          turma: req.payload.turma ?? '',
+          createdBy: authUser?.email ?? req.userEmail,
+        }));
+        return { ok: true, data: { count: result.count, reservations }, error: null };
+      } catch (e) {
+        return { ok: false, data: null, error: toBackendError(e) };
+      }
+    },
+    async updateReservationSelected(req): Promise<UpdateReservationSelectedResponse> {
+      try {
+        const roomId = req.payload.sala ? await resolveRoomId(req.payload.sala) : undefined;
+        const result = await apiFetch<{ count: number; reservations: NestReservation[] }>(
+          '/reservations/selected',
+          {
+            method: 'PATCH',
+            body: JSON.stringify({
+              ids: req.payload.ids,
+              ...(roomId !== null && roomId !== undefined ? { roomId } : {}),
+              inicio: req.payload.inicio,
+              fim: req.payload.fim,
+              turma: req.payload.turma !== '' ? req.payload.turma : undefined,
+              notes: req.payload.observacao !== '' ? req.payload.observacao : undefined,
+            }),
+          },
+        );
+        const authUser = selectUser(useAuthStore.getState());
+        const reservations = result.reservations.map(r => ({
+          ...toRow(r),
+          sala: req.payload.sala,
+          professor: authUser?.name ?? req.userEmail,
+          turma: req.payload.turma ?? '',
+          createdBy: authUser?.email ?? req.userEmail,
+        }));
+        return { ok: true, data: { count: result.count, reservations }, error: null };
+      } catch (e) {
+        return { ok: false, data: null, error: toBackendError(e) };
+      }
+    },
 
     // ── Migrado: GET /reservations ───────────────────────────
     async listReservations(_options?: ListReservationsOptions): Promise<ListReservationsResponse> {

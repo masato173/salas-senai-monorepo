@@ -20,7 +20,7 @@ export class OwnershipService {
       throw new NotFoundException(`Reserva "${reservationId}" não encontrada.`);
     }
 
-    if (currentUser.role === 'ADMIN') return reservation;
+    if (currentUser.role === 'ADMIN' || currentUser.role === 'COORDENADOR') return reservation;
 
     if (reservation.userId !== currentUser.userId) {
       throw new ForbiddenException('Você não tem permissão para modificar esta reserva.');
