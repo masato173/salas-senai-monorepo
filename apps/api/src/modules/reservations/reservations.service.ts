@@ -14,6 +14,7 @@ import type { CreateReservationDto } from './dtos/create-reservation.dto';
 import type { UpdateReservationDto } from './dtos/update-reservation.dto';
 import type { RequestUser } from '../auth/strategies/jwt.strategy';
 import { RealtimeService } from '../realtime/realtime.service';
+import type { CreateReservationRangeDto } from './dtos/create-reservation-range.dto';
 
 interface FindAllParams {
   roomId?: string | undefined;
@@ -267,5 +268,56 @@ export class ReservationsService {
     if (fim > '23:00') {
       throw new BadRequestException('Reservas não são permitidas após as 23:00.');
     }
+  }
+  async createRange(
+    dto: CreateReservationRangeDto,
+    currentUser: RequestUser,
+  ): Promise<{ count: number; reservations: Reservation[] }> {
+    const datas = this.expandirDatas(dto.dateInicio, dto.dateFim, dto.diasSemana);
+
+    if (datas.length === 0) {
+      throw new BadRequestException('Nenhuma data válida encontrada no intervalo especificado.');
+    }
+
+    if (datas.length > 60) {
+      throw new BadRequestException('Máximo de 60 dias consecutivos.');
+    }
+
+    const groupId = crypto.randomUUID();
+    const reservations: Reservation[] = [];
+
+    for (const data of datas) {
+      const reservation = await this.prisma.reservation.create({
+        data: {
+          userId: currentUser.userId,
+          roomId: dto.roomId,
+          groupId,
+          date: data,
+          inicio: dto.inicio,
+          fim: dto.fim,
+          turma: dto.turma ?? null,
+          notes: dto.notes ?? null,
+          status: ReservationStatus.PENDING,
+        },
+      });
+      reservations.push(reservation);
+      this.realtimeService.reservationCreated(reservation);
+    }
+
+    return { count: reservations.length, reservations };
+  }
+
+  private expandirDatas(dateinicio: string, dateFim: string, diasSemana: number[]): string[] {
+    const dates: string[] = [];
+    const atual = new Date(dateinicio + 'T12:00:00Z');
+    const fim = new Date(dateFim + 'T12:00:00Z');
+
+    while (atual <= fim) {
+      if (diasSemana.includes(atual.getUTCDay())) {
+        dates.push(atual.toISOString().slice(0, 10));
+      }
+      atual.setUTCDate(atual.getUTCDate() + 1);
+    }
+    return dates;
   }
 }

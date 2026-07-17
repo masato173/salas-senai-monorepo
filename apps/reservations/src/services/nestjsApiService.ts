@@ -235,7 +235,52 @@ export function createNestjsApiService(
         return fallback.fetchSchedule();
       }
     },
-    createReservationRange: req => fallback.createReservationRange(req),
+    async createReservationRange(req) {
+      try {
+        const roomId = await resolveRoomId(req.payload.sala);
+        if (roomId === null) {
+          return {
+            ok: false,
+            data: null,
+            error: {
+              code: 'VALIDATION' as const,
+              message: `Sala "${req.payload.sala}" não encontrada no sistema.`,
+            },
+          };
+        }
+        const authUser = selectUser(useAuthStore.getState());
+        const result = await apiFetch<{ count: number; reservations: NestReservation[] }>(
+          '/reservations/range',
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              roomId,
+              dateInicio: req.payload.dataInicio,
+              dateFim: req.payload.dataFim,
+              diasSemana: req.payload.diasSemana,
+              inicio: req.payload.inicio,
+              fim: req.payload.fim,
+              turma: req.payload.turma !== '' ? req.payload.turma : undefined,
+              notes: req.payload.observacao !== '' ? req.payload.observacao : undefined,
+            }),
+          },
+        );
+        const reservations = result.reservations.map(r => ({
+          ...toRow(r),
+          sala: req.payload.sala,
+          professor: authUser?.name ?? req.payload.professor,
+          turma: req.payload.turma ?? '',
+          createdBy: authUser?.email ?? req.userEmail,
+        }));
+        return {
+          ok: true,
+          data: { count: result.count, reservations },
+          error: null,
+        };
+      } catch (e) {
+        return { ok: false, data: null, error: toBackendError(e) };
+      }
+    },
     updateReservation: req => fallback.updateReservation(req),
     updateReservationGroup: req => fallback.updateReservationGroup(req),
     updateReservationSelected: req => fallback.updateReservationSelected(req),

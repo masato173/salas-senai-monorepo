@@ -13,12 +13,12 @@ import {
 } from '@nestjs/common';
 import { ReservationStatus, Role } from '@prisma/client';
 import { ReservationsService } from './reservations.service';
-import { CreateReservationDto } from './dtos/create-reservation.dto';
 import { UpdateReservationDto } from './dtos/update-reservation.dto';
 import { UpdateStatusDto } from './dtos/update-status.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import type { RequestUser } from '../auth/strategies/jwt.strategy';
 import type { Reservation } from '@prisma/client';
+import { CreateReservationRangeDto } from './dtos/create-reservation-range.dto';
 
 interface AuthenticatedRequest {
   user: RequestUser;
@@ -57,13 +57,13 @@ export class ReservationsController {
   }
 
   @Roles(Role.PROFESSOR, Role.COORDENADOR, Role.ADMIN)
-  @Post()
+  @Post('range')
   @HttpCode(HttpStatus.CREATED)
-  create(
-    @Body() dto: CreateReservationDto,
+  createRange(
+    @Body() dto: CreateReservationRangeDto,
     @Request() req: AuthenticatedRequest,
-  ): Promise<Reservation> {
-    return this.reservationsService.create(dto, req.user);
+  ): Promise<{ count: number; reservations: Reservation[] }> {
+    return this.reservationsService.createRange(dto, req.user);
   }
 
   // CRÍTICO: :id/status declarado ANTES de :id para evitar captura pelo param
