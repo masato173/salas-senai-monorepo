@@ -8,6 +8,7 @@ import { useListReservations } from '../../hooks/useListReservations';
 import { useRealtimeSocket } from '../../hooks/useRealtimeSocket';
 import { useAvailability } from '../../hooks/useAvailability';
 import { useAvailabilityBackend, BACKEND_DRIVER_ENABLED } from '../../hooks/useAvailabilityBackend';
+import { useDashboardStats } from '../../hooks/useDashboardStats';
 import {
   applyScheduleFilters,
   type ScheduleFilterState,
@@ -92,6 +93,11 @@ export function DashboardPage(): JSX.Element {
   const backendDispDash = useAvailabilityBackend(dataStats, undefined, {
     enabled: BACKEND_DRIVER_ENABLED,
   });
+  // F8.5 — stats do dashboard via SQL (GET /dashboard?date=)
+  const dashboardStats = useDashboardStats(dataStats, {
+    enabled: BACKEND_DRIVER_ENABLED,
+  });
+
   const disponibilidade =
     BACKEND_DRIVER_ENABLED && backendDispDash.data !== null ? backendDispDash.data : localDisp;
 
@@ -105,7 +111,12 @@ export function DashboardPage(): JSX.Element {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <DashboardStats filtered={filtered} hoje={dataStats} disponibilidade={disponibilidade} />
+        <DashboardStats
+          filtered={filtered}
+          hoje={dataStats}
+          disponibilidade={disponibilidade}
+          dashboardStats={BACKEND_DRIVER_ENABLED ? dashboardStats.data : null}
+        />
         <OccupancyDashboard
           filtered={filtered}
           filtros={filtros}

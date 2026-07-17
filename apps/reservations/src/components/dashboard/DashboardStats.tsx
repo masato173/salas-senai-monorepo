@@ -3,6 +3,7 @@ import { useMemo, type CSSProperties } from 'react';
 import { SALAS } from '../../config';
 import type { RegistroLegado, Turno, AvailabilityResult } from '../../types';
 import { formatDataBR, todayYmd } from './scheduleDateUtils';
+import type { DashboardStats as BackendStats } from '../../hooks/useDashboardStats';
 
 // Sprint A3.3 — cards de resumo do Dashboard. Componente PURO de apresentação:
 // recebe `filtered` (mesmo array que alimenta a tabela em OccupancyDashboard)
@@ -16,6 +17,8 @@ interface DashboardStatsProps {
   hoje: string; // YYYY-MM-DD passado pelo pai (já UTC-safe)
   // S5 — opcional, backward compat. Quando presente, renderiza 3 cards extras.
   disponibilidade?: AvailabilityResult;
+  // F8.5 — stats do backend via SQL. Quando presente, substitui cálculo local.
+  dashboardStats?: BackendStats | null;
 }
 
 // Detalhe visual: borda-esquerda na cor do turno. Reusa tokens existentes.
@@ -35,6 +38,7 @@ export function DashboardStats({
   filtered,
   hoje,
   disponibilidade,
+  dashboardStats,
 }: DashboardStatsProps): JSX.Element {
   const stats = useMemo(() => {
     const salasComAtividade = new Set(filtered.map(r => r.sala)).size;
@@ -69,6 +73,13 @@ export function DashboardStats({
     };
   }, [filtered, hoje, disponibilidade]);
 
+  // F8.5 — sobrescreve contagens locais com dados do backend quando disponível
+  const porTurnoFinal = dashboardStats?.porTurno ?? stats.porTurno;
+  const salasLivresFinal = dashboardStats?.salasLivres ?? stats.salasLivres;
+  const salasComAulaFinal = dashboardStats?.salasComAula ?? stats.salasComAula;
+  const salasComReservaFinal = dashboardStats?.reservasHoje ?? stats.salasComReserva;
+  const ocupacaoPercent = dashboardStats?.ocupacaoPercent ?? null;
+
   const totalOficial = SALAS.length;
   // Label dinâmico: "hoje" quando a data é hoje, "DD/MM/AAAA" quando filtrada.
   const dataLabel = hoje === todayYmd() ? 'hoje' : formatDataBR(hoje);
@@ -87,22 +98,24 @@ export function DashboardStats({
         sub={`em ${stats.salasHoje} sala${stats.salasHoje === 1 ? '' : 's'}`}
       />
 
-      <TurnoCard turno="M" value={stats.porTurno.M} />
-      <TurnoCard turno="V" value={stats.porTurno.V} />
-      <TurnoCard turno="N" value={stats.porTurno.N} />
-
+      <TurnoCard turno="M" value={porTurnoFinal.M} />
+      <TurnoCard turno="V" value={porTurnoFinal.V} />
+      <TurnoCard turno="N" value={porTurnoFinal.N} />
+      {ocupacaoPercent !== null && (
+        <Card label="Ocupação" value={ocupacaoPercent} sub="% das salas com aula" />
+      )}
       {/* S5 — disponibilidade de hoje (aditivo, só renderiza se prop presente). */}
       {disponibilidade && (
         <>
           <Card
             label={`Salas livres ${dataLabel}`}
-            value={stats.salasLivres}
+            value={salasLivresFinal}
             sub={`de ${totalOficial} salas`}
           />
-          <Card label={`Com aula ${dataLabel}`} value={stats.salasComAula} sub="salas ocupadas" />
+          <Card label={`Com aula ${dataLabel}`} value={salasComAulaFinal} sub="salas ocupadas" />
           <Card
             label={`Com reserva ${dataLabel}`}
-            value={stats.salasComReserva}
+            value={salasComReservaFinal}
             sub="salas reservadas"
           />
         </>
