@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { PageTransition } from '../router/PageTransition';
 import { ROUTES, getBreadcrumbs, ROUTE_SECTIONS } from '../router/config';
-import { useAuthStore, selectAccessToken } from '../store/authStore';
+import { useAuthStore, selectAccessToken, selectUser } from '../store/authStore';
 import { getSocket, disconnectSocket } from '../services/socketClient';
 
 const ICON_MAP = {
@@ -63,6 +63,7 @@ export function AppLayout() {
   const location = useLocation();
   const userRole = useAuthStore(s => s.user?.role ?? '');
   const accessToken = useAuthStore(selectAccessToken);
+  const currentUser = useAuthStore(selectUser);
 
   // F7.3 — Socket.IO: abre/fecha conexão conforme o token.
   // AppLayout gerencia apenas ciclo de vida.
@@ -224,9 +225,14 @@ export function AppLayout() {
                 <Moon size={15} strokeWidth={1.75} />
               )}
             </button>
-            <div className="topbar-avatar" title="Usuário">
-              U
-            </div>
+            <a
+              href="/perfil"
+              className="topbar-avatar"
+              title="Meu perfil"
+              style={{ textDecoration: 'none', cursor: 'pointer' }}
+            >
+              {(currentUser?.name ?? 'U').charAt(0).toUpperCase()}
+            </a>
           </div>
         </header>
 

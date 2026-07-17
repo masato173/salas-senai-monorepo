@@ -20,6 +20,7 @@ const SalasPage = lazy(() => import('../pages/Salas'));
 const TurmasPage = lazy(() => import('../pages/Turmas'));
 const RelatoriosPage = lazy(() => import('../pages/Relatorios'));
 const ConfiguracoesPage = lazy(() => import('../pages/Configuracoes'));
+const PerfilPage = lazy(() => import('../pages/Perfil'));
 const NotFoundPage = lazy(() => import('../pages/NotFound'));
 
 const AdminDashboardPage = lazy(() => import('../pages/Admin/Dashboard'));
@@ -208,6 +209,16 @@ export const router = createBrowserRouter([
             ),
           },
         ],
+      },
+      {
+        path: 'perfil',
+        element: (
+          <ProtectedRoute>
+            <Suspense fallback={<RouteLoader />}>
+              <PerfilPage />
+            </Suspense>
+          </ProtectedRoute>
+        ),
       },
       {
         path: '*',

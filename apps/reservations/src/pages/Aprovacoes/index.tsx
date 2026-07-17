@@ -32,7 +32,9 @@ export default function AprovacoesPage(): JSX.Element {
 
   // Busca o conjunto completo uma vez — toggle e busca filtram client-side.
   // Preparado para Socket.IO — F6.2 adicionará socket.on('reservation.*', refetch)
-  const { data, status, error, refetch } = usePendingReservations(service);
+  const { data, status, error, refetch } = usePendingReservations(service, {
+    status: 'PENDING',
+  });
 
   // F7.3b — realtime: recarrega aprovações quando evento chega.
   // Aprovação/rejeição dispara reservation.approved ou reservation.rejected.
