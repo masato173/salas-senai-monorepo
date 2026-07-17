@@ -93,6 +93,22 @@ export class SyncService {
               turma: d.turma,
               mes: d.mes,
               turno: d.turno ?? null,
+              inicio:
+                d.turno === 'M'
+                  ? '07:00'
+                  : d.turno === 'V'
+                    ? '13:00'
+                    : d.turno === 'N'
+                      ? '18:00'
+                      : null,
+              fim:
+                d.turno === 'M'
+                  ? '12:30'
+                  : d.turno === 'V'
+                    ? '18:00'
+                    : d.turno === 'N'
+                      ? '22:00'
+                      : null,
             })),
           });
         }

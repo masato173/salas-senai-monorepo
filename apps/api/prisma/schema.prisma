@@ -124,6 +124,8 @@ model Schedule {
   turma String
   mes   String
   turno String? // 'M' | 'V' | 'N' ou null
+  inicio String? // HH:MM — inferido do turno no sync
+  fim    String? // HH:MM — inferido do turno no sync
 
   @@index([date])
   @@index([sala, date])
