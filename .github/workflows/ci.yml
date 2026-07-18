@@ -7,7 +7,7 @@ on:
     branches: [master]
 
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: '22'
   PNPM_VERSION: '8'
 
 jobs:
@@ -32,6 +32,12 @@ jobs:
 
       - name: Typecheck (frontend)
         run: pnpm --filter @salas-senai/reservations typecheck
+
+      - name: Generate Prisma Client
+        run: pnpm --filter @salas-senai/api exec prisma generate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
 
       - name: Typecheck (backend)
         run: pnpm --filter @salas-senai/api build
