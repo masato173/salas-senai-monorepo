@@ -10,7 +10,8 @@
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src --ext .ts,.tsx --max-warnings 0",
+    "lint": "pnpm exec eslint src --ext .ts,.tsx --max-warnings 0",
+    "lint:fix": "pnpm exec eslint src --ext .ts,.tsx --fix",
     "clean": "rm -rf dist coverage"
   },
   "dependencies": {
