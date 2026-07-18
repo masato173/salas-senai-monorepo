@@ -8,6 +8,7 @@
     "seed": "node_modules/.bin/ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
   },
   "scripts": {
+    "postinstall": "prisma generate",
     "prebuild": "rimraf dist tsconfig.build.tsbuildinfo tsconfig.tsbuildinfo",
     "build": "node node_modules/typescript/bin/tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
