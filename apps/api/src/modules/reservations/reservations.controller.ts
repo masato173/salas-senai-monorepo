@@ -20,6 +20,7 @@ import { UpdateReservationSelectedDto } from './dtos/update-reservation-selected
 import { Roles } from '../../common/decorators/roles.decorator';
 import type { RequestUser } from '../auth/strategies/jwt.strategy';
 import type { Reservation } from '@prisma/client';
+import { CreateReservationDto } from './dtos/create-reservation.dto';
 import { CreateReservationRangeDto } from './dtos/create-reservation-range.dto';
 
 interface AuthenticatedRequest {
@@ -56,6 +57,16 @@ export class ReservationsController {
   @Get(':id')
   findOne(@Param('id') id: string): Promise<Reservation> {
     return this.reservationsService.findOne(id);
+  }
+
+  @Roles(Role.PROFESSOR, Role.COORDENADOR, Role.ADMIN)
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  create(
+    @Body() dto: CreateReservationDto,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<Reservation> {
+    return this.reservationsService.create(dto, req.user);
   }
 
   @Roles(Role.PROFESSOR, Role.COORDENADOR, Role.ADMIN)
