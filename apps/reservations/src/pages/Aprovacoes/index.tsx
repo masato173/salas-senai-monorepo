@@ -1,12 +1,10 @@
 import { useMemo, useState, useCallback } from 'react';
 import { AlertCircle } from 'lucide-react';
-import { createAppsScriptService } from '../../services/appsScript';
 import { createNestjsApiService } from '../../services/nestjsApiService';
 import { usePendingReservations } from '../../hooks/usePendingReservations';
 import { useRealtimeSocket } from '../../hooks/useRealtimeSocket';
 import { useApproveReservation } from '../../hooks/useApproveReservation';
 import { useRejectReservation } from '../../hooks/useRejectReservation';
-import { APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN } from '../../config';
 import { StatusToggle, type ApprovalMode } from './StatusToggle';
 import { SearchBar } from './SearchBar';
 import { ReservationApprovalCard } from './ReservationApprovalCard';
@@ -18,10 +16,7 @@ interface InFlight {
 }
 
 export default function AprovacoesPage(): JSX.Element {
-  const service = useMemo(() => {
-    const appsScript = createAppsScriptService({ url: APPS_SCRIPT_URL, token: APPS_SCRIPT_TOKEN });
-    return createNestjsApiService(appsScript);
-  }, []);
+  const service = useMemo(() => createNestjsApiService(), []);
 
   const [mode, setMode] = useState<ApprovalMode>('PENDING');
   const [search, setSearch] = useState('');

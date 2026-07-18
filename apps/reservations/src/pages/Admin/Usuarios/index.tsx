@@ -1,11 +1,9 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { Users, Search, RefreshCw, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
-import { createAppsScriptService } from '../../../services/appsScript';
 import { createNestjsApiService } from '../../../services/nestjsApiService';
 import { useListUsers } from '../../../hooks/useListUsers';
 import { useUpdateUser } from '../../../hooks/useUpdateUser';
 import type { AdminUser, UserListParams } from '../../../types';
-import { APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN } from '../../../config';
 
 // ─────────────────────────────────────────────────────────────
 // AdminUsuariosPage — F6.7
@@ -280,10 +278,7 @@ function SkeletonRows(): JSX.Element {
 
 // ─── Page ─────────────────────────────────────────────────────
 export default function AdminUsuariosPage(): JSX.Element {
-  const service = useMemo(() => {
-    const fallback = createAppsScriptService({ url: APPS_SCRIPT_URL, token: APPS_SCRIPT_TOKEN });
-    return createNestjsApiService(fallback);
-  }, []);
+  const service = useMemo(() => createNestjsApiService(), []);
 
   const { data, status, error, fetch } = useListUsers(service);
   const {

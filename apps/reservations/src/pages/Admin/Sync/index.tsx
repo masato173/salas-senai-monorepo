@@ -1,10 +1,8 @@
 import { useMemo, useCallback, useState } from 'react';
 import { RefreshCw, CheckCircle2, AlertCircle, Clock, Database, Zap } from 'lucide-react';
-import { createAppsScriptService } from '../../../services/appsScript';
 import { createNestjsApiService } from '../../../services/nestjsApiService';
 import { useTriggerSync } from '../../../hooks/useTriggerSync';
 import { useSyncHistory } from '../../../hooks/useSyncHistory';
-import { APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN } from '../../../config';
 import type { AuditLog } from '../../../types';
 import type { SyncResult } from '@salas-senai/shared';
 
@@ -163,10 +161,7 @@ function HistoryRow({ log, isLast }: { log: AuditLog; isLast: boolean }): JSX.El
 
 // ─── Página principal ─────────────────────────────────────────
 export default function AdminSyncPage(): JSX.Element {
-  const service = useMemo(() => {
-    const appsScript = createAppsScriptService({ url: APPS_SCRIPT_URL, token: APPS_SCRIPT_TOKEN });
-    return createNestjsApiService(appsScript);
-  }, []);
+  const service = useMemo(() => createNestjsApiService(), []);
 
   const {
     execute,

@@ -1,6 +1,5 @@
 import React, { useMemo, useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollText, RefreshCw, AlertCircle } from 'lucide-react';
-import { createAppsScriptService } from '../../../services/appsScript';
 import { createNestjsApiService } from '../../../services/nestjsApiService';
 import { useAuditLogs } from '../../../hooks/useAuditLogs';
 import { DataTable } from '../../../components/DataTable';
@@ -8,7 +7,6 @@ import type { Column } from '../../../components/DataTable';
 import { JsonTree } from '../../../components/JsonTree';
 import { Pagination } from '../../../components/Pagination';
 import type { AuditLog, AuditQuery } from '../../../types';
-import { APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN } from '../../../config';
 
 // ─────────────────────────────────────────────────────────────
 // AdminAuditoriaPage — F6.4
@@ -218,10 +216,7 @@ function ExpandedRow({ row }: { row: AuditLog }): JSX.Element {
 // ─── Página principal ─────────────────────────────────────────
 
 export default function AdminAuditoriaPage(): JSX.Element {
-  const service = useMemo(() => {
-    const appsScript = createAppsScriptService({ url: APPS_SCRIPT_URL, token: APPS_SCRIPT_TOKEN });
-    return createNestjsApiService(appsScript);
-  }, []);
+  const service = useMemo(() => createNestjsApiService(), []);
 
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);

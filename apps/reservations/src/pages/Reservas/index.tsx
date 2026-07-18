@@ -38,7 +38,7 @@ export default function ReservasPage() {
   // fetchSchedule e operações de grupo ainda delegam ao Apps Script (fallback).
   const service = useMemo(() => {
     const appsScript = createAppsScriptService({ url: APPS_SCRIPT_URL, token: APPS_SCRIPT_TOKEN });
-    return BACKEND_DRIVER_ENABLED ? createNestjsApiService(appsScript) : appsScript;
+    return BACKEND_DRIVER_ENABLED ? createNestjsApiService() : appsScript;
   }, []);
 
   // Lista de reservas pro calendário (auto-fetch no mount via hook default).

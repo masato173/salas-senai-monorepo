@@ -1,12 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createNestjsApiService, clearRoomCache } from '../nestjsApiService';
 import { useAuthStore } from '../../store/authStore';
-import { createAppsScriptService } from '../appsScript';
-
-// AppsScriptService não é exportado por appsScript.ts — mesmo padrão do
-// arquivo testado: shape derivado de ReturnType<typeof createAppsScriptService>.
-type AppsScriptService = ReturnType<typeof createAppsScriptService>;
-
 // Mock do apiClient — isolado do fetch real
 vi.mock('../apiClient', () => ({
   apiFetch: vi.fn(),
@@ -24,18 +18,6 @@ vi.mock('../apiClient', () => ({
 
 import { apiFetch, ApiError } from '../apiClient';
 const mockApiFetch = apiFetch as ReturnType<typeof vi.fn>;
-
-// Fallback mínimo para métodos não migrados
-const fallback: AppsScriptService = {
-  fetchSchedule: vi.fn(),
-  createReservation: vi.fn(),
-  createReservationRange: vi.fn(),
-  listReservations: vi.fn(),
-  cancelReservation: vi.fn(),
-  updateReservation: vi.fn(),
-  updateReservationGroup: vi.fn(),
-  updateReservationSelected: vi.fn(),
-};
 
 const MOCK_ROOMS = [
   { id: 'r-603', name: '603 Sala' },
@@ -87,7 +69,7 @@ describe('nestjsApiService', () => {
     it('mapeia reservas NestJS para BackendEnvelope com shape correto', async () => {
       mockApiFetch.mockResolvedValue([MOCK_NEST_RESERVATION]);
 
-      const svc = createNestjsApiService(fallback);
+      const svc = createNestjsApiService();
       const result = await svc.listReservations();
 
       expect(result.ok).toBe(true);
@@ -105,24 +87,24 @@ describe('nestjsApiService', () => {
 
     it('PENDING preserva status PENDING', async () => {
       mockApiFetch.mockResolvedValue([{ ...MOCK_NEST_RESERVATION, status: 'PENDING' }]);
-      const result = await createNestjsApiService(fallback).listReservations();
+      const result = await createNestjsApiService().listReservations();
       expect(result.data?.reservations[0]?.status).toBe('PENDING');
     });
     it('APPROVED preserva status APPROVED', async () => {
       mockApiFetch.mockResolvedValue([{ ...MOCK_NEST_RESERVATION, status: 'APPROVED' }]);
-      const result = await createNestjsApiService(fallback).listReservations();
+      const result = await createNestjsApiService().listReservations();
       expect(result.data?.reservations[0]?.status).toBe('APPROVED');
     });
 
     it('CANCELLED → CANCELLED no status', async () => {
       mockApiFetch.mockResolvedValue([{ ...MOCK_NEST_RESERVATION, status: 'CANCELLED' }]);
-      const result = await createNestjsApiService(fallback).listReservations();
+      const result = await createNestjsApiService().listReservations();
       expect(result.data?.reservations[0]?.status).toBe('CANCELLED');
     });
 
     it('retorna BackendEnvelope de erro em falha de rede', async () => {
       mockApiFetch.mockRejectedValue(new ApiError(500, 'Erro interno'));
-      const result = await createNestjsApiService(fallback).listReservations();
+      const result = await createNestjsApiService().listReservations();
       expect(result.ok).toBe(false);
       expect(result.error?.code).toBe('INTERNAL');
     });
@@ -151,7 +133,7 @@ describe('nestjsApiService', () => {
       mockApiFetch
         .mockResolvedValueOnce(MOCK_ROOMS) // GET /rooms
         .mockResolvedValueOnce(SUCCESS_POST); // POST /reservations
-      const result = await createNestjsApiService(fallback).createReservation(REQ);
+      const result = await createNestjsApiService().createReservation(REQ);
       expect(result.ok).toBe(true);
       expect(result.data?.sala).toBe('603 Sala');
       expect(result.data?.professor).toBe('Prof. Teste'); // do authStore
@@ -162,7 +144,7 @@ describe('nestjsApiService', () => {
         .mockResolvedValueOnce(MOCK_ROOMS) // GET /rooms (1ª criação)
         .mockResolvedValueOnce(SUCCESS_POST) // POST (1ª criação)
         .mockResolvedValueOnce(SUCCESS_POST); // POST (2ª criação — sem GET /rooms)
-      const svc = createNestjsApiService(fallback);
+      const svc = createNestjsApiService();
       await svc.createReservation(REQ);
       await svc.createReservation(REQ);
       const getCalls = mockApiFetch.mock.calls.filter(c => (c[0] as string) === '/rooms');
@@ -171,7 +153,7 @@ describe('nestjsApiService', () => {
 
     it('retorna erro VALIDATION se sala não encontrada no cache', async () => {
       mockApiFetch.mockResolvedValueOnce(MOCK_ROOMS); // GET /rooms
-      const result = await createNestjsApiService(fallback).createReservation({
+      const result = await createNestjsApiService().createReservation({
         ...REQ,
         payload: { ...REQ.payload, sala: 'Sala Inexistente' },
       });
@@ -183,7 +165,7 @@ describe('nestjsApiService', () => {
       mockApiFetch
         .mockResolvedValueOnce(MOCK_ROOMS) // GET /rooms
         .mockRejectedValueOnce(new ApiError(409, 'Sala já reservada neste horário.'));
-      const result = await createNestjsApiService(fallback).createReservation(REQ);
+      const result = await createNestjsApiService().createReservation(REQ);
       expect(result.ok).toBe(false);
       expect(result.error?.code).toBe('CONFLICT');
     });
@@ -196,7 +178,7 @@ describe('nestjsApiService', () => {
         .mockResolvedValueOnce(MOCK_NEST_RESERVATION) // GET /:id
         .mockResolvedValueOnce(null); // DELETE /:id
 
-      const result = await createNestjsApiService(fallback).cancelReservation({
+      const result = await createNestjsApiService().cancelReservation({
         userEmail: 'prof@senai.edu',
         payload: { id: 'res-1' },
       });
@@ -210,7 +192,7 @@ describe('nestjsApiService', () => {
 
     it('404 no GET → NOT_FOUND no error.code', async () => {
       mockApiFetch.mockRejectedValueOnce(new ApiError(404, 'Reserva não encontrada.'));
-      const result = await createNestjsApiService(fallback).cancelReservation({
+      const result = await createNestjsApiService().cancelReservation({
         userEmail: 'prof@senai.edu',
         payload: { id: 'nao-existe' },
       });
@@ -223,21 +205,13 @@ describe('nestjsApiService', () => {
   describe('fetchSchedule (F8.6 — NestJS direto)', () => {
     it('chama apiFetch em /schedules', async () => {
       mockApiFetch.mockResolvedValue({ registros: [], turnoMap: {} });
-      await createNestjsApiService(fallback).fetchSchedule();
+      await createNestjsApiService().fetchSchedule();
       expect(mockApiFetch).toHaveBeenCalledWith('/schedules');
-    });
-
-    it('nao delega ao fallback quando NestJS responde', async () => {
-      mockApiFetch.mockResolvedValue({ registros: [], turnoMap: {} });
-      await createNestjsApiService(fallback).fetchSchedule();
-      expect(fallback.fetchSchedule).not.toHaveBeenCalled();
     });
 
     it('lanca erro quando apiFetch falha', async () => {
       mockApiFetch.mockRejectedValue(new Error('Falha de rede'));
-      await expect(createNestjsApiService(fallback).fetchSchedule()).rejects.toThrow(
-        'Falha de rede',
-      );
+      await expect(createNestjsApiService().fetchSchedule()).rejects.toThrow('Falha de rede');
     });
   });
 });

@@ -1,10 +1,8 @@
 import { useMemo, useState, useEffect, useCallback } from 'react';
 import { HeartPulse, RefreshCw, Activity } from 'lucide-react';
-import { createAppsScriptService } from '../../../services/appsScript';
 import { createNestjsApiService } from '../../../services/nestjsApiService';
 import { useSystemHealth } from '../../../hooks/useSystemHealth';
 import type { HealthStatus } from '../../../hooks/useSystemHealth';
-import { APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN } from '../../../config';
 
 // ─────────────────────────────────────────────────────────────
 // AdminHealthPage — F6.8
@@ -118,10 +116,7 @@ function ServiceCard({
 }
 
 export default function AdminHealthPage(): JSX.Element {
-  const service = useMemo(() => {
-    const appsScript = createAppsScriptService({ url: APPS_SCRIPT_URL, token: APPS_SCRIPT_TOKEN });
-    return createNestjsApiService(appsScript);
-  }, []);
+  const service = useMemo(() => createNestjsApiService(), []);
 
   const { data, status, refetch } = useSystemHealth(service, { refreshInterval: 15_000 });
 

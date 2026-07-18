@@ -14,10 +14,8 @@ import {
   ScrollText,
   Users,
 } from 'lucide-react';
-import { createAppsScriptService } from '../../../services/appsScript';
 import { createNestjsApiService } from '../../../services/nestjsApiService';
 import { useAdminDashboard } from '../../../hooks/useAdminDashboard';
-import { APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN } from '../../../config';
 import type { AdminDashboardData } from '../../../hooks/useAdminDashboard';
 
 // ─── Utilitários ──────────────────────────────────────────────
@@ -459,10 +457,7 @@ function DashboardContent({
 // ─── Página principal ─────────────────────────────────────────
 
 export default function AdminDashboardPage(): JSX.Element {
-  const service = useMemo(() => {
-    const appsScript = createAppsScriptService({ url: APPS_SCRIPT_URL, token: APPS_SCRIPT_TOKEN });
-    return createNestjsApiService(appsScript);
-  }, []);
+  const service = useMemo(() => createNestjsApiService(), []);
 
   const { data, status, error, refetch } = useAdminDashboard(service);
 

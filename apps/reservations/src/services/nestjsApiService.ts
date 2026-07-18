@@ -2,23 +2,28 @@ import { apiFetch } from './apiClient';
 import type { PaginatedResponse, AuditLog, AuditQuery, AdminUser, UserListParams } from '../types';
 import type { SyncResult } from '@salas-senai/shared';
 import { useAuthStore, selectUser } from '../store/authStore';
-import { createAppsScriptService } from './appsScript';
+// F8.9 — createAppsScriptService removido: NestJS é fonte única de verdade.
 import type {
   BackendEnvelope,
   BackendError,
   BackendErrorCode,
   CancelReservationRequest,
   CancelReservationResponse,
+  CreateReservationRangeRequest,
+  CreateReservationRangeResponse,
   CreateReservationRequest,
   CreateReservationResponse,
   CreatedReservationRow,
   ListReservationsOptions,
   ListReservationsResponse,
   ScheduleResult,
-  UpdateReservationResponse,
+  UpdateReservationGroupRequest,
   UpdateReservationGroupResponse,
+  UpdateReservationRequest,
+  UpdateReservationResponse,
+  UpdateReservationSelectedRequest,
   UpdateReservationSelectedResponse,
-} from './appsScript';
+} from './apiTypes';
 
 // ─────────────────────────────────────────────────────────────
 // nestjsApiService — F5.3
@@ -36,10 +41,23 @@ import type {
 // F5.5 e F5.6 apenas trocam a instância nos orquestradores.
 // ─────────────────────────────────────────────────────────────
 
-// AppsScriptService não é exportado por appsScript.ts (interface interna ao
-// módulo). Mesmo padrão já usado em EditSelectedView.tsx / ReservationDetailsModal.tsx:
-// o objeto construído por createAppsScriptService já satisfaz este shape.
-type AppsScriptService = ReturnType<typeof createAppsScriptService>;
+// F8.9 — Interface explícita (antes derivada via ReturnType de createAppsScriptService).
+interface AppsScriptService {
+  fetchSchedule(): Promise<ScheduleResult>;
+  createReservation(req: CreateReservationRequest): Promise<CreateReservationResponse>;
+  createReservationRange(
+    req: CreateReservationRangeRequest,
+  ): Promise<CreateReservationRangeResponse>;
+  listReservations(options?: ListReservationsOptions): Promise<ListReservationsResponse>;
+  cancelReservation(req: CancelReservationRequest): Promise<CancelReservationResponse>;
+  updateReservation(req: UpdateReservationRequest): Promise<UpdateReservationResponse>;
+  updateReservationGroup(
+    req: UpdateReservationGroupRequest,
+  ): Promise<UpdateReservationGroupResponse>;
+  updateReservationSelected(
+    req: UpdateReservationSelectedRequest,
+  ): Promise<UpdateReservationSelectedResponse>;
+}
 
 // ─── Tipos internos (NestJS response shape) ──────────────────
 
@@ -224,9 +242,7 @@ export function clearRoomCache(): void {
 }
 
 // ─── Factory ──────────────────────────────────────────────────
-export function createNestjsApiService(
-  _fallback: AppsScriptService,
-): AppsScriptService & ReservationAdminApi {
+export function createNestjsApiService(): AppsScriptService & ReservationAdminApi {
   return {
     // ── Migrado: GET /schedules ──────────────────────────────
     // Apps Script não é mais chamado para aulas após F5.7.

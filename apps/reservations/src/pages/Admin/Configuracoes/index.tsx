@@ -1,9 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Settings, Sun, Moon, RefreshCw, Server, Database, Info } from 'lucide-react';
-import { createAppsScriptService } from '../../../services/appsScript';
 import { createNestjsApiService } from '../../../services/nestjsApiService';
-import { APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN } from '../../../config';
 
 // ─────────────────────────────────────────────────────────────
 // AdminConfiguracoesPage — F6.8
@@ -64,10 +62,7 @@ function SectionCard({
 }
 
 export default function AdminConfiguracoesPage(): JSX.Element {
-  const service = useMemo(() => {
-    const appsScript = createAppsScriptService({ url: APPS_SCRIPT_URL, token: APPS_SCRIPT_TOKEN });
-    return createNestjsApiService(appsScript);
-  }, []);
+  const service = useMemo(() => createNestjsApiService(), []);
 
   const [localTheme, setLocalTheme] = useState<'light' | 'dark'>(() => {
     const t = document.documentElement.dataset['theme'];

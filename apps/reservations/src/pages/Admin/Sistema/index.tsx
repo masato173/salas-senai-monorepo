@@ -1,10 +1,8 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { Server, RefreshCw, Database, Wifi, Cpu } from 'lucide-react';
-import { createAppsScriptService } from '../../../services/appsScript';
 import { createNestjsApiService } from '../../../services/nestjsApiService';
 import { useSystemHealth } from '../../../hooks/useSystemHealth';
 import type { HealthStatus } from '../../../hooks/useSystemHealth';
-import { APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN } from '../../../config';
 
 // ─────────────────────────────────────────────────────────────
 // AdminSistemaPage — F6.6
@@ -300,10 +298,7 @@ function CountdownBar({ seconds, total }: { seconds: number; total: number }): J
 
 // ─── Página principal ─────────────────────────────────────────
 export default function AdminSistemaPage(): JSX.Element {
-  const service = useMemo(() => {
-    const appsScript = createAppsScriptService({ url: APPS_SCRIPT_URL, token: APPS_SCRIPT_TOKEN });
-    return createNestjsApiService(appsScript);
-  }, []);
+  const service = useMemo(() => createNestjsApiService(), []);
 
   const { data, status, error, refetch } = useSystemHealth(service, {
     autoFetch: true,

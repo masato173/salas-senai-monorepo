@@ -35,7 +35,7 @@ export function DashboardPage(): JSX.Element {
   // listReservations. fetchSchedule ainda delega ao Apps Script (fallback).
   const service = useMemo(() => {
     const appsScript = createAppsScriptService({ url: APPS_SCRIPT_URL, token: APPS_SCRIPT_TOKEN });
-    return BACKEND_DRIVER_ENABLED ? createNestjsApiService(appsScript) : appsScript;
+    return BACKEND_DRIVER_ENABLED ? createNestjsApiService() : appsScript;
   }, []);
   const schedule = useSchedule(service);
   const list = useListReservations(service);
