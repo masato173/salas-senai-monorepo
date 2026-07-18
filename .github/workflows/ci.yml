@@ -40,8 +40,10 @@ jobs:
       - name: Typecheck (backend)
         run: pnpm --filter @salas-senai/api build
 
-      - name: Lint
-        run: pnpm lint
+      - name: Lint (frontend)
+        run: pnpm --filter @salas-senai/reservations lint
+      - name: Lint (backend)
+        run: pnpm --filter @salas-senai/api lint
 
       - name: Unit Tests
         run: pnpm --filter @salas-senai/reservations exec vitest run --no-coverage
