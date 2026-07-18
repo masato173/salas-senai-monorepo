@@ -97,17 +97,19 @@ jobs:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
 
       - name: Start backend
-        run: pnpm --filter @salas-senai/api start &
+        working-directory: apps/api
+        run: node dist/main.js &
         env:
           PORT: 3000
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
           APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
           APPS_SCRIPT_TOKEN: ${{ secrets.APPS_SCRIPT_TOKEN }}
 
       - name: Wait for backend
-        run: npx wait-on http://localhost:3000/health --timeout 30000
+        run: npx wait-on http://localhost:3000/health --timeout 60000
 
       - name: E2E tests
         run: pnpm test:e2e
