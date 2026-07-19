@@ -8,6 +8,8 @@ export const envSchema = z.object({
   // Apps Script — usado pelo SyncModule (POST /sync/schedules)
   APPS_SCRIPT_URL: z.string().url().optional(),
   APPS_SCRIPT_TOKEN: z.string().optional(),
+  // CORS — lista de origens separada por vírgula (ex.: "https://app.exemplo.com")
+  CORS_ORIGIN: z.string().optional(),
   JWT_SECRET: z.string().min(32),
   JWT_REFRESH_SECRET: z.string().min(32),
   JWT_EXPIRES_IN: z.string().default('15m'),

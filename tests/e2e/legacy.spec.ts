@@ -5,7 +5,9 @@ import { test, expect } from '@playwright/test';
 
 const BASE_URL = process.env.BASE_URL ?? 'https://masato173.github.io/salas-senai/';
 
-test.describe('Sistema legado — regressão', () => {
+// F9.1 — Sistema legado descontinuado após migração F8 para PostgreSQL.
+// Manter como referência histórica. Remover fisicamente em F9.7.
+test.describe.skip('Sistema legado — regressão', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto(BASE_URL);
     // Aguarda os dados carregarem (status muda de loading para ok)

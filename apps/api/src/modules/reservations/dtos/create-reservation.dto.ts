@@ -1,4 +1,5 @@
-import { IsString, IsNotEmpty, IsOptional, Matches, MaxLength } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, Matches, MaxLength, Validate } from 'class-validator';
+import { IsNotPastDateConstraint } from '../validators/is-not-past-date.validator';
 
 export class CreateReservationDto {
   @IsString()
@@ -7,6 +8,7 @@ export class CreateReservationDto {
 
   @IsString()
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'date deve estar no formato YYYY-MM-DD' })
+  @Validate(IsNotPastDateConstraint)
   date!: string;
 
   @IsString()

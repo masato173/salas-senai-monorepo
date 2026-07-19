@@ -21,3 +21,6 @@ apps/reservations/coverage/
 
 # Backups locais
 *.bak-*
+
+# Variáveis de ambiente de teste (credenciais E2E)
+.env.test

@@ -15,8 +15,14 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
+  // F9.1 — origens CORS configuráveis via CORS_ORIGIN (lista separada por vírgula).
+  // Fallback preserva o comportamento local: dev server (5173) e preview (4173).
+  const corsOrigins = process.env['CORS_ORIGIN']
+    ? process.env['CORS_ORIGIN'].split(',').map(o => o.trim())
+    : ['http://localhost:5173', 'http://localhost:4173'];
+
   app.enableCors({
-    origin: ['http://localhost:5173', 'http://localhost:4173'],
+    origin: corsOrigins,
     credentials: true,
   });
 

@@ -26,8 +26,10 @@ test.describe('Portal Admin', () => {
     await expect(adminPage.getByRole('heading', { name: 'Sistema' })).toBeVisible({
       timeout: 15_000,
     });
-    // Status API deve aparecer (Online ou Offline)
-    await expect(adminPage.getByText(/Online|Offline|Desconhecido/)).toBeVisible({
+    // Status API deve aparecer (Online ou Offline).
+    // .first() é necessário: a página tem 3+ badges de status (API, Banco de
+    // Dados, WebSocket "Desconhecido") — sem ele, strict mode violation.
+    await expect(adminPage.getByText(/Online|Offline|Desconhecido/).first()).toBeVisible({
       timeout: 15_000,
     });
   });
@@ -35,7 +37,9 @@ test.describe('Portal Admin', () => {
   test('página /admin/sync exibe botão de sincronização', async ({ adminPage }) => {
     const admin = new AdminPage(adminPage);
     await admin.gotoSync();
-    await expect(adminPage.getByRole('button', { name: /sincronizar/i })).toBeVisible({
+    // Texto real do botão em pages/Admin/Sync/index.tsx: "Iniciar Sincronização"
+    // (/sincronizar/i não casa — "Sincronização" tem "ç", não "r", após "Sincroniza")
+    await expect(adminPage.getByRole('button', { name: 'Iniciar Sincronização' })).toBeVisible({
       timeout: 15_000,
     });
   });

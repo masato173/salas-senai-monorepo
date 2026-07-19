@@ -1,9 +1,8 @@
 import type { Page } from '@playwright/test';
 import { SidebarPage } from './SidebarPage';
-import { clearAuth } from '../fixtures/auth.fixture';
 
 // aria-label="Alternar tema" confirmado em AppLayout.tsx linha 218
-// Botão de logout não existe no AppLayout atual — clearAuth é o workaround.
+// Avatar do topbar: <a href="/perfil" title="Meu perfil"> — AppLayout.tsx linhas 228-235
 
 export class AppPage {
   readonly sidebar: SidebarPage;
@@ -16,11 +15,12 @@ export class AppPage {
     return this.page.getByRole('button', { name: 'Alternar tema' });
   }
 
-  // [PROVISÓRIO] Simula logout via localStorage.clear().
-  // TODO: substituir por page.getByRole('button', { name: 'Sair' }).click()
-  //       quando botão de logout for implementado no AppLayout.tsx.
+  // Logout real: avatar do topbar → /perfil → botão "Sair da conta" → /login
+  // Botão confirmado em pages/Perfil/index.tsx ("Sair da conta" + clearAuth + navigate /login)
   async logout(): Promise<void> {
-    await clearAuth(this.page);
-    await this.page.reload();
+    await this.page.getByTitle('Meu perfil').click();
+    await this.page.waitForURL('/perfil');
+    await this.page.getByRole('button', { name: 'Sair da conta' }).click();
+    await this.page.waitForURL('/login');
   }
 }

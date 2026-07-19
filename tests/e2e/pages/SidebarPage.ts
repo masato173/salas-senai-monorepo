@@ -1,7 +1,10 @@
 import type { Page } from '@playwright/test';
 import { expect } from '@playwright/test';
 
-// aria-label="Navegação principal" confirmado em AppLayout.tsx linha 137
+// aria-label="Navegação principal" confirmado em AppLayout.tsx linha 138
+// Seção admin: label "Admin" (SECTION_LABELS em AppLayout.tsx), renderizada só para role ADMIN.
+// exact: true é obrigatório — sem ele, getByText('Admin') também casa os links
+// "Dashboard Admin" e "Configurações Admin" (strict mode violation).
 
 export class SidebarPage {
   constructor(private readonly page: Page) {}
@@ -19,10 +22,10 @@ export class SidebarPage {
   }
 
   async expectAdminSectionVisible(): Promise<void> {
-    await expect(this.nav.getByText('Admin')).toBeVisible();
+    await expect(this.nav.getByText('Admin', { exact: true })).toBeVisible();
   }
 
   async expectAdminSectionHidden(): Promise<void> {
-    await expect(this.nav.getByText('Admin')).not.toBeVisible();
+    await expect(this.nav.getByText('Admin', { exact: true })).not.toBeVisible();
   }
 }

@@ -1,8 +1,7 @@
 import { test, expect } from './fixtures/test.fixture';
 import { LoginPage } from './pages/LoginPage';
 import { AppPage } from './pages/AppPage';
-import { setupAdminSession, setupProfessorSession } from './helpers/auth';
-import { clearAuth } from './fixtures/auth.fixture';
+import { setupAdminSession } from './helpers/auth';
 
 const ADMIN_EMAIL = process.env['E2E_ADMIN_EMAIL'] ?? '';
 const ADMIN_PASSWORD = process.env['E2E_ADMIN_PASSWORD'] ?? '';
@@ -43,13 +42,12 @@ test.describe('Autenticação', () => {
     await expect(page).toHaveURL('/reservas');
   });
 
-  test('[PROVISÓRIO] logout limpa sessão e redireciona para login', async ({ page }) => {
-    // Botão de logout não existe no AppLayout ainda — workaround via clearAuth.
-    // TODO: substituir por botão UI quando implementado.
+  test('logout limpa sessão e redireciona para login', async ({ page }) => {
+    // Fluxo real: avatar do topbar → /perfil → botão "Sair da conta" → /login
     await setupAdminSession(page);
     await page.goto('/');
     const appPage = new AppPage(page);
-    await appPage.logout(); // clearAuth + reload
+    await appPage.logout();
     await page.waitForURL('/login');
     await expect(page).toHaveURL('/login');
   });
