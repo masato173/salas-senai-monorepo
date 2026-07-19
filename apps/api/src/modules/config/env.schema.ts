@@ -10,6 +10,8 @@ export const envSchema = z.object({
   APPS_SCRIPT_TOKEN: z.string().optional(),
   // CORS — lista de origens separada por vírgula (ex.: "https://app.exemplo.com")
   CORS_ORIGIN: z.string().optional(),
+  // Rate limiting — 'true' desliga o throttling (CI E2E faz polling em /auth/login)
+  THROTTLE_SKIP: z.enum(['true', 'false']).optional(),
   JWT_SECRET: z.string().min(32),
   JWT_REFRESH_SECRET: z.string().min(32),
   JWT_EXPIRES_IN: z.string().default('15m'),

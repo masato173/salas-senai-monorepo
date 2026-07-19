@@ -1,0 +1,142 @@
+name: CD
+
+# F9.3 — deploy automático: dispara somente quando o workflow CI conclui
+# com SUCESSO num push na master. Nunca roda em cima de CI vermelho.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [master]
+
+env:
+  NODE_VERSION: '22'
+  PNPM_VERSION: '8'
+
+# Necessário para publicar o build na branch gh-pages
+permissions:
+  contents: write
+
+# Nunca dois deploys simultâneos; um push novo espera o deploy anterior acabar
+concurrency:
+  group: cd-production
+  cancel-in-progress: false
+
+jobs:
+  # ── Job 0: pré-condições ──────────────────────────────────────
+  # Secrets não são acessíveis em `if` de job — este job os converte em
+  # outputs para que os jobs de deploy sejam PULADOS (não falhem) enquanto
+  # os secrets ainda não foram criados (ver docs/deploy.md).
+  preflight:
+    name: Verificar pré-condições
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      railway: ${{ steps.check.outputs.railway }}
+      pages: ${{ steps.check.outputs.pages }}
+    steps:
+      - name: Checar secrets de deploy
+        id: check
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          VITE_API_URL_PROD: ${{ secrets.VITE_API_URL_PROD }}
+        run: |
+          if [ -n "$RAILWAY_TOKEN" ]; then
+            echo "railway=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "railway=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::RAILWAY_TOKEN ausente — deploy do backend pulado (ver docs/deploy.md)"
+          fi
+          if [ -n "$VITE_API_URL_PROD" ]; then
+            echo "pages=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "pages=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::VITE_API_URL_PROD ausente — deploy do frontend pulado (ver docs/deploy.md)"
+          fi
+
+  # ── Job 1: backend → Railway ──────────────────────────────────
+  deploy-backend:
+    name: Deploy backend (Railway)
+    needs: preflight
+    if: needs.preflight.outputs.railway == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Deploya exatamente o commit que o CI validou (workflow_run
+          # faz checkout da branch default por padrão — não confiar nisso)
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Migrations ANTES do deploy do código: como as migrations do projeto
+      # são sempre aditivas (regra registrada), o código antigo continua
+      # funcionando durante a janela entre migration e novo deploy.
+      - name: Prisma migrate deploy (produção)
+        run: pnpm --filter @salas-senai/api exec prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      # O build acontece NO Railway (railway.json na raiz define build/start
+      # para o monorepo pnpm). O CI já validou build + testes neste SHA,
+      # por isso não há rebuild aqui. --ci: falha o workflow se o build
+      # do Railway falhar.
+      - name: Deploy no Railway
+        run: railway up --service salas-senai-api --ci
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+  # ── Job 2: frontend → GitHub Pages ────────────────────────────
+  deploy-frontend:
+    name: Deploy frontend (GitHub Pages)
+    needs: preflight
+    if: needs.preflight.outputs.pages == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # --base: o app é servido em https://masato173.github.io/salas-senai-monorepo/
+      # (o router usa basename: import.meta.env.BASE_URL para acompanhar)
+      - name: Build frontend (produção)
+        run: pnpm --filter @salas-senai/reservations run build -- --base=/salas-senai-monorepo/
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL_PROD }}
+
+      # SPA fallback: Pages serve 404.html para rotas desconhecidas; copiar o
+      # index faz refresh/deep-link (ex.: /reservas) cair no app React.
+      - name: SPA fallback (404.html)
+        run: cp apps/reservations/dist/index.html apps/reservations/dist/404.html
+
+      - name: Publicar na branch gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: apps/reservations/dist
+          publish_branch: gh-pages

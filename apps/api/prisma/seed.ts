@@ -1,6 +1,16 @@
 import { PrismaClient, RoomType } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
+// F9.2 — o seed cria usuários com senhas de teste conhecidas (role@senai2026).
+// Rodar contra o banco de produção seria uma falha de segurança grave: qualquer
+// pessoa com acesso a este repositório saberia as credenciais. Abortar sempre.
+if (process.env['NODE_ENV'] === 'production') {
+  throw new Error(
+    'Seed bloqueado: NODE_ENV=production. O seed cria usuários com senhas de ' +
+      'teste conhecidas e nunca deve rodar contra o banco de produção.',
+  );
+}
+
 const directUrl = process.env['DIRECT_URL'];
 if (!directUrl) throw new Error('DIRECT_URL nao configurada');
 const prisma = new PrismaClient({

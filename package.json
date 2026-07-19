@@ -41,11 +41,10 @@
   },
   "lint-staged": {
     "*.{ts,tsx,js}": [
-      "eslint --fix",
-      "prettier --write"
+      "npx prettier --write"
     ],
     "*.{json,md,css}": [
-      "prettier --write"
+      "npx prettier --write"
     ]
   },
   "commitlint": {

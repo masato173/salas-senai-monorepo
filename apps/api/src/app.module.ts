@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { LoggerModule } from 'nestjs-pino';
+import { randomUUID } from 'crypto';
 import { ConfigModule } from './modules/config/config.module';
 import { PrismaModule } from './modules/prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -17,8 +20,34 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 
+const isProduction = process.env['NODE_ENV'] === 'production';
+
 @Module({
   imports: [
+    // F9.4 — logging estruturado: JSON em produção, pino-pretty legível em dev.
+    // Cada requisição ganha um UUID (req.id) presente em todos os logs dela.
+    LoggerModule.forRoot({
+      pinoHttp: {
+        genReqId: () => randomUUID(),
+        redact: ['req.headers.authorization'],
+        ...(isProduction
+          ? {}
+          : {
+              transport: {
+                target: 'pino-pretty',
+                options: { singleLine: true, translateTime: 'SYS:HH:MM:ss' },
+              },
+            }),
+      },
+    }),
+    // F9.2 — rate limiting global: 100 req/min por IP (ttl em ms).
+    // Rotas sensíveis têm limite mais restrito via @Throttle (auth.controller).
+    // THROTTLE_SKIP=true desliga o throttling — usado no CI E2E, cujo helper
+    // wait-for-backend faz polling em POST /auth/login e estouraria o limite.
+    ThrottlerModule.forRoot({
+      throttlers: [{ name: 'default', ttl: 60_000, limit: 100 }],
+      skipIf: () => process.env['THROTTLE_SKIP'] === 'true',
+    }),
     ScheduleModule.forRoot(), // F7.2 — habilita @Cron em toda a aplicação
     ConfigModule,
     PrismaModule,
@@ -35,6 +64,10 @@ import { RolesGuard } from './common/guards/roles.guard';
     DashboardModule,
   ],
   providers: [
+    // Ordem importa: throttling roda ANTES da autenticação — brute force em
+    // /auth/login é barrado sem gastar CPU com bcrypt, e rotas @Public()
+    // continuam acessíveis (throttling e auth são mecanismos independentes).
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],

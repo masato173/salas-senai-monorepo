@@ -85,6 +85,8 @@ model Reservation {
   @@index([userId])
   @@index([status])
   @@index([groupId])
+  // F9.6 — availability/dashboard filtram por (date, status) sem roomId
+  @@index([date, status])
 }
 
 model AuditLog {

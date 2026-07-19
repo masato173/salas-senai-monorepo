@@ -107,6 +107,9 @@ jobs:
           JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
           APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
           APPS_SCRIPT_TOKEN: ${{ secrets.APPS_SCRIPT_TOKEN }}
+          # F9.2 — desliga o rate limiting no E2E: wait-for-backend faz polling
+          # em POST /auth/login e estouraria o limite de 5/min do @Throttle
+          THROTTLE_SKIP: 'true'
 
       - name: Wait for backend
         run: npx wait-on http://localhost:3000/health --timeout 60000
