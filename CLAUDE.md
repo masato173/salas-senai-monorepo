@@ -3,88 +3,97 @@
 ## O que é
 
 Sistema institucional de gestão e agendamento de salas do SENAI (Manaus).
-**Está EM PRODUÇÃO e EM USO REAL.** Não é protótipo, não é exemplo, não recriar do zero.
+**Está EM PRODUÇÃO e EM USO REAL.** Não recriar do zero.
 
-Objetivo: evoluir o sistema atual para uma plataforma SaaS de gestão de salas,
-reservas, calendário, disponibilidade, auditoria, aprovação e administração —
-**sem quebrar o legado**, de forma incremental.
+Plataforma SaaS de gestão de salas, reservas, calendário, disponibilidade,
+auditoria, aprovação e administração — evoluída incrementalmente a partir
+de um sistema legado em Google Sheets, **sem nunca quebrar o legado durante
+a transição**.
 
 ---
 
 ## Estado atual
 
-| Camada | Tecnologia | Estado |
-|---|---|---|
-| Frontend legado | HTML/CSS/JS + GitHub Pages | Funcional, em produção (somente leitura) |
-| Frontend novo | React + TypeScript + Vite + Zustand + React Query | Em construção |
-| Backend | Google Apps Script (Web App) | Funcional |
-| Dados | Google Sheets | Em produção |
+| Camada        | Tecnologia                                                                        | Estado                                                 |
+| ------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| Frontend      | React 18 + TypeScript + Vite + Zustand + React Query (hook manual) + FullCalendar | Em produção — 100% migrado, sem cliente Apps Script    |
+| Backend       | NestJS 10 + Prisma 5 + PostgreSQL (Supabase)                                      | Em produção — fonte única de verdade                   |
+| Realtime      | Socket.IO (namespace `/rooms`, JWT no handshake)                                  | Em produção                                            |
+| Auth          | JWT + Refresh Token + RBAC (PROFESSOR / COORDENADOR / ADMIN)                      | Em produção                                            |
+| Sync de aulas | Google Apps Script → `POST /sync/schedules` → tabela `Schedule`                   | Em produção — única função remanescente do Apps Script |
+| CI/CD         | GitHub Actions (validate + e2e) → Railway (backend) + GitHub Pages (frontend)     | Em produção                                            |
 
-**Features:**
-- Leitura de ocupação (legado): **completa**
-- Reserva única (criar 1 reserva): **completa e validada** (backend + service + hook + form)
-- Reserva em período (multi-dia, mesma sala/horário em vários dias): **em andamento**
-
----
-
-## Arquitetura-alvo (SaaS)
-
-Destino da evolução — **não construir tudo de uma vez**, migrar incrementalmente:
-
-- **Frontend:** React + TypeScript + Vite + Zustand + React Query + Tailwind + FullCalendar
-- **Backend:** NestJS + Prisma + PostgreSQL + Redis
-- **Realtime:** Socket.IO
-- **Auth:** JWT + Refresh Token + RBAC (PROFESSOR / COORDENADOR / ADMIN)
-- **Domínio:** User · Room · Reservation · AuditLog
-- **Módulos:** auth, rooms, reservations, schedules, availability, notifications, dashboard, users, audit
-- Validação de conflito em **transaction** no banco.
-
-Hoje o backend é Apps Script + Sheets. Ele será substituído gradualmente,
-**mantendo o contrato estável para o frontend** (o frontend não deve saber qual backend está por trás).
+O legado HTML/CSS/JS + Apps Script + Google Sheets como _backend de reservas_
+foi desativado no cutover oficial (ADR-003, F5.8). O Apps Script segue vivo
+hoje só como fonte de dados de aulas/turmas da planilha institucional
+(professores editam lá) — ver seção "Arquitetura atual".
 
 ---
 
-## Roadmap oficial
+## Arquitetura atual
 
-Migração incremental. **Cada item só inicia com o anterior estável; o legado nunca para de funcionar; nenhuma fase quebra a anterior.**
+```
+React (Vite, GitHub Pages)
+   │  JWT Bearer + refresh automático (apiClient.ts)
+   ▼
+NestJS (Railway)
+   │  Prisma
+   ▼
+PostgreSQL (Supabase)
+```
+
+Módulos reais do backend (`apps/api/src/app.module.ts`): `ConfigModule`,
+`PrismaModule`, `AuthModule`, `UsersModule`, `HealthModule`, `RoomsModule`,
+`ReservationsModule`, `AvailabilityModule`, `AuditModule`, `RealtimeModule`,
+`SyncModule`, `SchedulesModule`, `DashboardModule`, mais `ScheduleModule`
+(`@nestjs/schedule`, cron), `LoggerModule` (`nestjs-pino`) e `ThrottlerModule`
+(`@nestjs/throttler`) como infraestrutura transversal.
+
+**Exceção legítima e isolada:** `SyncModule` chama o Apps Script
+(`APPS_SCRIPT_URL`/`APPS_SCRIPT_TOKEN`) só para importar `Schedule` (aulas
+da planilha institucional) via `POST /sync/schedules` (ADMIN). Isso não é
+legado morto — é a fonte real de dados de aula, que continua sendo mantida
+na planilha pelos professores. Reservas, salas, usuários e auditoria **nunca**
+passam pelo Apps Script.
+
+---
+
+## Roadmap
 
 **✅ Concluído**
-- **F0 — Legado:** leitura de ocupação (HTML/CSS/JS + Apps Script + Sheets), filtros (turma/data/sala/mês/turno), paginação, proteção XSS.
-- **F1 — Frontend React:** estrutura Vite + TS + Zustand + React Query, roteamento, Dashboard exibindo o legado via iframe.
-- **F2 — Backend de reservas (Apps Script):** `doPost` + `LockService` + `checkConflicts` + idempotência; aba `Reservas`.
-- **Sprint 2 — Reserva única ponta-a-ponta:** service + hook + `ReservationForm` + página `/reservas`. Validada no navegador.
-- **Sprint 2.5 — Reserva em período** (multi-dia, mesma sala/horário; tudo-ou-nada; dias da semana escolhidos; limite 60 datas). 104/104 testes verdes, validada no navegador, 4 cleanups aplicados.
-- **Sprint 3 — Visualização (calendário) + cancelar.** FullCalendar v6 (mês/semana/dia, locale PT-BR, timeZone America/Manaus); `listReservations` (GET) + `cancelReservation` (POST) no backend; soft delete via status='CANCELLED'; owner validation por `createdBy`; idempotência state-based. Frontend: calendário lê via `useListReservations`, refetch automático após criar, modal de detalhes, cancelamento com confirmação inline + owner-check preventivo. 145/145 vitest, 11/11 PowerShell, validado no navegador ponta-a-ponta.
 
-**⏭️ Próximo (curto prazo)**
-- **Limpeza dos dados de teste na DEV** (reservas de 2030 do `test-sprint3.ps1` + testes manuais).
-- **Sprint 4 — Editar reserva:** revalidar conflito no backend; decidir comportamento ao editar uma reserva de um período (única data ou todas).
-- **(Opcional) 4.5 — Polish visual do calendário** com `/frontend-design`, escopado ao DS existente (voz via tipografia/microinterações, não cores novas).
+- **F0** — Legado (HTML/CSS/JS + Apps Script + Sheets): leitura de ocupação, funcional em produção.
+- **F1-F3** — Frontend React (Vite/TS/Zustand), estrutura de rotas, Dashboard.
+- **F4** — Backend NestJS completo: Auth, Users, Rooms, Reservations, Availability, Audit, Sync, Schedules, Realtime, Health, guards RBAC.
+- **F5** — Cutover oficial (ADR-003): frontend migrado 100% para NestJS; Apps Script deixa de ser backend de reservas.
+- **F6** — Portal de aprovações (COORDENADOR+) e shell administrativo (`/admin/*`).
+- **F7** — Remoção de `CURRENT_USER` hardcoded, cron de sync, cliente Socket.IO no frontend, testes E2E Playwright.
+- **F8** — Extração de tipos (`apiTypes.ts`), índice de performance em `Schedule`, dashboard via SQL.
+- **F9** — Produção e qualidade: Helmet + rate limiting, seed bloqueado em produção, CI/CD (Railway + GitHub Pages), logs estruturados (`nestjs-pino`), backup documentado, fix crítico de conflito em `createRange`, cliente Apps Script removido do frontend (F9.7), ESLint reativado com `root:true` (F9.8).
 
-**📦 Médio prazo**
-- Autenticação (login SENAI) + remover token do frontend (proxy / backend intermediário).
-- Aprovação de reservas (coordenador) + RBAC básico (PROFESSOR / COORDENADOR / ADMIN).
-- Notificações e realtime (Socket.IO).
+**⏭️ Próximos passos (em aberto)**
 
-**🎯 Longo prazo (arquitetura-alvo)**
-- Migração Apps Script → NestJS + Prisma + PostgreSQL, **mantendo o contrato do frontend**.
-- Redis (cache/filas), audit trail completo.
-- Dashboard administrativo, relatórios/exportação, analytics.
-- PWA, dark mode, preparação multi-tenant.
+- `createRange` não valida existência/disponibilidade da sala (`room.findUnique` + `available`) como `create()` valida — gap reportado no F9.6, não corrigido (fora de escopo daquela missão).
+- `GET /reservations` sem paginação — aceitável hoje; adicionar quando a tabela crescer (mudaria o contrato de resposta, precisa de decisão explícita).
+- `AuditLog` cobre só ações de `Reservation` (create/update/cancel/approve/reject) — ações administrativas de `Room` e `POST /sync/schedules` não são auditadas.
+- `apps/reservations/backend/codigo.gs*` (fontes históricas do Apps Script) — decidir se ainda precisam viver dentro do repo do frontend ou se migram para perto do `SyncModule`.
+- Autenticação institucional (SSO/LDAP) — pendência registrada desde a ADR-003, ainda não iniciada.
 
 ---
 
 ## REGRA ABSOLUTA
 
 **NUNCA:**
+
 - recriar o projeto do zero
 - remover funcionalidades existentes
-- quebrar Apps Script ou Google Sheets
-- alterar APIs/payloads silenciosamente
+- quebrar o sync com o Apps Script (`SyncModule`/`POST /sync/schedules`) sem decisão explícita — ele é a fonte real de dados de aula
+- alterar contratos de API do NestJS silenciosamente (nome/tipo de campo, formato de resposta, status HTTP)
 - remover compatibilidade
 - ignorar regressões, testes ou concorrência
 
 **SEMPRE:**
+
 1. analisar o contexto atual antes de mexer
 2. reutilizar o que já existe
 3. implementar incrementalmente
@@ -97,67 +106,270 @@ Se houver dúvida: **PARE, explique os trade-offs, não assuma silenciosamente.*
 
 ## O que conta como REGRESSÃO
 
-Regressão = qualquer comportamento que funcionava e **parou de funcionar** (ou mudou de resultado). Neste projeto, conta como regressão:
-
-- Leitura de ocupação do legado para de carregar ou retorna resultado diferente
-- Qualquer filtro (turma / data / sala / mês / turno) para de funcionar
-- Paginação, botão "Hoje", "Limpar" ou refresh quebram
-- `createReservation` (reserva única) falha ou muda o contrato de request/response
-- Conflito de horário deixa de ser detectado (overlap parcial/total/containment)
-- Idempotência para de funcionar (cria linha duplicada para o mesmo `clientRequestId`)
-- Um teste que passava passa a falhar
-- Contrato de API muda (nome/tipo de campo, formato de resposta) **sem versionar**
-- XSS deixa de ser sanitizado em dado externo
-- `setNumberFormat('@')` removido das colunas C/D/E
+- `GET /reservations`, `GET /availability`, `GET /schedules` ou `GET /dashboard` param de responder ou mudam o formato de resposta sem versionamento
+- Conflito de horário deixa de ser detectado em `create`, `update`, `createRange`, `updateGroup` ou `updateSelected` (overlap parcial/total/containment)
+- Idempotência do cancelamento (`DELETE /reservations/:id`) para de ser state-based (reserva já `CANCELLED` deve retornar sucesso, não erro)
+- Um teste que passava passa a falhar (frontend: Vitest; backend: Vitest unit)
+- `POST /sync/schedules` para de sincronizar `Schedule` corretamente
+- Rate limiting (`@Throttle`) ou Helmet somem de `main.ts`/`auth.controller.ts` sem decisão explícita
 - Tempo de resposta degrada de forma relevante
-
-**Regra:** nenhuma entrega pode introduzir regressão. Se uma mudança exigir quebrar um contrato, isso é uma **decisão explícita e documentada** — nunca silenciosa.
 
 ---
 
-## Protocolo OBRIGATÓRIO antes de qualquer alteração
+## Protocolo obrigatório antes de qualquer alteração
 
 1. Ler este `CLAUDE.md`.
 2. Ler os arquivos que serão tocados **e os que dependem deles**.
-3. Rodar os testes ANTES (baseline) e anotar quantos passam.
-4. Fazer a **análise de impacto** (seção abaixo).
-5. Confirmar em qual camada/feature a mudança entra e se respeita o legado.
+3. Rodar os testes ANTES (baseline).
+4. Fazer a análise de impacto: o que toca, quem depende, quebra contrato de API/schema, afeta concorrência (locks, race conditions), afeta performance, qual o plano de rollback.
+5. Confirmar em qual camada a mudança entra.
 6. Só então alterar — **mudança mínima necessária**.
 7. Rodar os testes DEPOIS e comparar com o baseline.
-8. Validar manualmente o caminho afetado (navegador / PowerShell).
+8. Validar manualmente o caminho afetado quando aplicável.
 
-Em caso de dúvida sobre escopo: **PARE e pergunte.** Nunca alterar contrato no escuro.
+Em caso de dúvida sobre escopo: **PARE e pergunte.**
 
 ---
 
-## Análise de impacto (responder ANTES de mexer)
+## Regra mais importante — conflito de horário
 
-- O que esta mudança toca? (arquivos, funções, contratos)
-- Quem depende disso? (legado, outras telas, backend)
-- Quebra algum contrato de API ou formato de dados?
-- Afeta concorrência? (locks, race conditions, reservas simultâneas)
-- Afeta performance? (mais leituras/escritas, lock segurado por mais tempo)
-- Qual é o plano de **rollback** se der errado?
+```ts
+const hasConflict = newStart < existingEnd && newEnd > existingStart;
+```
 
-Se a resposta a "quebra o legado?" for **sim**, reavaliar a abordagem antes de prosseguir.
+Implementada em `ConflictService.hasConflict` (`apps/api/src/modules/reservations/conflict.service.ts`),
+via query Prisma equivalente (`inicio: { lt: fim }`, `fim: { gt: inicio }`),
+considerando só reservas `PENDING`/`APPROVED` e não soft-deletadas.
+
+**Todos os métodos de escrita de `ReservationsService` que criam/movem uma
+reserva rodam dentro de `$transaction` com `pg_advisory_xact_lock(hashtext(roomId), hashtext(date))`
+seguido de `ConflictService.hasConflict`, antes do INSERT/UPDATE:**
+`create()`, `update()`, e — desde a correção do F9.6 — `createRange()`
+(uma `$transaction` **por data**, não uma única para o range inteiro, porque
+pgbouncer em transaction mode não suporta transactions longas; datas em
+conflito são puladas, não abortam o range todo). `updateGroup()` e
+`updateSelected()` também chamam `hasConflict()` por ocorrência, pulando
+as que conflitam.
+
+O frontend pode mostrar conflito como UX (otimista), mas **nunca é a única
+proteção** — a validação autoritativa é sempre no backend, dentro do lock.
+
+---
+
+## Backend NestJS (`apps/api`)
+
+### Módulos e guards globais
+
+Guards registrados como `APP_GUARD` em `app.module.ts`, nesta ordem:
+`ThrottlerGuard` → `JwtAuthGuard` → `RolesGuard`. Rotas `@Public()` pulam
+o `JwtAuthGuard`; rotas sem `@Roles(...)` passam livres no `RolesGuard`
+contanto que autenticadas; `ADMIN` sempre passa em qualquer `@Roles(...)`.
+
+### Schema Prisma (modelos reais — `apps/api/prisma/schema.prisma`)
+
+```
+User          id, name, email, passwordHash, role, active, deletedAt
+Room          id, name, type, capacity, floor, available
+Reservation   id, userId, roomId, groupId, date(string YYYY-MM-DD),
+              inicio, fim, status, turma, notes, clientRequestId, deletedAt
+              índices: [roomId,date] [userId] [status] [groupId] [date,status]
+AuditLog      id, action, entityType, entityId, userId, before, after, ip
+RefreshToken  id, userId, tokenHash, expiresAt, revokedAt
+Schedule      id, date, sala, turma, mes, turno, inicio, fim (sem FK p/ Room)
+
+enum Role               PROFESSOR | COORDENADOR | ADMIN
+enum RoomType            SALA_COMUM | LAB_GERAL | LAB_INFORMATICA | LAB_CLP
+                          | LAB_ELETRICA | LAB_SMT | LAB_ELETRONICA
+enum ReservationStatus  PENDING | APPROVED | REJECTED | CANCELLED
+```
+
+`Reservation.date`/`inicio`/`fim` são `String`, não `DateTime` — paridade
+com o legado Google Sheets, decisão travada desde F4.0.
+
+### Endpoints reais (confirmados nos controllers)
+
+```
+POST   /auth/login                @Public, @Throttle 5/60s
+POST   /auth/refresh              @Public, @Throttle 5/60s
+POST   /auth/logout               JWT
+
+GET    /health                    @Public
+
+GET    /rooms                     @Public
+GET    /rooms/admin/all           ADMIN
+GET    /rooms/:id                 @Public
+POST   /rooms                     ADMIN
+PATCH  /rooms/:id                 ADMIN
+DELETE /rooms/:id                 ADMIN (soft delete)
+
+GET    /reservations              JWT — filtros roomId, date, status, mine
+GET    /reservations/:id          JWT
+POST   /reservations              PROFESSOR | COORDENADOR | ADMIN
+POST   /reservations/range        PROFESSOR | COORDENADOR | ADMIN
+PATCH  /reservations/:id/status   COORDENADOR | ADMIN (APPROVED|REJECTED)
+PATCH  /reservations/group/:id    JWT (qualquer role autenticada)
+PATCH  /reservations/selected     JWT (qualquer role autenticada)
+PATCH  /reservations/:id          JWT (qualquer role autenticada)
+DELETE /reservations/:id          JWT — cancelamento (soft delete, idempotente)
+
+GET    /availability              @Public — date obrigatório, turno opcional
+GET    /schedules                 @Public
+GET    /dashboard                 @Public — date obrigatório
+
+POST   /sync/schedules            ADMIN — DELETE + INSERT batch 500, sem $transaction
+
+GET    /audit                     ADMIN — filtros entityType, entityId, userId,
+                                    action, from, to, page, limit
+
+GET    /users                     ADMIN — filtros role, search, isActive, page, limit
+PATCH  /users/:id/role            ADMIN
+PATCH  /users/:id/active          ADMIN
+
+WS     /rooms                     JWT no handshake (auth.token)
+       eventos: reservation.created/updated/approved/rejected/cancelled
+```
+
+---
+
+## Frontend React (`apps/reservations/src`)
+
+```
+main.tsx, config.ts, config/api.ts
+components/    dashboard/, calendar/, reservations/, ui/, DataTable.tsx,
+               Pagination.tsx, JsonTree.tsx
+hooks/         um hook por operação (useCreateReservation, useListReservations,
+               useCancelReservation, useCreateReservationRange, useApproveReservation,
+               useRejectReservation, usePendingReservations, useAuditLogs,
+               useListUsers, useUpdateUser, useSchedule, useAvailability,
+               useAvailabilityBackend, useDashboardStats, useSyncHistory,
+               useTriggerSync, useSystemHealth, useRealtimeSocket, useConflict, ...)
+layouts/       AppLayout.tsx, AdminLayout.tsx
+pages/         Dashboard, Reservas, Aprovacoes, Login, Salas, Turmas,
+               Agendamentos, Relatorios, Configuracoes, Perfil, NotFound,
+               Admin/{Dashboard,Usuarios,Permissoes,Auditoria,Sync,Sistema,
+               Configuracoes,Logs,Api,Health}
+router/        index.tsx, config.ts, ProtectedRoute.tsx, RouteLoader.tsx
+services/      apiClient.ts (JWT + refresh automático), apiTypes.ts
+               (fonte única de contratos), nestjsApiService.ts, availability.ts,
+               socketClient.ts, tokenStorage.ts
+store/         authStore.ts, reservationStore.ts (Zustand)
+validators/    conflict.ts, reservation.ts
+utils/         dateRange.ts, sanitize.ts
+```
+
+`apiTypes.ts` é a fonte única de verdade dos contratos (extraído do antigo
+`appsScript.ts` no F8.9; `appsScript.ts` foi deletado no F9.7 — não existe
+mais nenhum cliente Apps Script no frontend).
+
+### Padrão de hook
+
+```typescript
+export function useXxx(service: XxxService, options = {}): UseXxxResult {
+  const [status, setStatus] = useState<QueryStatus | MutationStatus>('idle');
+  const [error, setError] = useState<BackendError | null>(null);
+  const serviceRef = useRef(service); // evita stale closure
+  // query: useEffect mount-only + refetch explícito
+  // mutation: execute via useCallback
+}
+```
+
+Retry: só em falha de rede ou `error.code === 'INTERNAL'`, `maxRetries` default 2,
+mesmo `clientRequestId` em todas as tentativas de uma mutation.
+
+---
+
+## Segurança
+
+- **Helmet** (`app.use(helmet())` em `main.ts`) — headers de segurança HTTP padrão.
+- **Rate limiting** (`@nestjs/throttler`): 100 req/min por IP como default global
+  (`ThrottlerModule.forRoot`); `POST /auth/login` e `POST /auth/refresh` com limite
+  mais restrito de **5 req/min** via `@Throttle`. `THROTTLE_SKIP=true` desliga o
+  throttling — usado **só** no job E2E do CI (o helper de polling faria o login
+  estourar o limite); nunca usar em produção.
+- **Validação de data passada**: `IsNotPastDateConstraint` (UTC noon trick) aplicado
+  em `dateInicio` de `CreateReservationDto` e `CreateReservationRangeDto`.
+- **Seed bloqueado em produção**: `prisma/seed.ts` lança erro se `NODE_ENV=production`
+  — as senhas de teste (`role@senai2026`) nunca devem existir num banco real.
+- **CORS configurável** via `CORS_ORIGIN` (lista separada por vírgula); fallback
+  para `localhost:5173`/`4173` em dev.
+- **`ValidationPipe` global**: `whitelist`, `forbidNonWhitelisted`, `transform`.
+- Token do sync com Apps Script (`APPS_SCRIPT_TOKEN`) e segredos JWT nunca
+  commitados — só em `.env` local / secrets do Railway e GitHub Actions.
+- `app.set('trust proxy', 1)` — necessário atrás do proxy do Railway para que
+  o rate limiting por IP funcione corretamente (`X-Forwarded-For`).
+
+---
+
+## CI/CD
+
+**CI** (`.github/workflows/ci.yml`) — dispara em push/PR para `master`:
+
+- Job `validate`: instala deps, typecheck frontend, `prisma generate`,
+  typecheck backend (`build`), **lint frontend e backend** (reativado no
+  F9.8), testes unitários do frontend (Vitest), build do frontend.
+- Job `e2e` (depende de `validate`): build do backend, `prisma migrate deploy`,
+  sobe o backend com `THROTTLE_SKIP=true`, roda Playwright, upload do relatório
+  em caso de falha.
+
+**CD** (`.github/workflows/cd.yml`) — dispara via `workflow_run` do CI,
+só quando `conclusion == success`, na branch `master`:
+
+- Job `preflight`: checa se os secrets `RAILWAY_TOKEN`/`VITE_API_URL_PROD`
+  existem; se não, **pula** os deploys sem falhar o workflow.
+- Job `deploy-backend`: checkout do SHA validado pelo CI, `prisma migrate deploy`,
+  `railway up --service salas-senai-api --ci` (build definido por `railway.json`
+  na raiz — Nixpacks, `node apps/api/dist/main.js`, healthcheck `/health`).
+- Job `deploy-frontend`: build com `--base=/salas-senai-monorepo/` e
+  `VITE_API_URL` de produção, fallback SPA (`404.html`), publica na branch
+  `gh-pages` via `peaceiris/actions-gh-pages`.
+
+Deploy nunca acontece em cima de CI vermelho, e sempre no SHA exato validado.
+Detalhes de setup manual (Railway, secrets) em `docs/deploy.md`.
+
+---
+
+## Observabilidade
+
+- **Logs estruturados via `nestjs-pino`** (`LoggerModule.forRoot` em
+  `app.module.ts`, `app.useLogger(app.get(Logger))` em `main.ts`): JSON puro
+  em produção, `pino-pretty` legível em dev; cada requisição ganha um
+  `req.id` (UUID) presente em todos os logs dela; header `Authorization`
+  redigido.
+- Eventos de autenticação (`AuthService`) logados de forma estruturada —
+  sucesso/falha de login, refresh, logout — **nunca** senha nem token completo.
+- `ReservationsService.createRange` loga (`Logger.warn`) as datas puladas por
+  conflito — não fazem parte do contrato de resposta, só ficam rastreáveis no log.
+- `AuditLog` (tabela) registra quem/quando/o quê nas ações de `Reservation`
+  (create/update/delete/approve/reject) — ver "Próximos passos" para o gap
+  em ações de `Room`/`sync`.
+- Erros de resposta HTTP não seguem um envelope único do lado NestJS (usam
+  as exceptions padrão do Nest — `NotFoundException`, `ConflictException`,
+  etc.); o **frontend** normaliza para `BackendError { code, message }` em
+  `nestjsApiService.ts`.
 
 ---
 
 ## Regra anti-invenção — a IA NÃO inventa código
 
 A IA (Claude Code ou assistente) **NUNCA inventa**:
+
 - nomes de funções, métodos, variáveis, campos ou tipos que não existem no código
-- contratos de API, formatos de request/response ou nomes de campo (`dataInicio` **não** vira `startDate`)
+- contratos de API, formatos de request/response ou nomes de campo
 - helpers, módulos, bibliotecas ou imports não verificados
-- IDs, URLs, tokens, caminhos de arquivo, nomes de aba ou de planilha
+- IDs, URLs, tokens, caminhos de arquivo, nomes de módulo ou de tabela
 - estrutura de arquivos ou comportamento de função sem ter **lido o código real**
 
 **Antes de referenciar qualquer coisa, VERIFICAR que ela existe:**
+
 - ler o arquivo real (não assumir pelo nome)
 - confirmar a assinatura da função / o nome exato do campo
-- usar os contratos já validados (ver seção Backend e os tipos em `appsScript.ts`)
+- usar os contratos já validados: `apps/reservations/src/services/apiTypes.ts`
+  (frontend) e os DTOs/controllers/`schema.prisma` reais (backend)
 
-Se a informação não estiver disponível: **perguntar, ou marcar `// TODO` explícito** — nunca preencher a lacuna com suposição. Código inventado que "parece certo" é pior que um TODO honesto, porque esconde o bug até a integração.
+Se a informação não estiver disponível: **perguntar, ou marcar `// TODO`
+explícito** — nunca preencher a lacuna com suposição. Código inventado que
+"parece certo" é pior que um TODO honesto, porque esconde o bug até a
+integração.
 
 ---
 
@@ -165,149 +377,16 @@ Se a informação não estiver disponível: **perguntar, ou marcar `// TODO` exp
 
 Uma tarefa só está concluída quando **TODOS** forem verdadeiros:
 
-- [ ] compila sem erros
-- [ ] lint passa
-- [ ] todos os testes passam, **sem reduzir** a cobertura existente
-- [ ] **zero regressão** (todos os testes antigos seguem verdes)
-- [ ] tipagem válida (sem `any` desnecessário, imports válidos)
-- [ ] validado manualmente no caminho real (navegador / `Invoke-RestMethod`)
-- [ ] backend: validação **dentro do lock**, idempotência mantida, contrato preservado
-- [ ] **endpoint novo de Apps Script: colado no editor + redeploy Nova versão + teste PowerShell verde RODANDO.** "Gerado e auditado no repo" ≠ "publicado e funcionando". (Lição Sprint 3: o frontend foi construído contra um `listReservations` que existia no `.gs` do repo mas nunca tinha sido publicado no deploy — o calendário ficou vazio até o redeploy. Ao fatiar em etapas, a etapa de frontend NÃO começa antes de a etapa de backend estar publicada e testada.)
-- [ ] decisão técnica relevante registrada na tabela de Decisões
-
----
-
-## Regra mais importante — conflito de horário
-
-```js
-const hasConflict = newStart < existingEnd && newEnd > existingStart;
-```
-
-Toda validação de conflito é **autoritativa no backend**, dentro do `LockService`.
-O frontend pode mostrar conflito como UX (otimista), mas **nunca é a única proteção**.
-
-Cobrir: overlap parcial, overlap total, containment, múltiplas datas, race conditions, reservas simultâneas.
-
----
-
-## Horários (horário LIVRE, não fixo)
-
-Reservas permitidas em qualquer faixa dentro de **06:00 → 23:00**.
-O usuário escolhe: **data, sala, hora de início, hora de fim**.
-
-**NÃO usar horários fixos.** Turnos M/V/N são apenas **rótulos derivados** da hora de início
-(M = manhã, V = tarde, N = noite), usados para exibição — **não são restrições de horário**.
-
----
-
-## Planilhas (CRÍTICO — não confundir DEV com PRODUÇÃO)
-
-| Ambiente | Nome | ID | Regra |
-|---|---|---|---|
-| **PRODUÇÃO** | Controle das salas | `1m97CzLNYJlqTq3qECYtpGgeS_skIL0B3eoWNIx7edXk` | **NÃO TOCAR** — funcionários usam agora |
-| **DEV** | SENAI Salas - DEV copia | `1Y4DP1Q4nxx4BMwEoYFd7R673G8asaubM9-XzSrGUPLE` | Trabalhar aqui |
-
-Todo desenvolvimento e teste acontece na planilha **DEV**.
-
----
-
-## Backend (Apps Script)
-
-- Deploy: App da Web, executar como "eu", acesso "qualquer pessoa".
-- **Redeploy SEMPRE como Nova versão:** Implantar → Gerenciar implantações → lápis → Nova versão → Implantar. A URL `/exec` não muda.
-- URL/token: ver `apps/reservations/src/config.ts` (frontend) e `SPREADSHEET_ID` / `SECRET_TOKEN` no `codigo.gs`.
-
-**Fluxo de escrita (obrigatório):**
-```
-POST → doPost → LockService → validate → checkConflict → saveReservation → response
-```
-
-**Aba `Reservas` (colunas A–M):**
-```
-id | sala | data | inicio | fim | professor | turma | observacao | status | createdBy | createdAt | updatedAt | clientRequestId
-```
-
-- Idempotência por `clientRequestId` (criação); idempotência **state-based** para cancelamento (status já CANCELLED → ok).
-- Colunas C/D/E (data/inicio/fim) forçadas como texto via `setNumberFormat('@')` após `appendRow` — **não regredir** (Sheets converte "08:00"/"2026-12-10" em Date de 1899 ao reler, quebrando a comparação de conflito). O cancel atualiza só as colunas I (status) e L (updatedAt) via `setValue`, sem tocar C/D/E.
-- Códigos de erro padronizados: `CONFLICT`, `VALIDATION`, `LOCK_TIMEOUT`, `DUPLICATE`, `INTERNAL`, `NOT_FOUND`, `FORBIDDEN`.
-- **Latência de propagação do Sheets (característica conhecida, não bug):** após uma escrita (ex.: cancelar), um `refetch` imediato pode, raramente, ler o estado anterior por milissegundos antes de propagar. O refetch automático cobre o caso normal; o botão "Atualizar" é o fallback manual. Some quando migrar pro Postgres (leitura/escrita consistente).
-
-**Endpoints (GET via `doGet`, POST via `doPost`):**
-- `doGet` sem `action` → grade legada (dashboard/iframe) — **nunca tocar**.
-- `doGet?action=listReservations[&includeCancelled=true]` → lista (ACTIVE por padrão).
-- `doPost action=createReservation | createReservationRange | cancelReservation`.
-
----
-
-## Estrutura do frontend (apps/reservations)
-
-```
-src/
-├── config.ts                 ← URL, token, SALAS, CURRENT_USER
-├── services/appsScript.ts    ← fetchSchedule, createReservation (+ range)
-├── hooks/useCreateReservation.ts
-├── components/reservations/ReservationForm.tsx
-├── pages/Reservas/index.tsx
-├── validators/               ← conflict.ts, reservation.ts
-└── store/reservationStore.ts ← Zustand
-```
-
-Fluxo local (proxy/VPN bloqueia o dev server, usar preview):
-```
-npx vite build
-copy public\legacy-index.html dist\legacy-index.html
-npx vite preview        # http://localhost:4173
-```
-
----
-
-## Padrões de código
-
-- **Mínimo e sem duplicação.** Não criar camadas, helpers, DTOs ou abstrações desnecessárias.
-- Funções curtas, responsabilidade única, CSS limpo.
-- Mudança mínima: não modificar código não relacionado; preservar comportamento existente.
-- Preferir solução simples e de baixo risco à solução "esperta".
-- **TDD:** RED → GREEN → REFACTOR. Frontend com Vitest; backend Apps Script testado via PowerShell (`Invoke-RestMethod`, **não** `curl.exe`).
-
----
-
-## Segurança
-
-- Sanitização anti-XSS em todo dado externo (`esc()` no legado, `sanitize` no backend).
-- Validação **sempre** no backend; nunca confiar só no frontend.
-- `LockService` em toda escrita.
-- Token: dados de sala são públicos e não sensíveis; o token atual é suficiente para a fase atual. **Auth real (JWT/RBAC) entra na fase do proxy** — não antes.
-- Timezone: **America/Manaus (UTC-4)**.
-- Nunca expor secrets em código público ou neste arquivo.
-
----
-
-## Observabilidade e logs
-
-- **Backend:** `Logger.log` em toda ação crítica e em **todo** `catch` (incluir `err.stack`). **Nunca catch vazio.**
-- Toda resposta de erro no formato `{ ok:false, error:{ code, message } }` com código padronizado.
-- **Frontend:** erros tratados e exibidos ao usuário (toast/alerta), nunca engolidos; `console.error` com contexto em falhas inesperadas.
-- **Audit:** toda escrita registra quem (`createdBy`), quando (`createdAt`/`updatedAt`) e o quê.
-- Mensagens de erro claras e acionáveis para o usuário final, em PT-BR.
-
----
-
-## Regras de migração futura
-
-- Migração **sempre incremental**: o sistema anterior continua funcionando durante a transição.
-- A nova camada **coexiste** com a antiga (ex.: React novo + HTML legado via fallback/iframe).
-- Mudança de contrato de API é **versionada**, nunca silenciosa.
-- Antes de remover algo antigo: garantir que o novo cobre 100% e está estável em produção.
-- Cada fase é **independente e reversível** (rollback claro e testado).
-
-### Migração Sheets → PostgreSQL (decidido)
-
-- **Postgres será a FONTE ÚNICA de verdade.** Sem sync bidirecional.
-- **Funcionários migram pro app web; Sheets é descontinuado** (ou vira espelho read-only unidirecional Postgres→Sheets, nunca editável). Sync bidirecional foi descartado por gerar dupla escrita e conflitos.
-- **Migração de dados:** script único que lê o Sheets e popula o Postgres (seed). NÃO é sync contínuo.
-- **O contrato do service (`appsScript.ts`) deve permanecer estável:** trocar Apps Script por NestJS muda só a implementação interna, não a interface que hooks/componentes consomem. O frontend não deve saber qual backend está por trás.
-- **Pré-condição do corte:** o app cobre 100% das operações que os funcionários fazem hoje no Sheet (criar, listar, cancelar, editar, eventualmente aprovar).
-- **Trigger pra começar a planejar a migração:** aba `Reservas` passar de ~2000 linhas em produção, OU latência percebida do Apps Script ficar inaceitável.
+- [ ] `pnpm --filter @salas-senai/api build` (typecheck) sem erros
+- [ ] `pnpm --filter @salas-senai/reservations typecheck` sem erros
+- [ ] `pnpm --filter @salas-senai/api lint` e `pnpm --filter @salas-senai/reservations lint` (0 erros/warnings — `--max-warnings 0` no frontend)
+- [ ] `pnpm --filter @salas-senai/api test:unit` e `pnpm --filter @salas-senai/reservations test` verdes, **sem reduzir** cobertura existente
+- [ ] **zero regressão** (ver seção "O que conta como REGRESSÃO")
+- [ ] tipagem válida (sem `any` desnecessário fora dos overrides de teste do ESLint)
+- [ ] validado manualmente no caminho real quando aplicável (browser / `Invoke-RestMethod`)
+- [ ] backend: validação **dentro do lock** (`$transaction` + `pg_advisory_xact_lock`), idempotência mantida, contrato preservado
+- [ ] mudança de contrato de API sempre **versionada/documentada**, nunca silenciosa
+- [ ] decisão técnica relevante registrada na tabela de Decisões (ou num ADR em `docs/adr/` se for arquitetural)
 
 ---
 
@@ -315,7 +394,7 @@ npx vite preview        # http://localhost:4173
 
 Quando dois objetivos colidem, **vence o de cima**:
 
-1. Não quebrar o legado / estabilidade
+1. Não quebrar produção / estabilidade
 2. Compatibilidade de contrato
 3. Segurança e integridade de dados (conflito de horário, concorrência)
 4. Correção funcional
@@ -324,7 +403,8 @@ Quando dois objetivos colidem, **vence o de cima**:
 7. Performance
 8. Velocidade de entrega
 
-Exemplos: segurança vence conveniência · não quebrar legado vence nova feature · correção vence performance · simplicidade vence "esperteza".
+Exemplos: segurança vence conveniência · não quebrar produção vence nova
+feature · correção vence performance · simplicidade vence "esperteza".
 
 ---
 
@@ -333,63 +413,86 @@ Exemplos: segurança vence conveniência · não quebrar legado vence nova featu
 - Commits **pequenos e atômicos**: uma mudança lógica por commit.
 - **Nunca** commitar código que não compila ou com teste vermelho.
 - Mensagem no imperativo, com tipo e escopo. Ex.:
-  - `feat(reservations): adiciona reserva em período (tudo-ou-nada)`
-  - `fix(conflict): corrige detecção quando hora é lida como Date de 1899`
-- Tipos: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`.
-- Uma feature por branch quando possível; o branch principal **nunca** com legado quebrado.
+  - `fix(reservations): corrige createRange sem validação de conflito`
+  - `feat(f9): seguranca (helmet, rate limit, seed guard)`
+  - `chore(eslint): adiciona root:true para impedir subida ate a raiz`
+- Tipos: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `ci`.
+- Uma feature por branch quando possível; a branch principal **nunca** com
+  produção quebrada.
 - Rodar os testes antes de cada entrega.
-- Registrar decisões técnicas relevantes na tabela abaixo.
+- Registrar decisões técnicas relevantes na tabela abaixo (ou em ADR).
 
 ---
 
 ## Como responder (mudanças significativas)
 
 Para tarefas relevantes, cobrir:
-objetivo · impacto no legado · riscos · estratégia · testes · implementação · segurança · performance · rollback · próximos passos.
+objetivo · impacto · riscos · estratégia · testes · implementação ·
+segurança · performance · rollback · próximos passos.
 
-Sempre entregar artefatos completos (código, imports, configs, testes, comandos) — nunca só teoria.
-Para micro-tarefas, ser direto e conciso (não inflar a resposta).
+Sempre entregar artefatos completos (código, imports, configs, testes,
+comandos) — nunca só teoria. Para micro-tarefas, ser direto e conciso.
 
-Mentalidade: pensar como Staff Engineer / Software Architect / Security Engineer / especialista em SaaS institucional.
+Mentalidade: pensar como Staff Engineer / Software Architect / Security
+Engineer / especialista em SaaS institucional.
 
 ---
 
 ## Comandos úteis
 
 ```powershell
-# Testes do frontend
-.\node_modules\.bin\vitest.CMD run --reporter=basic
+# Backend — typecheck, lint, testes
+pnpm --filter @salas-senai/api build
+pnpm --filter @salas-senai/api lint
+pnpm --filter @salas-senai/api test:unit
 
-# Build + preview (contorna bloqueio do dev server)
-npx vite build
-copy public\legacy-index.html dist\legacy-index.html
-npx vite preview
+# Backend — subir localmente
+pnpm --filter @salas-senai/api start:dev
 
-# Testar backend (PowerShell, nunca curl.exe)
-Invoke-RestMethod -Uri $URL -Method Post -Body $body -ContentType 'text/plain'
+# Frontend — typecheck, lint, testes
+pnpm --filter @salas-senai/reservations typecheck
+pnpm --filter @salas-senai/reservations lint
+pnpm --filter @salas-senai/reservations exec vitest run --reporter=dot --no-coverage
+
+# Frontend — subir localmente
+pnpm --filter @salas-senai/reservations dev
+
+# E2E (Playwright, requer backend + frontend de pé)
+pnpm test:e2e
+
+# Prisma
+pnpm --filter @salas-senai/api exec prisma generate
+pnpm --filter @salas-senai/api exec prisma migrate deploy   # produção/CI
 ```
+
+<!-- TODO: confirmar se o workaround histórico "vite preview + copy legacy-index.html"
+     (bloqueio de proxy/VPN no dev server) ainda é necessário no ambiente atual —
+     não há evidência no código de que o problema foi resolvido nem de que persiste;
+     se o dev server (`pnpm --filter @salas-senai/reservations dev`) não abrir,
+     tentar `npx vite build && npx vite preview` como alternativa. -->
 
 ---
 
 ## Decisões técnicas registradas
 
-| Data | Decisão | Motivo |
-|---|---|---|
-| 2026-05 | Cache removido do Apps Script | Limite de 100KB do CacheService estourava com milhares de registros |
-| 2026-05 | XSS protegido via `esc()` | Dados da planilha renderizados via innerHTML sem escape |
-| 2026-05 | `getTurnoMap` usa `.find().trim()` | Nome da aba tinha espaço no final |
-| 2026-05 | `clear()` renomeado para `resetFilters()` | Conflito com `window.clear()` nativo causava falha silenciosa |
-| 2026-06 | Colunas C/D/E forçadas como texto (`setNumberFormat('@')`) | Sheets convertia "08:00"/datas em Date de 1899, quebrando detecção de conflito |
-| 2026-06 | Reservas novas em aba separada `Reservas` (formato tabela) | Abas mensais são grade dia×sala incompatível; legado não é tocado |
-| 2026-06 | Reserva em período: tudo-ou-nada, dias da semana escolhidos, limite 60 datas | Atomicidade dentro do lock; proteção contra timeout/abuso |
-| 2026-06 | `dateRange.ts` (frontend) usa `getUTC*` + meio-dia UTC | Determinístico independente do fuso do browser; mantém paridade com `expandDateRange` do backend |
-| 2026-06 | Sem optimistic update no modo período | Datas distintas com mesma sala/horário não conflitam entre si; rollback de N inserts seria custo sem benefício |
-| 2026-06 | `anyLoading` derivado como fonte única no `ReservationForm` | Todos os usos de "form ocupado" passam por uma constante; muda só num lugar se um terceiro mutation entrar |
-| 2026-06 | Migração Sheets → Postgres: Postgres como fonte única, sem sync bidirecional | Sync bidirecional gera dupla escrita e conflitos; funcionários migrarão pro app, Sheets é descontinuado |
-| 2026-06 | Cancelar reserva = soft delete (status='CANCELLED'), não hard delete | Mantém auditoria; `listReservations` filtra ACTIVE por padrão, flag `includeCancelled=true` devolve tudo |
-| 2026-06 | Idempotência do cancel é **state-based**, não por `clientRequestId` | Se já CANCELLED, devolve `ok=true` sem owner check — operação já aplicada; `clientRequestId` só logado |
-| 2026-06 | Owner validation no cancel: backend rejeita FORBIDDEN se `userEmail` ≠ `createdBy` (col J, índice 9 do array) | Camada de proteção mesmo sem auth; frontend desabilita botão preventivamente (UX), backend é a defesa real |
-| 2026-06 | Calendário: mapper passa `start`/`end` como string ISO sem `Z`, sem construir `Date` | FullCalendar resolve via `timeZone='America/Manaus'`; evita off-by-one de fuso. Reserva 08:00 aparece 08:00 |
-| 2026-06 | Dados da reserva pro modal via `extendedProps` do evento (FullCalendar) | Evento auto-suficiente; click recupera tudo sem segunda busca. Tipo `ReservationDetails` único = sem drift |
-| 2026-06 | Calendário "burro" (recebe events/loading/error via props); `useListReservations` vive na página | Desacopla; quando backend virar Postgres, troca a fonte na página e o calendário não percebe |
-| 2026-06 | `test-sprint3.ps1` usa datas únicas por execução (base 2030 + random) | Datas fixas colidiam entre runs (CONFLICT), mascarando FORBIDDEN/smoke. Re-execução agora é idempotente |
+| Data    | Decisão                                                                                                                                                                           | Motivo                                                                                                                                                             |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2026-05 | Cache removido do Apps Script                                                                                                                                                     | Limite de 100KB do CacheService estourava com milhares de registros                                                                                                |
+| 2026-05 | XSS protegido via `esc()`                                                                                                                                                         | Dados da planilha renderizados via innerHTML sem escape                                                                                                            |
+| 2026-06 | Colunas C/D/E forçadas como texto (`setNumberFormat('@')`) no Apps Script                                                                                                         | Sheets convertia "08:00"/datas em Date de 1899, quebrando detecção de conflito                                                                                     |
+| 2026-06 | Reserva em período: tudo-ou-nada, dias da semana escolhidos, limite 60 datas                                                                                                      | Atomicidade dentro do lock; proteção contra timeout/abuso                                                                                                          |
+| 2026-06 | Migração Sheets → Postgres: Postgres como fonte única de reservas, sem sync bidirecional                                                                                          | Sync bidirecional geraria dupla escrita e conflitos                                                                                                                |
+| 2026-06 | Cancelar reserva = soft delete (`status='CANCELLED'`), idempotência state-based                                                                                                   | Mantém auditoria; retry de cancel numa reserva já cancelada não é erro                                                                                             |
+| 2026-07 | Cutover oficial F5.8: NestJS é o backend de reservas                                                                                                                              | Apps Script passa a servir só como fonte de sync de `Schedule` (ADR-003)                                                                                           |
+| 2026-07 | `Reservation.date/inicio/fim` como `String`, não `DateTime`                                                                                                                       | Paridade com o legado Google Sheets (decisão F4.0)                                                                                                                 |
+| 2026-07 | Apps Script removido do **frontend** (F9.7); tipos migrados de `appsScript.ts` para `apiTypes.ts`                                                                                 | Reservas já eram 100% NestJS desde F5.8; `appsScript.ts` sobrevivia só como fonte de tipos e fallback morto                                                        |
+| 2026-07 | CORS configurável via `CORS_ORIGIN`                                                                                                                                               | Produção (GitHub Pages) tem origem diferente de `localhost`                                                                                                        |
+| 2026-07 | Validação de data passada (`IsNotPastDateConstraint`, UTC noon) em `dateInicio`                                                                                                   | Backend aceitava reservas retroativas — falha de integridade confirmada por E2E                                                                                    |
+| 2026-07 | Helmet + `@nestjs/throttler` (100/min global, 5/min em login/refresh)                                                                                                             | Auditoria de segurança F9.1: headers de segurança ausentes, sem proteção contra brute force                                                                        |
+| 2026-07 | Seed bloqueado em produção via checagem de `NODE_ENV` (senhas de teste mantidas)                                                                                                  | Senhas conhecidas (`role@senai2026`) seriam risco grave se o seed rodasse contra produção                                                                          |
+| 2026-07 | Deploy: Railway (backend) + GitHub Pages (frontend); CD via `workflow_run` pós-CI                                                                                                 | Deploy nunca roda em cima de CI vermelho; deploya exatamente o SHA validado                                                                                        |
+| 2026-07 | Backup via recurso nativo do Supabase, sem script de export customizado                                                                                                           | Já incluso no plano; evita manter infraestrutura de backup própria                                                                                                 |
+| 2026-07 | Logs estruturados via `nestjs-pino` (JSON em produção, pino-pretty em dev)                                                                                                        | Observabilidade em produção real; request-id por requisição                                                                                                        |
+| 2026-07 | Índice `Reservation(date, status)` adicionado                                                                                                                                     | `AvailabilityService`/`DashboardService` filtram por `date` sem `roomId` — índice `(roomId,date)` existente não cobria                                             |
+| 2026-07 | Fix crítico: `createRange` passou a usar `$transaction` individual por data + `pg_advisory_xact_lock` + `ConflictService`, com datas conflitantes puladas (não abortando o range) | Implementação original inserção direta, sem lock nem validação de conflito — violação da Regra mais importante do projeto                                          |
+| 2026-07 | `root: true` nos `.eslintrc.cjs` de `apps/api` e `apps/reservations`; `eslint` como devDependency explícita na raiz                                                               | ESLint subia até a raiz do monorepo e caía no `ignorePatterns` que bloqueia `apps/`, causando "No files matching the pattern src" ao lintar um pacote isoladamente |
