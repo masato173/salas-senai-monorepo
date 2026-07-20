@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   ConflictException as NestConflictException,
   BadRequestException,
@@ -28,6 +29,10 @@ interface FindAllParams {
 
 @Injectable()
 export class ReservationsService {
+  // Datas puladas por conflito em createRange não fazem parte do contrato de
+  // resposta ({ count, reservations }) — ficam rastreáveis só via log.
+  private readonly logger = new Logger(ReservationsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly conflictService: ConflictService,
@@ -367,22 +372,66 @@ export class ReservationsService {
 
     const groupId = crypto.randomUUID();
     const reservations: Reservation[] = [];
+    const skipped: Array<{ date: string; reason: string }> = [];
 
     for (const data of datas) {
-      const reservation = await this.prisma.reservation.create({
-        data: {
+      // Uma $transaction por data — NÃO uma única para o range inteiro:
+      // pgbouncer em transaction mode não suporta transactions longas
+      // (mesmo padrão de create()/update(), ver Bug histórico #2).
+      const reservation = await this.prisma.$transaction(async tx => {
+        // Advisory lock por (roomId, date): serializa escritas concorrentes
+        // na mesma sala+dia, evitando race conditions.
+        await tx.$executeRaw`
+          SELECT pg_advisory_xact_lock(hashtext(${dto.roomId}), hashtext(${data}))
+        `;
+
+        const conflict = await this.conflictService.hasConflict(
+          { roomId: dto.roomId, date: data, inicio: dto.inicio, fim: dto.fim },
+          tx,
+        );
+        if (conflict) {
+          return null;
+        }
+
+        const created = await tx.reservation.create({
+          data: {
+            userId: currentUser.userId,
+            roomId: dto.roomId,
+            groupId,
+            date: data,
+            inicio: dto.inicio,
+            fim: dto.fim,
+            turma: dto.turma ?? null,
+            notes: dto.notes ?? null,
+            status: ReservationStatus.PENDING,
+          },
+        });
+
+        await this.auditService.log(tx, {
+          action: 'CREATE_RESERVATION',
+          entityId: created.id,
           userId: currentUser.userId,
-          roomId: dto.roomId,
-          groupId,
-          date: data,
-          inicio: dto.inicio,
-          fim: dto.fim,
-          turma: dto.turma ?? null,
-          notes: dto.notes ?? null,
-          status: ReservationStatus.PENDING,
-        },
+          after: created,
+        });
+
+        return created;
       });
+
+      if (reservation === null) {
+        skipped.push({ date: data, reason: 'conflito' });
+        continue;
+      }
       reservations.push(reservation);
+    }
+
+    if (skipped.length > 0) {
+      this.logger.warn(
+        `createRange: ${skipped.length} data(s) pulada(s) por conflito — ` +
+          `roomId=${dto.roomId} datas=${skipped.map(s => s.date).join(',')}`,
+      );
+    }
+
+    for (const reservation of reservations) {
       this.realtimeService.reservationCreated(reservation);
     }
 

@@ -231,6 +231,69 @@ describe('ReservationsService', () => {
     });
   });
 
+  // ── createRange ───────────────────────────────────────────────────────────
+  describe('createRange()', () => {
+    const rangeDto = {
+      roomId: 'room-1',
+      dateInicio: '2026-08-03',
+      dateFim: '2026-08-05',
+      diasSemana: [0, 1, 2, 3, 4, 5, 6], // todos os dias — não depende do dia da semana real
+      inicio: '08:00',
+      fim: '10:00',
+    };
+
+    beforeEach(() => {
+      mockTx.reservation.create.mockImplementation(
+        (args: { data: { date: string; [key: string]: unknown } }) =>
+          Promise.resolve({ ...baseReservation, ...args.data, id: `res-${args.data.date}` }),
+      );
+    });
+
+    it('pula data com conflito e cria as demais', async () => {
+      mockConflictService.hasConflict.mockImplementation((params: { date: string }) =>
+        Promise.resolve(params.date === '2026-08-04'),
+      );
+
+      const result = await makeService().createRange(rangeDto, profUser);
+
+      expect(result.count).toBe(2);
+      expect(result.reservations.map(r => r.date)).toEqual(['2026-08-03', '2026-08-05']);
+      expect(mockTx.reservation.create).toHaveBeenCalledTimes(2);
+      expect(mockRealtimeService.reservationCreated).toHaveBeenCalledTimes(2);
+      // lock é tentado nas 3 datas, mesmo na que acaba pulada por conflito
+      expect(mockTx.$executeRaw).toHaveBeenCalledTimes(3);
+    });
+
+    it('todas as datas com conflito: retorna count=0 e reservations=[]', async () => {
+      mockConflictService.hasConflict.mockResolvedValue(true);
+
+      const result = await makeService().createRange(rangeDto, profUser);
+
+      expect(result).toEqual({ count: 0, reservations: [] });
+      expect(mockTx.reservation.create).not.toHaveBeenCalled();
+      expect(mockRealtimeService.reservationCreated).not.toHaveBeenCalled();
+    });
+
+    it('nenhuma data com conflito: cria todas as datas do range', async () => {
+      mockConflictService.hasConflict.mockResolvedValue(false);
+
+      const result = await makeService().createRange(rangeDto, profUser);
+
+      expect(result.count).toBe(3);
+      expect(result.reservations.map(r => r.date)).toEqual([
+        '2026-08-03',
+        '2026-08-04',
+        '2026-08-05',
+      ]);
+      expect(mockTx.$executeRaw).toHaveBeenCalledTimes(3);
+      expect(mockAuditService.log).toHaveBeenCalledTimes(3);
+      expect(mockAuditService.log).toHaveBeenCalledWith(
+        mockTx,
+        expect.objectContaining({ action: 'CREATE_RESERVATION' }),
+      );
+    });
+  });
+
   // ── findOne ───────────────────────────────────────────────────────────────
   describe('findOne()', () => {
     it('lança NotFoundException quando reserva não existe', async () => {

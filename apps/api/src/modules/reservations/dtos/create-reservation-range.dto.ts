@@ -9,8 +9,10 @@ import {
   IsOptional,
   MaxLength,
   Matches,
+  Validate,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { IsNotPastDateConstraint } from '../validators/is-not-past-date.validator';
 
 export class CreateReservationRangeDto {
   @IsString()
@@ -19,6 +21,7 @@ export class CreateReservationRangeDto {
 
   @IsString()
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'dateInicio deve estar no formato YYYY-MM-DD' })
+  @Validate(IsNotPastDateConstraint)
   dateInicio!: string;
 
   @IsString()
