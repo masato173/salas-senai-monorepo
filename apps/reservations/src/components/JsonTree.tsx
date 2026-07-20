@@ -48,7 +48,7 @@ function JsonNode({ value, depth = 0, maxDepth = 4 }: JsonTreeProps): JSX.Elemen
         <div
           style={{ paddingLeft: 12, borderLeft: '1px solid var(--color-border)', marginLeft: 4 }}
         >
-          {value.map((item, i) => (
+          {value.map((item: unknown, i) => (
             <div key={i} style={{ fontSize: 12, lineHeight: '1.6' }}>
               <span style={{ color: COLORS.key }}>{i}: </span>
               <JsonNode value={item} depth={depth + 1} maxDepth={maxDepth} />

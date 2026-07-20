@@ -5,12 +5,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import type { JwtPayload } from './strategies/jwt.strategy';
 
-interface TokenPair {
+export interface TokenPair {
   accessToken: string;
   refreshToken: string;
 }
 
-interface LoginResult extends TokenPair {
+export interface LoginResult extends TokenPair {
   user: { id: string; name: string; email: string; role: string };
 }
 

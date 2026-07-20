@@ -1,6 +1,7 @@
 const base = require('@salas-senai/eslint-config');
 
 module.exports = {
+  root: true,
   ...base,
   parserOptions: {
     project: './tsconfig.json',

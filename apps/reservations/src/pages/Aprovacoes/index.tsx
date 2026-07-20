@@ -41,7 +41,7 @@ export default function AprovacoesPage(): JSX.Element {
   const approver = useApproveReservation(service);
   const rejecter = useRejectReservation(service);
 
-  const reservations = data?.reservations ?? [];
+  const reservations = useMemo(() => data?.reservations ?? [], [data]);
 
   const pendingCount = useMemo(
     () => reservations.filter(r => r.status === 'PENDING').length,

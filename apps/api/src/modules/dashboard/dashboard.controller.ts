@@ -1,5 +1,5 @@
 import { Controller, Get, Query, BadRequestException } from '@nestjs/common';
-import { DashboardService } from './dashboard.service';
+import { DashboardService, DashboardResult } from './dashboard.service';
 import { Public } from '../../common/decorators/public.decorator';
 
 @Public()
@@ -8,7 +8,7 @@ export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
   @Get()
-  getStats(@Query('date') date?: string) {
+  getStats(@Query('date') date?: string): Promise<DashboardResult> {
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       throw new BadRequestException('Parâmetro "date" é obrigatório no formato YYYY-MM-DD.');
     }

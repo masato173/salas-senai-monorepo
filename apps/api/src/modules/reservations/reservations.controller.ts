@@ -97,13 +97,16 @@ export class ReservationsController {
     @Param('groupId') groupId: string,
     @Body() dto: UpdateReservationGroupDto,
     @Request() req: AuthenticatedRequest,
-  ) {
+  ): Promise<{ count: number; reservations: Reservation[] }> {
     return this.reservationsService.updateGroup({ ...dto, groupId }, req.user);
   }
 
   @Patch('selected')
   @HttpCode(HttpStatus.OK)
-  updateSelected(@Body() dto: UpdateReservationSelectedDto, @Request() req: AuthenticatedRequest) {
+  updateSelected(
+    @Body() dto: UpdateReservationSelectedDto,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<{ count: number; reservations: Reservation[] }> {
     return this.reservationsService.updateSelected(dto, req.user);
   }
 

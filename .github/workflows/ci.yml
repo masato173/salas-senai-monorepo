@@ -40,7 +40,13 @@ jobs:
       - name: Typecheck (backend)
         run: pnpm --filter @salas-senai/api build
 
-      # Lint removido temporariamente — reativar em F9.8 após configuração do ESLint no CI
+      - name: Lint (frontend)
+        working-directory: apps/reservations
+        run: pnpm exec eslint src --ext .ts,.tsx --max-warnings 0
+
+      - name: Lint (backend)
+        working-directory: apps/api
+        run: pnpm exec eslint src test --ext .ts
 
       - name: Unit Tests
         run: pnpm --filter @salas-senai/reservations exec vitest run --no-coverage
