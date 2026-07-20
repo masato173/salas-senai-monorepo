@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import type { BackendEnvelope, BackendError } from '../services/appsScript';
+import type { BackendEnvelope, BackendError } from '../services/apiTypes';
 import type { SyncResult } from '@salas-senai/shared';
 
 // ─────────────────────────────────────────────────────────────

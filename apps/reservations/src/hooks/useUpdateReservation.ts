@@ -3,7 +3,7 @@ import type {
   UpdateReservationRequest,
   UpdateReservationResponse,
   BackendError,
-} from '../services/appsScript';
+} from '../services/apiTypes';
 
 // ─────────────────────────────────────────────────────────────
 // Sprint 4 C1 — editar UMA reserva (PUT-like).
@@ -24,16 +24,16 @@ interface ReservationUpdater {
 
 interface ExecuteOptions {
   clientRequestId?: string;
-  maxRetries?:      number; // default 2
+  maxRetries?: number; // default 2
 }
 
 export async function executeUpdateReservation(
   service: ReservationUpdater,
-  req:     Omit<UpdateReservationRequest, 'clientRequestId'>,
+  req: Omit<UpdateReservationRequest, 'clientRequestId'>,
   options: ExecuteOptions = {},
 ): Promise<UpdateReservationResponse> {
   const clientRequestId = options.clientRequestId ?? crypto.randomUUID();
-  const maxRetries      = options.maxRetries ?? 2;
+  const maxRetries = options.maxRetries ?? 2;
 
   let lastEnvelope: UpdateReservationResponse | undefined;
   let lastNetError: unknown;
@@ -66,17 +66,19 @@ function isRetryable(code: BackendError['code'] | undefined): boolean {
 export type MutationStatus = 'idle' | 'loading' | 'success' | 'error';
 
 interface UseUpdateReservationResult {
-  mutate: (req: Omit<UpdateReservationRequest, 'clientRequestId'>) => Promise<UpdateReservationResponse>;
+  mutate: (
+    req: Omit<UpdateReservationRequest, 'clientRequestId'>,
+  ) => Promise<UpdateReservationResponse>;
   status: MutationStatus;
-  error:  BackendError | null;
-  data:   UpdateReservationResponse['data'];
-  reset:  () => void;
+  error: BackendError | null;
+  data: UpdateReservationResponse['data'];
+  reset: () => void;
 }
 
 export function useUpdateReservation(service: ReservationUpdater): UseUpdateReservationResult {
   const [status, setStatus] = useState<MutationStatus>('idle');
-  const [error,  setError]  = useState<BackendError | null>(null);
-  const [data,   setData]   = useState<UpdateReservationResponse['data']>(null);
+  const [error, setError] = useState<BackendError | null>(null);
+  const [data, setData] = useState<UpdateReservationResponse['data']>(null);
 
   const serviceRef = useRef(service);
   serviceRef.current = service;
@@ -97,7 +99,7 @@ export function useUpdateReservation(service: ReservationUpdater): UseUpdateRese
       return res;
     } catch (err) {
       const networkError: BackendError = {
-        code:    'INTERNAL',
+        code: 'INTERNAL',
         message: err instanceof Error ? err.message : 'Falha de rede.',
       };
       setError(networkError);

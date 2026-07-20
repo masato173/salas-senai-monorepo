@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import type { BackendEnvelope, CreatedReservationRow, BackendError } from '../services/appsScript';
+import type { BackendEnvelope, CreatedReservationRow, BackendError } from '../services/apiTypes';
 
 type UpdateStatusResponse = BackendEnvelope<CreatedReservationRow>;
 

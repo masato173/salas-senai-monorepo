@@ -3,7 +3,7 @@ import type {
   CancelReservationRequest,
   CancelReservationResponse,
   BackendError,
-} from '../services/appsScript';
+} from '../services/apiTypes';
 
 // ─────────────────────────────────────────────────────────────
 // Política de retry — idempotente via clientRequestId.
@@ -21,16 +21,16 @@ interface ReservationCanceller {
 
 interface ExecuteOptions {
   clientRequestId?: string;
-  maxRetries?:      number; // default 2
+  maxRetries?: number; // default 2
 }
 
 export async function executeCancelReservation(
   service: ReservationCanceller,
-  req:     Omit<CancelReservationRequest, 'clientRequestId'>,
+  req: Omit<CancelReservationRequest, 'clientRequestId'>,
   options: ExecuteOptions = {},
 ): Promise<CancelReservationResponse> {
   const clientRequestId = options.clientRequestId ?? crypto.randomUUID();
-  const maxRetries      = options.maxRetries ?? 2;
+  const maxRetries = options.maxRetries ?? 2;
 
   let lastEnvelope: CancelReservationResponse | undefined;
   let lastNetError: unknown;
@@ -63,17 +63,19 @@ function isRetryable(code: BackendError['code'] | undefined): boolean {
 export type MutationStatus = 'idle' | 'loading' | 'success' | 'error';
 
 interface UseCancelReservationResult {
-  mutate: (req: Omit<CancelReservationRequest, 'clientRequestId'>) => Promise<CancelReservationResponse>;
+  mutate: (
+    req: Omit<CancelReservationRequest, 'clientRequestId'>,
+  ) => Promise<CancelReservationResponse>;
   status: MutationStatus;
-  error:  BackendError | null;
-  data:   CancelReservationResponse['data'];
-  reset:  () => void;
+  error: BackendError | null;
+  data: CancelReservationResponse['data'];
+  reset: () => void;
 }
 
 export function useCancelReservation(service: ReservationCanceller): UseCancelReservationResult {
   const [status, setStatus] = useState<MutationStatus>('idle');
-  const [error,  setError]  = useState<BackendError | null>(null);
-  const [data,   setData]   = useState<CancelReservationResponse['data']>(null);
+  const [error, setError] = useState<BackendError | null>(null);
+  const [data, setData] = useState<CancelReservationResponse['data']>(null);
 
   const serviceRef = useRef(service);
   serviceRef.current = service;
@@ -94,7 +96,7 @@ export function useCancelReservation(service: ReservationCanceller): UseCancelRe
       return res;
     } catch (err) {
       const networkError: BackendError = {
-        code:    'INTERNAL',
+        code: 'INTERNAL',
         message: err instanceof Error ? err.message : 'Falha de rede.',
       };
       setError(networkError);

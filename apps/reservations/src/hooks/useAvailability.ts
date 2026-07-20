@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { RegistroLegado, Turno, AvailabilityResult } from '../types';
-import type { CreatedReservationRow } from '../services/appsScript';
+import type { CreatedReservationRow } from '../services/apiTypes';
 import { buildRoomAvailability } from '../services/availability';
 
 // Sprint Disponibilidade S3 — hook derivado (Forma B).

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { RegistroLegado } from '../../types';
-import type { CreatedReservationRow } from '../appsScript';
+import type { CreatedReservationRow } from '../apiTypes';
 import { toMinutes, overlaps, buildRoomAvailability } from '../availability';
 
 // Sprint Disponibilidade — testes puros do S2 (services/availability.ts).

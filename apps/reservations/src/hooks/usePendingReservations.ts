@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { BackendError, ListReservationsResponse } from '../services/appsScript';
+import type { BackendError, ListReservationsResponse } from '../services/apiTypes';
 
 // ─────────────────────────────────────────────────────────────
 // usePendingReservations — F6.1

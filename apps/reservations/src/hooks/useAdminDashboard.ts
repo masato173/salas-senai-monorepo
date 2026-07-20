@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiFetch } from '../services/apiClient';
-import type { BackendError, ListReservationsResponse } from '../services/appsScript';
+import type { BackendError, ListReservationsResponse } from '../services/apiTypes';
 
 // ─────────────────────────────────────────────────────────────
 // useAdminDashboard — F6.3

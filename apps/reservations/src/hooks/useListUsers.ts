@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import type { BackendError } from '../services/appsScript';
+import type { BackendError } from '../services/apiTypes';
 import type { AdminUser, UserListParams, PaginatedResponse } from '../types';
 
 // ─────────────────────────────────────────────────────────────

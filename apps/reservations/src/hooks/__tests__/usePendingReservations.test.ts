@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { executeListPendingReservations } from '../usePendingReservations';
-import type { ListReservationsResponse } from '../../services/appsScript';
+import type { ListReservationsResponse } from '../../services/apiTypes';
 
 const mockService = { listPendingReservations: vi.fn() };
 

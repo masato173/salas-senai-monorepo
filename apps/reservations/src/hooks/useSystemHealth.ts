@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { BackendError } from '../services/appsScript';
+import type { BackendError } from '../services/apiTypes';
 
 // ─────────────────────────────────────────────────────────────
 // useSystemHealth — F6.6

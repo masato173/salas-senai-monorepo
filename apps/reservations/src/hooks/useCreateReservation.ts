@@ -3,7 +3,7 @@ import type {
   CreateReservationRequest,
   CreateReservationResponse,
   BackendError,
-} from '../services/appsScript';
+} from '../services/apiTypes';
 
 // ─────────────────────────────────────────────────────────────
 // Política de retry — idempotente via clientRequestId.
@@ -19,16 +19,16 @@ interface ReservationCreator {
 
 interface ExecuteOptions {
   clientRequestId?: string;
-  maxRetries?:      number; // default 2
+  maxRetries?: number; // default 2
 }
 
 export async function executeCreateReservation(
   service: ReservationCreator,
-  req:     Omit<CreateReservationRequest, 'clientRequestId'>,
+  req: Omit<CreateReservationRequest, 'clientRequestId'>,
   options: ExecuteOptions = {},
 ): Promise<CreateReservationResponse> {
   const clientRequestId = options.clientRequestId ?? crypto.randomUUID();
-  const maxRetries      = options.maxRetries ?? 2;
+  const maxRetries = options.maxRetries ?? 2;
 
   let lastEnvelope: CreateReservationResponse | undefined;
   let lastNetError: unknown;
@@ -61,17 +61,19 @@ function isRetryable(code: BackendError['code'] | undefined): boolean {
 export type MutationStatus = 'idle' | 'loading' | 'success' | 'error';
 
 interface UseCreateReservationResult {
-  mutate:    (req: Omit<CreateReservationRequest, 'clientRequestId'>) => Promise<CreateReservationResponse>;
-  status:    MutationStatus;
-  error:     BackendError | null;
-  data:      CreateReservationResponse['data'];
-  reset:     () => void;
+  mutate: (
+    req: Omit<CreateReservationRequest, 'clientRequestId'>,
+  ) => Promise<CreateReservationResponse>;
+  status: MutationStatus;
+  error: BackendError | null;
+  data: CreateReservationResponse['data'];
+  reset: () => void;
 }
 
 export function useCreateReservation(service: ReservationCreator): UseCreateReservationResult {
   const [status, setStatus] = useState<MutationStatus>('idle');
-  const [error,  setError]  = useState<BackendError | null>(null);
-  const [data,   setData]   = useState<CreateReservationResponse['data']>(null);
+  const [error, setError] = useState<BackendError | null>(null);
+  const [data, setData] = useState<CreateReservationResponse['data']>(null);
 
   // Mantém estável entre renders sem recriar callback.
   const serviceRef = useRef(service);
@@ -93,7 +95,7 @@ export function useCreateReservation(service: ReservationCreator): UseCreateRese
       return res;
     } catch (err) {
       const networkError: BackendError = {
-        code:    'INTERNAL',
+        code: 'INTERNAL',
         message: err instanceof Error ? err.message : 'Falha de rede.',
       };
       setError(networkError);

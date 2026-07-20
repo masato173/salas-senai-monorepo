@@ -5,7 +5,7 @@ import type {
   UpdateReservationSelectedResponse,
   BackendErrorCode,
   CreatedReservationRow,
-} from '../../services/appsScript';
+} from '../../services/apiTypes';
 
 // ─────────────────────────────────────────────────────────────
 // Sprint 4 D4.5a — testes do hook do C3 (updateReservationSelected).

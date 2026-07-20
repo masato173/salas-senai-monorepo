@@ -4,7 +4,7 @@ import type {
   BackendEnvelope,
   CreatedReservationRow,
   BackendErrorCode,
-} from '../../services/appsScript';
+} from '../../services/apiTypes';
 
 const mockService = { updateStatus: vi.fn() };
 

@@ -20,7 +20,7 @@ import type {
   UpdateReservationGroupRequest,
   UpdateReservationGroupResponse,
   CreatedReservationRow,
-} from '../../services/appsScript';
+} from '../../services/apiTypes';
 import type {
   CreateReservationInput,
   Turno,

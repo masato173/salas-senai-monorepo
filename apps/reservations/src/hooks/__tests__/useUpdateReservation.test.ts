@@ -4,7 +4,7 @@ import type {
   UpdateReservationRequest,
   UpdateReservationResponse,
   BackendErrorCode,
-} from '../../services/appsScript';
+} from '../../services/apiTypes';
 
 // DUPLICATE não é retornado por updateReservation — pulamos.
 // CONFLICT É retornado (editar pra horário ocupado por outra ACTIVE) e
@@ -18,12 +18,12 @@ import type {
 const BASE_REQ: Omit<UpdateReservationRequest, 'clientRequestId'> = {
   userEmail: 'professor@senai.edu',
   payload: {
-    id:         'r-1',
-    sala:       '604 Sala',
-    data:       '2026-12-10',
-    inicio:     '10:00',
-    fim:        '11:00',
-    turma:      'ADS-A',
+    id: 'r-1',
+    sala: '604 Sala',
+    data: '2026-12-10',
+    inicio: '10:00',
+    fim: '11:00',
+    turma: 'ADS-A',
     observacao: '',
   },
 };
@@ -31,19 +31,19 @@ const BASE_REQ: Omit<UpdateReservationRequest, 'clientRequestId'> = {
 const OK_RES: UpdateReservationResponse = {
   ok: true,
   data: {
-    id:         'r-1',
-    sala:       '604 Sala',
-    data:       '2026-12-10',
-    inicio:     '10:00',
-    fim:        '11:00',
-    professor:  'Fulano',
-    turma:      'ADS-A',
+    id: 'r-1',
+    sala: '604 Sala',
+    data: '2026-12-10',
+    inicio: '10:00',
+    fim: '11:00',
+    professor: 'Fulano',
+    turma: 'ADS-A',
     observacao: '',
-    status:     'ACTIVE',
-    createdBy:  'professor@senai.edu',
-    createdAt:  '2026-06-01T12:00:00.000Z',
-    updatedAt:  '2026-06-10T10:00:00.000Z',
-    groupId:    'r-1',  // Sprint 4 Fase A: única → groupId === id
+    status: 'ACTIVE',
+    createdBy: 'professor@senai.edu',
+    createdAt: '2026-06-01T12:00:00.000Z',
+    updatedAt: '2026-06-10T10:00:00.000Z',
+    groupId: 'r-1', // Sprint 4 Fase A: única → groupId === id
   },
   error: null,
 };
@@ -109,18 +109,17 @@ describe('executeUpdateReservation()', () => {
   });
 
   it('retenta em INTERNAL com o MESMO clientRequestId', async () => {
-    const updateReservation = vi.fn()
+    const updateReservation = vi
+      .fn()
       .mockResolvedValueOnce(envelope('INTERNAL'))
       .mockResolvedValueOnce(OK_RES);
 
-    const result = await executeUpdateReservation(
-      { updateReservation },
-      BASE_REQ,
-      { maxRetries: 2 },
-    );
+    const result = await executeUpdateReservation({ updateReservation }, BASE_REQ, {
+      maxRetries: 2,
+    });
 
     expect(updateReservation).toHaveBeenCalledTimes(2);
-    const firstId  = updateReservation.mock.calls[0][0].clientRequestId;
+    const firstId = updateReservation.mock.calls[0][0].clientRequestId;
     const secondId = updateReservation.mock.calls[1][0].clientRequestId;
     expect(firstId).toBe(secondId);
     expect(firstId).toBe('11111111-2222-3333-4444-555555555555');
@@ -128,18 +127,17 @@ describe('executeUpdateReservation()', () => {
   });
 
   it('retenta em falha de rede com o MESMO clientRequestId', async () => {
-    const updateReservation = vi.fn()
+    const updateReservation = vi
+      .fn()
       .mockRejectedValueOnce(new TypeError('Network down'))
       .mockResolvedValueOnce(OK_RES);
 
-    const result = await executeUpdateReservation(
-      { updateReservation },
-      BASE_REQ,
-      { maxRetries: 2 },
-    );
+    const result = await executeUpdateReservation({ updateReservation }, BASE_REQ, {
+      maxRetries: 2,
+    });
 
     expect(updateReservation).toHaveBeenCalledTimes(2);
-    const firstId  = updateReservation.mock.calls[0][0].clientRequestId;
+    const firstId = updateReservation.mock.calls[0][0].clientRequestId;
     const secondId = updateReservation.mock.calls[1][0].clientRequestId;
     expect(firstId).toBe(secondId);
     expect(result.ok).toBe(true);
@@ -148,11 +146,9 @@ describe('executeUpdateReservation()', () => {
   it('após esgotar retries em INTERNAL, devolve o último envelope ok=false', async () => {
     const updateReservation = vi.fn().mockResolvedValue(envelope('INTERNAL'));
 
-    const result = await executeUpdateReservation(
-      { updateReservation },
-      BASE_REQ,
-      { maxRetries: 2 },
-    );
+    const result = await executeUpdateReservation({ updateReservation }, BASE_REQ, {
+      maxRetries: 2,
+    });
 
     expect(updateReservation).toHaveBeenCalledTimes(3); // 1 inicial + 2 retries
     expect(result.ok).toBe(false);
@@ -163,11 +159,7 @@ describe('executeUpdateReservation()', () => {
     const updateReservation = vi.fn().mockRejectedValue(new TypeError('Network down'));
 
     await expect(
-      executeUpdateReservation(
-        { updateReservation },
-        BASE_REQ,
-        { maxRetries: 1 },
-      ),
+      executeUpdateReservation({ updateReservation }, BASE_REQ, { maxRetries: 1 }),
     ).rejects.toThrow('Network down');
     expect(updateReservation).toHaveBeenCalledTimes(2);
   });
@@ -175,11 +167,9 @@ describe('executeUpdateReservation()', () => {
   it('respeita clientRequestId fornecido externamente', async () => {
     const updateReservation = vi.fn().mockResolvedValue(OK_RES);
 
-    await executeUpdateReservation(
-      { updateReservation },
-      BASE_REQ,
-      { clientRequestId: 'externo-9999' },
-    );
+    await executeUpdateReservation({ updateReservation }, BASE_REQ, {
+      clientRequestId: 'externo-9999',
+    });
 
     expect(updateReservation.mock.calls[0][0].clientRequestId).toBe('externo-9999');
   });
@@ -190,12 +180,12 @@ describe('executeUpdateReservation()', () => {
     await executeUpdateReservation({ updateReservation }, BASE_REQ);
 
     expect(updateReservation.mock.calls[0][0].payload).toEqual({
-      id:         'r-1',
-      sala:       '604 Sala',
-      data:       '2026-12-10',
-      inicio:     '10:00',
-      fim:        '11:00',
-      turma:      'ADS-A',
+      id: 'r-1',
+      sala: '604 Sala',
+      data: '2026-12-10',
+      inicio: '10:00',
+      fim: '11:00',
+      turma: 'ADS-A',
       observacao: '',
     });
   });

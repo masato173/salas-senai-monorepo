@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { executeTriggerSync } from '../useTriggerSync';
-import type { BackendEnvelope } from '../../services/appsScript';
+import type { BackendEnvelope } from '../../services/apiTypes';
 import type { SyncResult } from '@salas-senai/shared';
 
 const SYNC_RESULT: SyncResult = {

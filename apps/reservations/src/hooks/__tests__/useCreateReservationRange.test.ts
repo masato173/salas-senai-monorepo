@@ -3,19 +3,19 @@ import { executeCreateReservationRange } from '../useCreateReservationRange';
 import type {
   CreateReservationRangeRequest,
   CreateReservationRangeResponse,
-} from '../../services/appsScript';
+} from '../../services/apiTypes';
 
 const BASE_REQ: Omit<CreateReservationRangeRequest, 'clientRequestId'> = {
   userEmail: 'professor@senai.edu',
   payload: {
-    sala:       '603 Sala',
+    sala: '603 Sala',
     dataInicio: '2026-12-10',
-    dataFim:    '2026-12-15',
+    dataFim: '2026-12-15',
     diasSemana: [2, 4],
-    inicio:     '08:00',
-    fim:        '10:00',
-    professor:  'Fulano',
-    turma:      'ADS-A',
+    inicio: '08:00',
+    fim: '10:00',
+    professor: 'Fulano',
+    turma: 'ADS-A',
     observacao: '',
   },
 };
@@ -26,17 +26,29 @@ const OK_RES: CreateReservationRangeResponse = {
     count: 2,
     reservations: [
       {
-        id: 'r-1', sala: '603 Sala', data: '2026-12-10',
-        inicio: '08:00', fim: '10:00', professor: 'Fulano',
-        turma: 'ADS-A', observacao: '', status: 'ACTIVE',
+        id: 'r-1',
+        sala: '603 Sala',
+        data: '2026-12-10',
+        inicio: '08:00',
+        fim: '10:00',
+        professor: 'Fulano',
+        turma: 'ADS-A',
+        observacao: '',
+        status: 'ACTIVE',
         createdBy: 'professor@senai.edu',
         createdAt: '2026-06-01T12:00:00.000Z',
         updatedAt: '2026-06-01T12:00:00.000Z',
       },
       {
-        id: 'r-2', sala: '603 Sala', data: '2026-12-15',
-        inicio: '08:00', fim: '10:00', professor: 'Fulano',
-        turma: 'ADS-A', observacao: '', status: 'ACTIVE',
+        id: 'r-2',
+        sala: '603 Sala',
+        data: '2026-12-15',
+        inicio: '08:00',
+        fim: '10:00',
+        professor: 'Fulano',
+        turma: 'ADS-A',
+        observacao: '',
+        status: 'ACTIVE',
         createdBy: 'professor@senai.edu',
         createdAt: '2026-06-01T12:00:00.000Z',
         updatedAt: '2026-06-01T12:00:00.000Z',
@@ -97,16 +109,17 @@ describe('executeCreateReservationRange()', () => {
   });
 
   it('retenta em INTERNAL com o MESMO clientRequestId', async () => {
-    const createReservationRange = vi.fn()
+    const createReservationRange = vi
+      .fn()
       .mockResolvedValueOnce(envelope('INTERNAL'))
       .mockResolvedValueOnce(OK_RES);
 
-    const result = await executeCreateReservationRange(
-      { createReservationRange }, BASE_REQ, { maxRetries: 2 },
-    );
+    const result = await executeCreateReservationRange({ createReservationRange }, BASE_REQ, {
+      maxRetries: 2,
+    });
 
     expect(createReservationRange).toHaveBeenCalledTimes(2);
-    const firstId  = createReservationRange.mock.calls[0][0].clientRequestId;
+    const firstId = createReservationRange.mock.calls[0][0].clientRequestId;
     const secondId = createReservationRange.mock.calls[1][0].clientRequestId;
     expect(firstId).toBe(secondId);
     expect(firstId).toBe('11111111-2222-3333-4444-555555555555');
@@ -114,16 +127,17 @@ describe('executeCreateReservationRange()', () => {
   });
 
   it('retenta em falha de rede com o MESMO clientRequestId', async () => {
-    const createReservationRange = vi.fn()
+    const createReservationRange = vi
+      .fn()
       .mockRejectedValueOnce(new TypeError('Network down'))
       .mockResolvedValueOnce(OK_RES);
 
-    const result = await executeCreateReservationRange(
-      { createReservationRange }, BASE_REQ, { maxRetries: 2 },
-    );
+    const result = await executeCreateReservationRange({ createReservationRange }, BASE_REQ, {
+      maxRetries: 2,
+    });
 
     expect(createReservationRange).toHaveBeenCalledTimes(2);
-    const firstId  = createReservationRange.mock.calls[0][0].clientRequestId;
+    const firstId = createReservationRange.mock.calls[0][0].clientRequestId;
     const secondId = createReservationRange.mock.calls[1][0].clientRequestId;
     expect(firstId).toBe(secondId);
     expect(result.ok).toBe(true);
@@ -132,9 +146,9 @@ describe('executeCreateReservationRange()', () => {
   it('após esgotar retries em INTERNAL, devolve o último envelope ok=false', async () => {
     const createReservationRange = vi.fn().mockResolvedValue(envelope('INTERNAL'));
 
-    const result = await executeCreateReservationRange(
-      { createReservationRange }, BASE_REQ, { maxRetries: 2 },
-    );
+    const result = await executeCreateReservationRange({ createReservationRange }, BASE_REQ, {
+      maxRetries: 2,
+    });
 
     expect(createReservationRange).toHaveBeenCalledTimes(3); // 1 inicial + 2 retries
     expect(result.ok).toBe(false);
@@ -153,11 +167,9 @@ describe('executeCreateReservationRange()', () => {
   it('respeita clientRequestId fornecido externamente', async () => {
     const createReservationRange = vi.fn().mockResolvedValue(OK_RES);
 
-    await executeCreateReservationRange(
-      { createReservationRange },
-      BASE_REQ,
-      { clientRequestId: 'externo-9999' },
-    );
+    await executeCreateReservationRange({ createReservationRange }, BASE_REQ, {
+      clientRequestId: 'externo-9999',
+    });
 
     expect(createReservationRange.mock.calls[0][0].clientRequestId).toBe('externo-9999');
   });

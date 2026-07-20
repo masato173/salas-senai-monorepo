@@ -5,7 +5,6 @@ import { ReservationList } from '../../components/reservations/ReservationList';
 import { ReservationForm } from '../../components/reservations/ReservationForm';
 import { ReservationCalendar } from '../../components/reservations/ReservationCalendar';
 import { ReservationDetailsModal } from '../../components/reservations/ReservationDetailsModal';
-import { createAppsScriptService } from '../../services/appsScript';
 import { createNestjsApiService } from '../../services/nestjsApiService';
 import { useListReservations } from '../../hooks/useListReservations';
 import { useRealtimeSocket } from '../../hooks/useRealtimeSocket';
@@ -20,7 +19,7 @@ import {
 } from '../../components/reservations/reservationToEvent';
 import { getEventosDaSala } from '../../services/availability';
 import { RoomAvailabilityPanel } from '../../components/reservations/RoomAvailabilityPanel';
-import { APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN, SALAS } from '../../config';
+import { SALAS } from '../../config';
 import { useAuthStore, selectUser } from '../../store/authStore';
 import type { RegistroLegado, SalaEvento } from '../../types';
 
@@ -33,13 +32,8 @@ export default function ReservasPage() {
   const [selectedDate, setSelectedDate] = useState<string>(todayYmd);
   const [selectedReservation, setSelectedReservation] = useState<ReservationDetails | null>(null);
 
-  // F5.4-F5.6: quando BACKEND_DRIVER_ENABLED=true, usa NestJS para
-  // listReservations, createReservation e cancelReservation.
-  // fetchSchedule e operações de grupo ainda delegam ao Apps Script (fallback).
-  const service = useMemo(() => {
-    const appsScript = createAppsScriptService({ url: APPS_SCRIPT_URL, token: APPS_SCRIPT_TOKEN });
-    return BACKEND_DRIVER_ENABLED ? createNestjsApiService() : appsScript;
-  }, []);
+  // F9.7 — NestJS é fonte única de verdade; fallback Apps Script removido.
+  const service = useMemo(() => createNestjsApiService(), []);
 
   // Lista de reservas pro calendário (auto-fetch no mount via hook default).
   const list = useListReservations(service);

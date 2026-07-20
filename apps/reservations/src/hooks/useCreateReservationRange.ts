@@ -3,7 +3,7 @@ import type {
   CreateReservationRangeRequest,
   CreateReservationRangeResponse,
   BackendError,
-} from '../services/appsScript';
+} from '../services/apiTypes';
 
 // ─────────────────────────────────────────────────────────────
 // Política de retry — idempotente via clientRequestId.
@@ -18,21 +18,23 @@ import type {
 // ─────────────────────────────────────────────────────────────
 
 interface ReservationRangeCreator {
-  createReservationRange: (req: CreateReservationRangeRequest) => Promise<CreateReservationRangeResponse>;
+  createReservationRange: (
+    req: CreateReservationRangeRequest,
+  ) => Promise<CreateReservationRangeResponse>;
 }
 
 interface ExecuteOptions {
   clientRequestId?: string;
-  maxRetries?:      number; // default 2
+  maxRetries?: number; // default 2
 }
 
 export async function executeCreateReservationRange(
   service: ReservationRangeCreator,
-  req:     Omit<CreateReservationRangeRequest, 'clientRequestId'>,
+  req: Omit<CreateReservationRangeRequest, 'clientRequestId'>,
   options: ExecuteOptions = {},
 ): Promise<CreateReservationRangeResponse> {
   const clientRequestId = options.clientRequestId ?? crypto.randomUUID();
-  const maxRetries      = options.maxRetries ?? 2;
+  const maxRetries = options.maxRetries ?? 2;
 
   let lastEnvelope: CreateReservationRangeResponse | undefined;
   let lastNetError: unknown;
@@ -64,45 +66,52 @@ function isRetryable(code: BackendError['code'] | undefined): boolean {
 type RangeMutationStatus = 'idle' | 'loading' | 'success' | 'error';
 
 interface UseCreateReservationRangeResult {
-  mutate: (req: Omit<CreateReservationRangeRequest, 'clientRequestId'>) => Promise<CreateReservationRangeResponse>;
+  mutate: (
+    req: Omit<CreateReservationRangeRequest, 'clientRequestId'>,
+  ) => Promise<CreateReservationRangeResponse>;
   status: RangeMutationStatus;
-  error:  BackendError | null;
-  data:   CreateReservationRangeResponse['data'];
-  reset:  () => void;
+  error: BackendError | null;
+  data: CreateReservationRangeResponse['data'];
+  reset: () => void;
 }
 
-export function useCreateReservationRange(service: ReservationRangeCreator): UseCreateReservationRangeResult {
+export function useCreateReservationRange(
+  service: ReservationRangeCreator,
+): UseCreateReservationRangeResult {
   const [status, setStatus] = useState<RangeMutationStatus>('idle');
-  const [error,  setError]  = useState<BackendError | null>(null);
-  const [data,   setData]   = useState<CreateReservationRangeResponse['data']>(null);
+  const [error, setError] = useState<BackendError | null>(null);
+  const [data, setData] = useState<CreateReservationRangeResponse['data']>(null);
 
   const serviceRef = useRef(service);
   serviceRef.current = service;
 
-  const mutate = useCallback(async (req: Omit<CreateReservationRangeRequest, 'clientRequestId'>) => {
-    setStatus('loading');
-    setError(null);
+  const mutate = useCallback(
+    async (req: Omit<CreateReservationRangeRequest, 'clientRequestId'>) => {
+      setStatus('loading');
+      setError(null);
 
-    try {
-      const res = await executeCreateReservationRange(serviceRef.current, req);
-      if (res.ok) {
-        setData(res.data);
-        setStatus('success');
-      } else {
-        setError(res.error);
+      try {
+        const res = await executeCreateReservationRange(serviceRef.current, req);
+        if (res.ok) {
+          setData(res.data);
+          setStatus('success');
+        } else {
+          setError(res.error);
+          setStatus('error');
+        }
+        return res;
+      } catch (err) {
+        const networkError: BackendError = {
+          code: 'INTERNAL',
+          message: err instanceof Error ? err.message : 'Falha de rede.',
+        };
+        setError(networkError);
         setStatus('error');
+        return { ok: false, data: null, error: networkError };
       }
-      return res;
-    } catch (err) {
-      const networkError: BackendError = {
-        code:    'INTERNAL',
-        message: err instanceof Error ? err.message : 'Falha de rede.',
-      };
-      setError(networkError);
-      setStatus('error');
-      return { ok: false, data: null, error: networkError };
-    }
-  }, []);
+    },
+    [],
+  );
 
   const reset = useCallback(() => {
     setStatus('idle');

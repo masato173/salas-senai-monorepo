@@ -1,21 +1,21 @@
 import { describe, it, expect } from 'vitest';
 import { reservationToEvent } from '../reservationToEvent';
-import type { CreatedReservationRow } from '../../../services/appsScript';
+import type { CreatedReservationRow } from '../../../services/apiTypes';
 
 const SAMPLE: CreatedReservationRow = {
-  id:         'r-1',
-  sala:       '603 Sala',
-  data:       '2026-12-10',
-  inicio:     '08:00',
-  fim:        '10:00',
-  professor:  'Fulano',
-  turma:      'ADS-A',
+  id: 'r-1',
+  sala: '603 Sala',
+  data: '2026-12-10',
+  inicio: '08:00',
+  fim: '10:00',
+  professor: 'Fulano',
+  turma: 'ADS-A',
   observacao: '',
-  status:     'ACTIVE',
-  createdBy:  'professor@senai.edu',
-  createdAt:  '2026-06-01T12:00:00.000Z',
-  updatedAt:  '2026-06-01T12:00:00.000Z',
-  groupId:    'r-1',  // Sprint 4 Fase A: única → groupId === id
+  status: 'ACTIVE',
+  createdBy: 'professor@senai.edu',
+  createdAt: '2026-06-01T12:00:00.000Z',
+  updatedAt: '2026-06-01T12:00:00.000Z',
+  groupId: 'r-1', // Sprint 4 Fase A: única → groupId === id
 };
 
 describe('reservationToEvent()', () => {
@@ -23,20 +23,20 @@ describe('reservationToEvent()', () => {
     const event = reservationToEvent(SAMPLE);
 
     expect(event).toEqual({
-      id:    'r-1',
+      id: 'r-1',
       title: '603 Sala · ADS-A',
       start: '2026-12-10T08:00:00',
-      end:   '2026-12-10T10:00:00',
+      end: '2026-12-10T10:00:00',
       extendedProps: {
-        sala:       '603 Sala',
-        data:       '2026-12-10',
-        inicio:     '08:00',
-        fim:        '10:00',
-        professor:  'Fulano',
-        turma:      'ADS-A',
+        sala: '603 Sala',
+        data: '2026-12-10',
+        inicio: '08:00',
+        fim: '10:00',
+        professor: 'Fulano',
+        turma: 'ADS-A',
         observacao: '',
-        createdBy:  'professor@senai.edu',
-        groupId:    'r-1',
+        createdBy: 'professor@senai.edu',
+        groupId: 'r-1',
       },
     });
   });
@@ -52,7 +52,7 @@ describe('reservationToEvent()', () => {
 
     expect(event.start).toBe('2026-12-10T08:00:00');
     expect(event.start).not.toMatch(/Z|\+\d{2}:\d{2}/); // sem Z, sem offset explícito
-    expect(event.start).not.toMatch(/\.\d{3}/);          // sem milissegundos
+    expect(event.start).not.toMatch(/\.\d{3}/); // sem milissegundos
   });
 
   it('end segue formato YYYY-MM-DDTHH:MM:00 sem timezone suffix', () => {
@@ -78,7 +78,17 @@ describe('reservationToEvent()', () => {
 
     expect(event.extendedProps).toBeDefined();
     expect(Object.keys(event.extendedProps!).sort()).toEqual(
-      ['createdBy', 'data', 'fim', 'groupId', 'inicio', 'observacao', 'professor', 'sala', 'turma'].sort(),
+      [
+        'createdBy',
+        'data',
+        'fim',
+        'groupId',
+        'inicio',
+        'observacao',
+        'professor',
+        'sala',
+        'turma',
+      ].sort(),
     );
   });
 
@@ -106,7 +116,7 @@ describe('reservationToEvent()', () => {
     // Linhas pre-Fase-A nao tem coluna N — backend devolve groupId undefined.
     // Mapper aplica ?? '' pra normalizar pro modal.
     const legacy = { ...SAMPLE, groupId: undefined } as unknown as CreatedReservationRow;
-    const event  = reservationToEvent(legacy);
+    const event = reservationToEvent(legacy);
 
     expect(event.extendedProps?.groupId).toBe('');
   });

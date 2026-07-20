@@ -1,5 +1,5 @@
 import { Check, X } from 'lucide-react';
-import type { CreatedReservationRow } from '../../services/appsScript';
+import type { CreatedReservationRow } from '../../services/apiTypes';
 
 interface ReservationApprovalCardProps {
   reservation: CreatedReservationRow;

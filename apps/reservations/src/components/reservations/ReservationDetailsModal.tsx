@@ -7,7 +7,7 @@ import type {
   BackendError,
   UpdateReservationSelectedRequest,
   UpdateReservationSelectedResponse,
-} from '../../services/appsScript';
+} from '../../services/apiTypes';
 
 // Sub-etapa 4.2a — modal apresentacional puro.
 // Sub-etapa 4.2b — fluxo de cancelamento em 2 cliques + owner-check preventivo.

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ScheduleResult } from '../services/appsScript';
+import type { ScheduleResult } from '../services/apiTypes';
 
 // ─────────────────────────────────────────────────────────────
 // Sprint A3.1 — hook de dados pro Dashboard nativo.

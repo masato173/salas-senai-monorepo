@@ -3,7 +3,7 @@ import type {
   UpdateReservationSelectedRequest,
   UpdateReservationSelectedResponse,
   BackendError,
-} from '../services/appsScript';
+} from '../services/apiTypes';
 
 // ─────────────────────────────────────────────────────────────
 // Sprint 4 C3 — remanejar ocorrências SELECIONADAS de um grupo.

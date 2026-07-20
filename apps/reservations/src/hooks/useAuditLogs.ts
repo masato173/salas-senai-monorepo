@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PaginatedResponse, AuditLog, AuditQuery } from '../types';
-import type { BackendError } from '../services/appsScript';
+import type { BackendError } from '../services/apiTypes';
 
 // ─────────────────────────────────────────────────────────────
 // useAuditLogs — F6.4

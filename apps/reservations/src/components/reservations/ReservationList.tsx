@@ -1,5 +1,5 @@
 import { useMemo, type CSSProperties } from 'react';
-import type { CreatedReservationRow } from '../../services/appsScript';
+import type { CreatedReservationRow } from '../../services/apiTypes';
 
 interface ReservationListProps {
   reservations?: CreatedReservationRow[];

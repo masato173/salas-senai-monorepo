@@ -6,7 +6,7 @@ import type {
   RoomStatus,
   AvailabilityResult,
 } from '../types';
-import type { CreatedReservationRow } from './appsScript';
+import type { CreatedReservationRow } from './apiTypes';
 
 // Sprint Disponibilidade S2 — mapper puro, testável em isolamento (Vitest).
 // Sem React, sem fetch, sem efeitos colaterais.

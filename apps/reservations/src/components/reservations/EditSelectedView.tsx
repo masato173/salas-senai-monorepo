@@ -9,7 +9,7 @@ import type { ReservationFormService } from './ReservationForm';
 import type {
   UpdateReservationSelectedRequest,
   UpdateReservationSelectedResponse,
-} from '../../services/appsScript';
+} from '../../services/apiTypes';
 
 // Estende ReservationFormService localmente com updateReservationSelected.
 // O método foi adicionado ao AppsScriptService (appsScript.ts) na Fase D4.1,

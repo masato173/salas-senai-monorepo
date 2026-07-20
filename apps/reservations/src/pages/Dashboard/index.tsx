@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react';
 
-import { createAppsScriptService } from '../../services/appsScript';
 import { createNestjsApiService } from '../../services/nestjsApiService';
-import { APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN, SALAS } from '../../config';
+import { SALAS } from '../../config';
 import { useSchedule } from '../../hooks/useSchedule';
 import { useListReservations } from '../../hooks/useListReservations';
 import { useRealtimeSocket } from '../../hooks/useRealtimeSocket';
@@ -17,7 +16,7 @@ import { DashboardStats } from '../../components/dashboard/DashboardStats';
 import { OccupancyDashboard } from '../../components/dashboard/OccupancyDashboard';
 import { todayYmd, formatDataBR } from '../../components/dashboard/scheduleDateUtils';
 import type { RegistroLegado } from '../../types';
-import type { CreatedReservationRow } from '../../services/appsScript';
+import type { CreatedReservationRow } from '../../services/apiTypes';
 
 // Sprint A3 — Dashboard nativo (cards + tabela de ocupação). Sem iframe.
 
@@ -31,12 +30,8 @@ const ESTADO_INICIAL_FILTROS: ScheduleFilterState = {
 };
 
 export function DashboardPage(): JSX.Element {
-  // F5.4-F5.6: quando BACKEND_DRIVER_ENABLED=true, usa NestJS para
-  // listReservations. fetchSchedule ainda delega ao Apps Script (fallback).
-  const service = useMemo(() => {
-    const appsScript = createAppsScriptService({ url: APPS_SCRIPT_URL, token: APPS_SCRIPT_TOKEN });
-    return BACKEND_DRIVER_ENABLED ? createNestjsApiService() : appsScript;
-  }, []);
+  // F9.7 — NestJS é fonte única de verdade; fallback Apps Script removido.
+  const service = useMemo(() => createNestjsApiService(), []);
   const schedule = useSchedule(service);
   const list = useListReservations(service);
 

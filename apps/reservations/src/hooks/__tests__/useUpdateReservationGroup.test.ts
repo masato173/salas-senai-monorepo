@@ -5,7 +5,7 @@ import type {
   UpdateReservationGroupResponse,
   BackendErrorCode,
   CreatedReservationRow,
-} from '../../services/appsScript';
+} from '../../services/apiTypes';
 
 // DUPLICATE não é retornado por updateReservationGroup — pulamos.
 // CONFLICT É retornado (atomicidade tudo-ou-nada: qualquer linha do grupo
@@ -18,34 +18,34 @@ import type {
 // hook são indistinguíveis.
 
 const BASE_PAYLOAD = {
-  groupId:    'grp-shared-xyz',
-  sala:       '611 Sala',
-  inicio:     '16:00',
-  fim:        '17:00',
-  turma:      'ADS-B',
+  groupId: 'grp-shared-xyz',
+  sala: '611 Sala',
+  inicio: '16:00',
+  fim: '17:00',
+  turma: 'ADS-B',
   observacao: 'grupo',
 };
 
 const BASE_REQ: Omit<UpdateReservationGroupRequest, 'clientRequestId'> = {
   userEmail: 'professor@senai.edu',
-  payload:   BASE_PAYLOAD,
+  payload: BASE_PAYLOAD,
 };
 
 function rowFixture(overrides: Partial<CreatedReservationRow> = {}): CreatedReservationRow {
   return {
-    id:         'r-1',
-    sala:       '611 Sala',
-    data:       '2026-12-10',
-    inicio:     '16:00',
-    fim:        '17:00',
-    professor:  'Fulano',
-    turma:      'ADS-B',
+    id: 'r-1',
+    sala: '611 Sala',
+    data: '2026-12-10',
+    inicio: '16:00',
+    fim: '17:00',
+    professor: 'Fulano',
+    turma: 'ADS-B',
     observacao: 'grupo',
-    status:     'ACTIVE',
-    createdBy:  'professor@senai.edu',
-    createdAt:  '2026-06-01T12:00:00.000Z',
-    updatedAt:  '2026-06-10T10:00:00.000Z',
-    groupId:    'grp-shared-xyz',
+    status: 'ACTIVE',
+    createdBy: 'professor@senai.edu',
+    createdAt: '2026-06-01T12:00:00.000Z',
+    updatedAt: '2026-06-10T10:00:00.000Z',
+    groupId: 'grp-shared-xyz',
     ...overrides,
   };
 }
@@ -136,18 +136,17 @@ describe('executeUpdateReservationGroup()', () => {
   });
 
   it('retenta em INTERNAL com o MESMO clientRequestId', async () => {
-    const updateReservationGroup = vi.fn()
+    const updateReservationGroup = vi
+      .fn()
       .mockResolvedValueOnce(envelope('INTERNAL'))
       .mockResolvedValueOnce(OK_RES);
 
-    const result = await executeUpdateReservationGroup(
-      { updateReservationGroup },
-      BASE_REQ,
-      { maxRetries: 2 },
-    );
+    const result = await executeUpdateReservationGroup({ updateReservationGroup }, BASE_REQ, {
+      maxRetries: 2,
+    });
 
     expect(updateReservationGroup).toHaveBeenCalledTimes(2);
-    const firstId  = updateReservationGroup.mock.calls[0][0].clientRequestId;
+    const firstId = updateReservationGroup.mock.calls[0][0].clientRequestId;
     const secondId = updateReservationGroup.mock.calls[1][0].clientRequestId;
     expect(firstId).toBe(secondId);
     expect(firstId).toBe('11111111-2222-3333-4444-555555555555');
@@ -155,18 +154,17 @@ describe('executeUpdateReservationGroup()', () => {
   });
 
   it('retenta em falha de rede com o MESMO clientRequestId', async () => {
-    const updateReservationGroup = vi.fn()
+    const updateReservationGroup = vi
+      .fn()
       .mockRejectedValueOnce(new TypeError('Network down'))
       .mockResolvedValueOnce(OK_RES);
 
-    const result = await executeUpdateReservationGroup(
-      { updateReservationGroup },
-      BASE_REQ,
-      { maxRetries: 2 },
-    );
+    const result = await executeUpdateReservationGroup({ updateReservationGroup }, BASE_REQ, {
+      maxRetries: 2,
+    });
 
     expect(updateReservationGroup).toHaveBeenCalledTimes(2);
-    const firstId  = updateReservationGroup.mock.calls[0][0].clientRequestId;
+    const firstId = updateReservationGroup.mock.calls[0][0].clientRequestId;
     const secondId = updateReservationGroup.mock.calls[1][0].clientRequestId;
     expect(firstId).toBe(secondId);
     expect(result.ok).toBe(true);
@@ -175,11 +173,9 @@ describe('executeUpdateReservationGroup()', () => {
   it('após esgotar retries em INTERNAL, devolve o último envelope ok=false', async () => {
     const updateReservationGroup = vi.fn().mockResolvedValue(envelope('INTERNAL'));
 
-    const result = await executeUpdateReservationGroup(
-      { updateReservationGroup },
-      BASE_REQ,
-      { maxRetries: 2 },
-    );
+    const result = await executeUpdateReservationGroup({ updateReservationGroup }, BASE_REQ, {
+      maxRetries: 2,
+    });
 
     expect(updateReservationGroup).toHaveBeenCalledTimes(3);
     expect(result.ok).toBe(false);
@@ -190,11 +186,7 @@ describe('executeUpdateReservationGroup()', () => {
     const updateReservationGroup = vi.fn().mockRejectedValue(new TypeError('Network down'));
 
     await expect(
-      executeUpdateReservationGroup(
-        { updateReservationGroup },
-        BASE_REQ,
-        { maxRetries: 1 },
-      ),
+      executeUpdateReservationGroup({ updateReservationGroup }, BASE_REQ, { maxRetries: 1 }),
     ).rejects.toThrow('Network down');
     expect(updateReservationGroup).toHaveBeenCalledTimes(2);
   });
@@ -202,11 +194,9 @@ describe('executeUpdateReservationGroup()', () => {
   it('respeita clientRequestId fornecido externamente', async () => {
     const updateReservationGroup = vi.fn().mockResolvedValue(OK_RES);
 
-    await executeUpdateReservationGroup(
-      { updateReservationGroup },
-      BASE_REQ,
-      { clientRequestId: 'externo-9999' },
-    );
+    await executeUpdateReservationGroup({ updateReservationGroup }, BASE_REQ, {
+      clientRequestId: 'externo-9999',
+    });
 
     expect(updateReservationGroup.mock.calls[0][0].clientRequestId).toBe('externo-9999');
   });

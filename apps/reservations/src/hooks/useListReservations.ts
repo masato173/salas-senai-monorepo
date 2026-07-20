@@ -3,7 +3,7 @@ import type {
   ListReservationsOptions,
   ListReservationsResponse,
   BackendError,
-} from '../services/appsScript';
+} from '../services/apiTypes';
 
 // ─────────────────────────────────────────────────────────────
 // Política de retry — apenas para falhas transientes.
@@ -67,9 +67,9 @@ export interface UseListReservationsOptions {
 }
 
 interface UseListReservationsResult {
-  data:    ListReservationsResponse['data'];
-  status:  QueryStatus;
-  error:   BackendError | null;
+  data: ListReservationsResponse['data'];
+  status: QueryStatus;
+  error: BackendError | null;
   refetch: (options?: ListReservationsOptions) => Promise<ListReservationsResponse>;
 }
 
@@ -80,8 +80,8 @@ export function useListReservations(
   const { autoFetch = true } = hookOptions;
 
   const [status, setStatus] = useState<QueryStatus>('idle');
-  const [error,  setError]  = useState<BackendError | null>(null);
-  const [data,   setData]   = useState<ListReservationsResponse['data']>(null);
+  const [error, setError] = useState<BackendError | null>(null);
+  const [data, setData] = useState<ListReservationsResponse['data']>(null);
 
   const serviceRef = useRef(service);
   serviceRef.current = service;
@@ -102,7 +102,7 @@ export function useListReservations(
       return res;
     } catch (err) {
       const networkError: BackendError = {
-        code:    'INTERNAL',
+        code: 'INTERNAL',
         message: err instanceof Error ? err.message : 'Falha de rede.',
       };
       setError(networkError);
