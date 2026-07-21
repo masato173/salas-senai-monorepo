@@ -18,6 +18,7 @@ const mockTx = {
 };
 
 const mockPrisma = {
+  room: { findUnique: vi.fn() },
   reservation: { findMany: vi.fn(), findUnique: vi.fn() },
   $transaction: vi
     .fn()
@@ -243,6 +244,11 @@ describe('ReservationsService', () => {
     };
 
     beforeEach(() => {
+      mockPrisma.room.findUnique.mockResolvedValue({
+        id: rangeDto.roomId,
+        name: 'Sala Teste',
+        available: true,
+      });
       mockTx.reservation.create.mockImplementation(
         (args: { data: { date: string; [key: string]: unknown } }) =>
           Promise.resolve({ ...baseReservation, ...args.data, id: `res-${args.data.date}` }),

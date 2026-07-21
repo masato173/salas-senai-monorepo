@@ -8,6 +8,6 @@ import { AuditService } from './audit/audit.service';
 @Module({
   controllers: [ReservationsController],
   providers: [ReservationsService, ConflictService, OwnershipService, AuditService],
-  exports: [ConflictService],
+  exports: [ConflictService, AuditService],
 })
 export class ReservationsModule {}

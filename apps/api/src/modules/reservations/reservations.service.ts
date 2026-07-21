@@ -24,6 +24,10 @@ interface FindAllParams {
   date?: string | undefined;
   status?: ReservationStatus | undefined;
   mine?: boolean | undefined;
+  // Paginação aditiva/opt-in — ver findAll(). Ausentes ou inválidos:
+  // comportamento idêntico ao contrato atual (array completo).
+  page?: number | undefined;
+  pageSize?: number | undefined;
   currentUser: RequestUser;
 }
 
@@ -42,11 +46,17 @@ export class ReservationsService {
   ) {}
 
   async findAll(params: FindAllParams): Promise<Reservation[]> {
-    const { roomId, date, status, mine, currentUser } = params;
+    const { roomId, date, status, mine, page, pageSize, currentUser } = params;
 
     // PROFESSOR vê apenas suas reservas.
     // COORDENADOR/ADMIN vê tudo, a menos que mine=true.
     const restrictToOwn = currentUser.role === 'PROFESSOR' || mine === true;
+
+    // Paginação só ativa se page E pageSize vierem válidos (page >= 1,
+    // 1 <= pageSize <= 200). Sem eles (ou inválidos): sem skip/take,
+    // retorna o array completo — contrato de resposta preservado.
+    const paginate =
+      page !== undefined && pageSize !== undefined && page >= 1 && pageSize >= 1 && pageSize <= 200;
 
     return this.prisma.reservation.findMany({
       where: {
@@ -61,6 +71,7 @@ export class ReservationsService {
         user: { select: { id: true, name: true, email: true } },
       },
       orderBy: [{ date: 'asc' }, { inicio: 'asc' }],
+      ...(paginate ? { skip: (page - 1) * pageSize, take: pageSize } : {}),
     });
   }
 
@@ -368,6 +379,19 @@ export class ReservationsService {
 
     if (datas.length > 60) {
       throw new BadRequestException('Máximo de 60 dias consecutivos.');
+    }
+
+    // Sala é a mesma pra todas as datas do range — checar uma vez antes do
+    // loop (não repetir a query 60x). Mesma checagem de create(); leitura
+    // simples fora de transaction — o advisory lock por (roomId, date)
+    // dentro do loop já protege contra a sala ser desativada no meio da
+    // operação (edge case aceitável, fora de escopo resolver aqui).
+    const room = await this.prisma.room.findUnique({ where: { id: dto.roomId } });
+    if (!room) {
+      throw new NotFoundException(`Sala "${dto.roomId}" não encontrada.`);
+    }
+    if (!room.available) {
+      throw new BadRequestException(`Sala "${room.name}" está desativada.`);
     }
 
     const groupId = crypto.randomUUID();

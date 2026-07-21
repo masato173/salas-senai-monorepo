@@ -37,6 +37,8 @@ export class ReservationsController {
     @Query('date') date?: string,
     @Query('status') status?: string,
     @Query('mine') mine?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
     @Request() req?: AuthenticatedRequest,
   ): Promise<Reservation[]> {
     const currentUser = req!.user;
@@ -45,11 +47,20 @@ export class ReservationsController {
         ? (status as ReservationStatus)
         : undefined;
 
+    // page/pageSize: só números inteiros positivos viram parâmetro válido —
+    // qualquer outra coisa (ausente, malformado, negativo) vira undefined e
+    // o service cai no comportamento padrão sem paginação.
+    const resolvedPage = page !== undefined && /^\d+$/.test(page) ? Number(page) : undefined;
+    const resolvedPageSize =
+      pageSize !== undefined && /^\d+$/.test(pageSize) ? Number(pageSize) : undefined;
+
     return this.reservationsService.findAll({
       roomId,
       date,
       status: resolvedStatus,
       mine: mine === 'true',
+      page: resolvedPage,
+      pageSize: resolvedPageSize,
       currentUser,
     });
   }

@@ -1,3 +1,9 @@
+// Este arquivo é o código-fonte do Google Apps Script publicado que
+// alimenta o SyncModule do backend NestJS (POST /sync/schedules).
+// Vive em apps/reservations/backend/ por razões históricas (era
+// consumido pelo frontend legado antes do F5/F8). Mantido aqui como
+// referência — a fonte real é o script publicado no Google Apps Script,
+// não este arquivo. Ver docs/adr/ADR-004 e apps/api/src/modules/sync/.
 // ============================================================
 // CONTROLE DE SALAS SENAI — Google Apps Script
 // Versão limpa — bugs de runtime corrigidos:

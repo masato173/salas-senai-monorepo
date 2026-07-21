@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type { Reservation } from '@prisma/client';
 
 export type ReservationAuditAction =
   | 'CREATE_RESERVATION'
@@ -9,12 +8,20 @@ export type ReservationAuditAction =
   | 'APPROVE_RESERVATION'
   | 'REJECT_RESERVATION';
 
+export type RoomAuditAction = 'CREATE_ROOM' | 'UPDATE_ROOM' | 'DEACTIVATE_ROOM';
+
+export type AuditAction = ReservationAuditAction | RoomAuditAction;
+export type AuditEntityType = 'Reservation' | 'Room';
+
 interface AuditParams {
-  action: ReservationAuditAction;
+  action: AuditAction;
+  // Default 'Reservation' — preserva compatibilidade com as chamadas
+  // existentes em reservations.service.ts, que não precisam passar isso.
+  entityType?: AuditEntityType;
   entityId: string;
   userId: string;
-  before?: Partial<Reservation>;
-  after?: Partial<Reservation>;
+  before?: Record<string, unknown>;
+  after?: Record<string, unknown>;
 }
 
 @Injectable()
@@ -24,7 +31,7 @@ export class AuditService {
     await tx.auditLog.create({
       data: {
         action: params.action,
-        entityType: 'Reservation',
+        entityType: params.entityType ?? 'Reservation',
         entityId: params.entityId,
         userId: params.userId,
         before:
