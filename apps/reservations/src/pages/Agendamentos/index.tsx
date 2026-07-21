@@ -3,91 +3,56 @@ import { ScheduleHeader } from '../../components/calendar/ScheduleHeader';
 import { ScheduleFilters } from '../../components/calendar/ScheduleFilters';
 import { AvailabilityCards } from '../../components/calendar/AvailabilityCards';
 import { ScheduleSidebar } from '../../components/calendar/ScheduleSidebar';
-import { CalendarPlaceholder } from '../../components/calendar/CalendarPlaceholder';
+import { DayView } from '../../components/calendar/DayView';
+import { useAvailabilityBackend, BACKEND_DRIVER_ENABLED } from '../../hooks/useAvailabilityBackend';
+import { useDashboardStats } from '../../hooks/useDashboardStats';
 import type { ScheduleFilterState } from '../../components/calendar/ScheduleFilters';
 import type { SidebarEntry } from '../../components/calendar/ScheduleSidebar';
+import type { DisponibilidadeSala } from '../../types';
 
-// ── Mock de dados ──────────────────────────────────────────────
-// Fase 4: substituir por useQuery() → Apps Script / API
-const MOCK_ENTRIES: SidebarEntry[] = [
-  {
-    id: '1',
-    sala: '603 Sala',
-    turma: 'APB.ADM.148',
-    turno: 'M',
-    start: '07:30',
-    end: '09:30',
-    status: 'busy',
-  },
-  {
-    id: '2',
-    sala: '605 Sala',
-    turma: 'APB.OPL.015',
-    turno: 'V',
-    start: '13:30',
-    end: '15:30',
-    status: 'busy',
-  },
-  {
-    id: '3',
-    sala: '607 Sala',
-    turma: '',
-    turno: null,
-    start: '07:30',
-    end: '22:00',
-    status: 'free',
-  },
-  {
-    id: '4',
-    sala: '608 Sala',
-    turma: 'APB.OPL.079',
-    turno: 'M',
-    start: '09:45',
-    end: '11:45',
-    status: 'busy',
-  },
-  {
-    id: '5',
-    sala: '610 Lab. Inf.',
-    turma: 'APB.HML.003',
-    turno: 'N',
-    start: '18:30',
-    end: '20:30',
-    status: 'busy',
-  },
-  {
-    id: '6',
-    sala: '612 Lab. CLP',
-    turma: '',
-    turno: null,
-    start: '07:30',
-    end: '22:00',
-    status: 'free',
-  },
-  {
-    id: '7',
-    sala: '614 Lab. Elét.',
-    turma: 'APB.ELT.010',
-    turno: 'V',
-    start: '15:45',
-    end: '17:45',
-    status: 'pending',
-  },
-  {
-    id: '8',
-    sala: '701 Sala',
-    turma: '',
-    turno: null,
-    start: '07:30',
-    end: '22:00',
-    status: 'free',
-  },
-];
+// ── Mapeamento de disponibilidade → entradas do sidebar/calendário ──
+// Função pura, testável em isolamento sem React.
+export function mapToEntries(salas: DisponibilidadeSala[]): SidebarEntry[] {
+  const entries: SidebarEntry[] = [];
+
+  for (const sala of salas) {
+    if (sala.status === 'livre' || sala.eventos.length === 0) {
+      entries.push({
+        id: sala.sala,
+        sala: sala.sala,
+        turma: '',
+        turno: null,
+        start: '07:00',
+        end: '22:00',
+        status: 'free',
+      });
+      continue;
+    }
+
+    for (const evento of sala.eventos) {
+      const status: SidebarEntry['status'] =
+        evento.tipo === 'aula' ? 'busy' : sala.status === 'conflito' ? 'busy' : 'pending';
+
+      entries.push({
+        id: `${sala.sala}-${evento.inicio}`,
+        sala: sala.sala,
+        turma: evento.turma ?? '',
+        turno: evento.turno ?? null,
+        start: evento.inicio,
+        end: evento.fim,
+        status,
+      });
+    }
+  }
+
+  return entries.sort((a, b) => a.sala.localeCompare(b.sala));
+}
 
 // ── Helpers de filtro ──────────────────────────────────────────
-function matchesSearch(sala: string, search: string): boolean {
+// Busca por TURMA (não mais por sala) — mudança explícita da Fase 4.
+function matchesTurma(turma: string, search: string): boolean {
   if (!search) return true;
-  return sala.toLowerCase().includes(search.toLowerCase());
+  return turma.toLowerCase().includes(search.toLowerCase());
 }
 
 function matchesTurno(turno: SidebarEntry['turno'], filter: ScheduleFilterState['turno']): boolean {
@@ -95,8 +60,7 @@ function matchesTurno(turno: SidebarEntry['turno'], filter: ScheduleFilterState[
   return turno === filter;
 }
 
-// roomType filter — inferido do nome da sala para o mock
-// Fase 4: usar campo type direto do backend
+// roomType filter — inferido do nome da sala (sem campo type na disponibilidade)
 function matchesRoomType(sala: string, filter: ScheduleFilterState['roomType']): boolean {
   if (filter === 'TODOS') return true;
   const lower = sala.toLowerCase();
@@ -112,7 +76,6 @@ export default function AgendamentosPage() {
   const today = new Date().toISOString().slice(0, 10);
 
   const [date, setDate] = useState(today);
-  const [isLoading, setIsLoading] = useState(false);
   const [filters, setFilters] = useState<ScheduleFilterState>({
     turno: 'TODOS',
     roomType: 'TODOS',
@@ -120,34 +83,38 @@ export default function AgendamentosPage() {
   });
   const [selected, setSelected] = useState<SidebarEntry | null>(null);
 
-  // Simula loading ao trocar de data
+  const disp = useAvailabilityBackend(date, undefined, { enabled: BACKEND_DRIVER_ENABLED });
+  const stats = useDashboardStats(date, { enabled: BACKEND_DRIVER_ENABLED });
+  const isLoading = disp.loading || stats.loading;
+
   function handleDateChange(d: string) {
     setDate(d);
-    setIsLoading(true);
-    setTimeout(() => setIsLoading(false), 600);
   }
 
-  // Entradas filtradas para o sidebar
+  // Todas as entradas mapeadas a partir da disponibilidade real
+  const allEntries = useMemo(() => mapToEntries(disp.data?.salas ?? []), [disp.data]);
+
+  // Entradas filtradas para o sidebar e calendário
   const filtered = useMemo(
     () =>
-      MOCK_ENTRIES.filter(
+      allEntries.filter(
         e =>
-          matchesSearch(e.sala, filters.search) &&
+          matchesTurma(e.turma, filters.search) &&
           matchesTurno(e.turno, filters.turno) &&
           matchesRoomType(e.sala, filters.roomType),
       ),
-    [filters],
+    [allEntries, filters],
   );
 
-  // Dados para os cards de resumo
+  // Dados para os cards de resumo — GET /dashboard via SQL
   const summaryData = useMemo(
     () => ({
-      totalSalas: MOCK_ENTRIES.length,
-      livres: MOCK_ENTRIES.filter(e => e.status === 'free').length,
-      ocupadas: MOCK_ENTRIES.filter(e => e.status === 'busy').length,
-      reservasPendentes: MOCK_ENTRIES.filter(e => e.status === 'pending').length,
+      totalSalas: stats.data?.totalSalas ?? 0,
+      livres: stats.data?.salasLivres ?? 0,
+      ocupadas: stats.data?.salasComAula ?? 0,
+      reservasPendentes: stats.data?.reservasPendentes ?? 0,
     }),
-    [],
+    [stats.data],
   );
 
   return (
@@ -222,7 +189,7 @@ export default function AgendamentosPage() {
           )}
 
           {/* Grade do calendário */}
-          <CalendarPlaceholder date={date} />
+          <DayView date={date} entries={filtered} selected={selected} />
         </div>
       </div>
 

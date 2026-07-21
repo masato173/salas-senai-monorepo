@@ -9,10 +9,6 @@ describe('ROUTES config', () => {
       '/agendamentos',
       '/reservas',
       '/aprovacoes',
-      '/salas',
-      '/turmas',
-      '/relatorios',
-      '/configuracoes',
       '/admin',
       '/admin/usuarios',
       '/admin/auditoria',
@@ -63,10 +59,6 @@ describe('ROUTES config', () => {
       expect(r.requiredRole, `${r.path} deve requerer ADMIN`).toBe('ADMIN');
     }
   });
-
-  it('configuracoes requer role ADMIN', () => {
-    expect(ROUTES.find(r => r.path === '/configuracoes')?.requiredRole).toBe('ADMIN');
-  });
 });
 
 describe('ROUTE_SECTIONS', () => {
@@ -77,17 +69,15 @@ describe('ROUTE_SECTIONS', () => {
     expect(paths).toContain('/reservas');
   });
 
-  it('seção gestao tem Aprovações, Salas e Turmas', () => {
+  it('seção gestao tem Aprovações', () => {
     const paths = ROUTE_SECTIONS.gestao.map(r => r.path);
     expect(paths).toContain('/aprovacoes');
-    expect(paths).toContain('/salas');
-    expect(paths).toContain('/turmas');
   });
 
-  it('seção sistema tem Relatorios e Configuracoes', () => {
-    const paths = ROUTE_SECTIONS.sistema.map(r => r.path);
-    expect(paths).toContain('/relatorios');
-    expect(paths).toContain('/configuracoes');
+  // Salas, Turmas, Relatórios e Configurações (stub) removidas da navegação —
+  // seção sistema fica vazia até uma página real ocupá-la.
+  it('seção sistema fica vazia (abas stub removidas da navegação)', () => {
+    expect(ROUTE_SECTIONS.sistema).toEqual([]);
   });
 
   it('todas as rotas estão em alguma seção', () => {
@@ -145,13 +135,12 @@ describe('hasAccess()', () => {
 
   it('rota protegida — bloqueada sem auth', () => {
     expect(hasAccess('/reservas', false)).toBe(false);
-    expect(hasAccess('/salas', false)).toBe(false);
-    expect(hasAccess('/configuracoes', false)).toBe(false);
+    expect(hasAccess('/aprovacoes', false)).toBe(false);
   });
 
   it('rota protegida — liberada com auth', () => {
     expect(hasAccess('/reservas', true)).toBe(true);
-    expect(hasAccess('/configuracoes', true)).toBe(true);
+    expect(hasAccess('/aprovacoes', true)).toBe(true);
   });
 
   it('path inexistente retorna false', () => {

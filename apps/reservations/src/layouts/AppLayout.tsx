@@ -138,6 +138,9 @@ export function AppLayout() {
         <nav className="sidebar-nav" aria-label="Navegação principal">
           {(['principal', 'gestao', 'sistema'] as const as string[])
             .concat(userRole === 'ADMIN' ? ['admin'] : [])
+            // Seções sem rotas (ex: 'sistema' após remover as abas stub) não
+            // renderizam cabeçalho órfão.
+            .filter(section => ROUTE_SECTIONS[section as keyof typeof ROUTE_SECTIONS].length > 0)
             .map(section => (
               <div key={section}>
                 <div className="sidebar-section-label">

@@ -16,10 +16,6 @@ import { DashboardPage } from '../pages/Dashboard';
 const AgendamentosPage = lazy(() => import('../pages/Agendamentos'));
 const ReservasPage = lazy(() => import('../pages/Reservas'));
 const AprovacoesPage = lazy(() => import('../pages/Aprovacoes'));
-const SalasPage = lazy(() => import('../pages/Salas'));
-const TurmasPage = lazy(() => import('../pages/Turmas'));
-const RelatoriosPage = lazy(() => import('../pages/Relatorios'));
-const ConfiguracoesPage = lazy(() => import('../pages/Configuracoes'));
 const PerfilPage = lazy(() => import('../pages/Perfil'));
 const NotFoundPage = lazy(() => import('../pages/NotFound'));
 
@@ -77,46 +73,6 @@ export const router = createBrowserRouter(
             <ProtectedRoute requiredRole="COORDENADOR">
               <Suspense fallback={<RouteLoader />}>
                 <AprovacoesPage />
-              </Suspense>
-            </ProtectedRoute>
-          ),
-        },
-        {
-          path: 'salas',
-          element: (
-            <ProtectedRoute>
-              <Suspense fallback={<RouteLoader />}>
-                <SalasPage />
-              </Suspense>
-            </ProtectedRoute>
-          ),
-        },
-        {
-          path: 'turmas',
-          element: (
-            <ProtectedRoute>
-              <Suspense fallback={<RouteLoader />}>
-                <TurmasPage />
-              </Suspense>
-            </ProtectedRoute>
-          ),
-        },
-        {
-          path: 'relatorios',
-          element: (
-            <ProtectedRoute>
-              <Suspense fallback={<RouteLoader />}>
-                <RelatoriosPage />
-              </Suspense>
-            </ProtectedRoute>
-          ),
-        },
-        {
-          path: 'configuracoes',
-          element: (
-            <ProtectedRoute requiredRole="ADMIN">
-              <Suspense fallback={<RouteLoader />}>
-                <ConfiguracoesPage />
               </Suspense>
             </ProtectedRoute>
           ),

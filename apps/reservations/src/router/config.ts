@@ -56,43 +56,6 @@ export const ROUTES: RouteConfig[] = [
     requiresAuth: true,
     requiredRole: 'COORDENADOR',
   },
-  {
-    path: '/salas',
-    label: 'Salas',
-    pageTitle: 'Salas · SENAI Salas',
-    icon: 'Building2',
-    section: 'gestao',
-    requiresAuth: true,
-    requiredRole: 'COORDENADOR',
-  },
-  {
-    path: '/turmas',
-    label: 'Turmas',
-    pageTitle: 'Turmas · SENAI Salas',
-    icon: 'Users',
-    section: 'gestao',
-    requiresAuth: true,
-    requiredRole: 'COORDENADOR',
-  },
-  // ── Sistema ─────────────────────────────────────────────
-  {
-    path: '/relatorios',
-    label: 'Relatórios',
-    pageTitle: 'Relatórios · SENAI Salas',
-    icon: 'BarChart3',
-    section: 'sistema',
-    requiresAuth: true,
-    requiredRole: 'COORDENADOR',
-  },
-  {
-    path: '/configuracoes',
-    label: 'Configurações',
-    pageTitle: 'Configurações · SENAI Salas',
-    icon: 'Settings',
-    section: 'sistema',
-    requiresAuth: true,
-    requiredRole: 'ADMIN',
-  },
   // ── Admin ──────────────────────────────────────────────
   {
     path: '/admin',
