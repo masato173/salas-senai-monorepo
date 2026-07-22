@@ -78,40 +78,61 @@ export class SyncService {
 
       const dados = raw.dados ?? [];
 
+      // Guard: Apps Script retornou lista vazia — abortar antes do DELETE.
+      // Isso protege os dados históricos de um retorno vazio acidental
+      // (Apps Script desativado, timeout, ou planilha sem dados no futuro).
+      // Um sync vazio não é um erro de negócio, mas também não justifica
+      // apagar a tabela Schedule inteira.
+      if (dados.length === 0) {
+        const finishedAt = new Date().toISOString();
+        const duration = Date.now() - startMs;
+        this.logger.warn(
+          `Sync abortado (syncId: ${syncId}): Apps Script retornou 0 registros. ` +
+            'Schedule não foi alterado. Verifique se o Apps Script está ativo e a planilha tem dados.',
+        );
+        return {
+          synced: 0,
+          fromAppsScript: 0,
+          duration,
+          syncId,
+          startedAt,
+          finishedAt,
+          timestamp: finishedAt,
+        };
+      }
+
       // Full replace: DELETE + INSERT sequenciais sem $transaction interativo.
       // pgbouncer em transaction mode não suporta interactive transactions para
       // operações longas. Sync é idempotente — retry resolve falha parcial.
       await this.prisma.schedule.deleteMany({});
-      if (dados.length > 0) {
-        // createMany em lotes de 500 evita timeout de query individual
-        const BATCH = 500;
-        for (let i = 0; i < dados.length; i += BATCH) {
-          await this.prisma.schedule.createMany({
-            data: dados.slice(i, i + BATCH).map(d => ({
-              date: d.data,
-              sala: d.sala,
-              turma: d.turma,
-              mes: d.mes,
-              turno: d.turno ?? null,
-              inicio:
-                d.turno === 'M'
-                  ? '07:00'
-                  : d.turno === 'V'
-                    ? '13:00'
-                    : d.turno === 'N'
-                      ? '18:00'
-                      : null,
-              fim:
-                d.turno === 'M'
-                  ? '12:30'
-                  : d.turno === 'V'
+      // createMany em lotes de 500 evita timeout de query individual
+      const BATCH = 500;
+      for (let i = 0; i < dados.length; i += BATCH) {
+        await this.prisma.schedule.createMany({
+          data: dados.slice(i, i + BATCH).map(d => ({
+            date: d.data,
+            sala: d.sala,
+            turma: d.turma,
+            mes: d.mes,
+            turno: d.turno ?? null,
+            inicio:
+              d.turno === 'M'
+                ? '07:00'
+                : d.turno === 'V'
+                  ? '13:00'
+                  : d.turno === 'N'
                     ? '18:00'
-                    : d.turno === 'N'
-                      ? '22:00'
-                      : null,
-            })),
-          });
-        }
+                    : null,
+            fim:
+              d.turno === 'M'
+                ? '12:30'
+                : d.turno === 'V'
+                  ? '18:00'
+                  : d.turno === 'N'
+                    ? '22:00'
+                    : null,
+          })),
+        });
       }
 
       // Contar registros realmente inseridos — diagnóstico e retorno real
