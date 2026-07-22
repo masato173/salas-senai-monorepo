@@ -1,5 +1,6 @@
 import { CalendarDays } from 'lucide-react';
 import type { SidebarEntry } from './ScheduleSidebar';
+import { todayYmd } from '../dashboard/scheduleDateUtils';
 
 interface DayViewProps {
   date: string;
@@ -51,7 +52,7 @@ const STATUS_COLOR: Record<'busy' | 'pending', string> = {
 
 export function DayView({ date, entries, selected }: DayViewProps) {
   const now = new Date();
-  const today = now.toISOString().slice(0, 10);
+  const today = todayYmd();
   const isToday = date === today;
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   const showNowLine =

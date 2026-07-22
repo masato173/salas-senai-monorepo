@@ -9,6 +9,7 @@ import { useDashboardStats } from '../../hooks/useDashboardStats';
 import type { ScheduleFilterState } from '../../components/calendar/ScheduleFilters';
 import type { SidebarEntry } from '../../components/calendar/ScheduleSidebar';
 import type { DisponibilidadeSala } from '../../types';
+import { todayYmd } from '../../components/dashboard/scheduleDateUtils';
 
 // ── Mapeamento de disponibilidade → entradas do sidebar/calendário ──
 // Função pura, testável em isolamento sem React.
@@ -73,7 +74,7 @@ function matchesRoomType(sala: string, filter: ScheduleFilterState['roomType']):
 
 // ── Componente principal ───────────────────────────────────────
 export default function AgendamentosPage() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayYmd();
 
   const [date, setDate] = useState(today);
   const [filters, setFilters] = useState<ScheduleFilterState>({
