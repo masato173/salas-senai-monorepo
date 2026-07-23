@@ -175,7 +175,13 @@ export function ReservationApprovalCard({
         <span style={{ color: 'var(--color-subtle)' }} aria-hidden="true">
           ·
         </span>
-        <span style={{ fontFamily: "'DM Mono', monospace", color: 'var(--color-text)' }}>
+        <span
+          style={{
+            fontFamily: 'DM Sans, system-ui, sans-serif',
+            fontVariantNumeric: 'tabular-nums',
+            color: 'var(--color-text)',
+          }}
+        >
           {reservation.inicio} – {reservation.fim}
         </span>
       </div>

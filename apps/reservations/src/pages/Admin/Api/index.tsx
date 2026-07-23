@@ -218,7 +218,8 @@ function MethodBadge({ method }: { method: Endpoint['method'] }): JSX.Element {
         fontSize: 10,
         fontWeight: 800,
         letterSpacing: '.04em',
-        fontFamily: 'DM Mono, monospace',
+        fontFamily: 'DM Sans, system-ui, sans-serif',
+        fontVariantNumeric: 'tabular-nums',
         background: s.bg,
         color: s.color,
         flexShrink: 0,
@@ -242,7 +243,8 @@ function AuthBadge({ auth }: { auth: Endpoint['auth'] }): JSX.Element {
         fontSize: 10,
         fontWeight: 700,
         letterSpacing: '.03em',
-        fontFamily: 'DM Mono, monospace',
+        fontFamily: 'DM Sans, system-ui, sans-serif',
+        fontVariantNumeric: 'tabular-nums',
         background: s.bg,
         color: s.color,
         border: `1px solid ${s.border}`,
@@ -306,7 +308,8 @@ export default function AdminApiPage(): JSX.Element {
               padding: '5px 12px',
               borderRadius: 6,
               fontSize: 12,
-              fontFamily: 'DM Mono, monospace',
+              fontFamily: 'DM Sans, system-ui, sans-serif',
+              fontVariantNumeric: 'tabular-nums',
               background: 'var(--color-surface-2)',
               color: 'var(--color-muted)',
               border: '1px solid var(--color-border)',
@@ -347,7 +350,8 @@ export default function AdminApiPage(): JSX.Element {
                   style={{
                     fontSize: 11,
                     color: 'var(--color-subtle)',
-                    fontFamily: 'DM Mono, monospace',
+                    fontFamily: 'DM Sans, system-ui, sans-serif',
+                    fontVariantNumeric: 'tabular-nums',
                   }}
                 >
                   {mod.endpoints.length} endpoint{mod.endpoints.length !== 1 ? 's' : ''}
@@ -380,7 +384,8 @@ export default function AdminApiPage(): JSX.Element {
                       >
                         <span
                           style={{
-                            fontFamily: 'DM Mono, monospace',
+                            fontFamily: 'DM Sans, system-ui, sans-serif',
+                            fontVariantNumeric: 'tabular-nums',
                             fontSize: 12,
                             color: 'var(--color-text)',
                             fontWeight: 500,

@@ -23,7 +23,8 @@ export default function NotFoundPage() {
           fontWeight: 800,
           lineHeight: 1,
           color: 'var(--color-border-2)',
-          fontFamily: 'DM Mono, monospace',
+          fontFamily: 'DM Sans, system-ui, sans-serif',
+          fontVariantNumeric: 'tabular-nums',
         }}
       >
         404
@@ -35,7 +36,8 @@ export default function NotFoundPage() {
         A rota{' '}
         <code
           style={{
-            fontFamily: 'DM Mono, monospace',
+            fontFamily: 'DM Sans, system-ui, sans-serif',
+            fontVariantNumeric: 'tabular-nums',
             fontSize: '12px',
             background: 'var(--color-surface-2)',
             padding: '2px 6px',

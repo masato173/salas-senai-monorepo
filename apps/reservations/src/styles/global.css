@@ -179,7 +179,8 @@ a {
   font-size: 13px;
   font-weight: 700;
   color: #fff;
-  font-family: 'DM Mono', monospace;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
 }
 .sidebar-logo-text {
   display: flex;
@@ -559,7 +560,8 @@ a {
   font-size: 12px;
 }
 .slot-time {
-  font-family: 'DM Mono', monospace;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
   font-size: 11px;
   font-weight: 500;
   white-space: nowrap;

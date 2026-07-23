@@ -128,7 +128,8 @@ function EntryRow({
         <span
           style={{
             fontSize: '11px',
-            fontFamily: 'DM Mono, monospace',
+            fontFamily: 'DM Sans, system-ui, sans-serif',
+            fontVariantNumeric: 'tabular-nums',
             color: 'var(--color-muted)',
           }}
         >

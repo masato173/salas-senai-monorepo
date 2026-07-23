@@ -95,7 +95,7 @@ export function OccupancyUnified({ salas, isLoading }: OccupancyUnifiedProps): J
           <table style={tableStyle}>
             <thead>
               <tr>
-                <th style={thStyle}>Sala</th>
+                <th style={{ ...thStyle, minWidth: '140px' }}>Sala</th>
                 <th style={thStyle}>Status</th>
                 <th style={thStyle}>Eventos</th>
               </tr>
@@ -106,7 +106,7 @@ export function OccupancyUnified({ salas, isLoading }: OccupancyUnifiedProps): J
                 const isFree = sala.eventos.length === 0;
                 return (
                   <tr key={sala.sala} style={{ ...trStyle, opacity: isFree ? 0.6 : 1 }}>
-                    <td style={{ ...tdStyle, fontWeight: 600 }}>{sala.sala}</td>
+                    <td style={{ ...tdStyle, fontWeight: 600, minWidth: '140px' }}>{sala.sala}</td>
                     <td style={tdStyle}>
                       <span
                         style={{
@@ -126,12 +126,14 @@ export function OccupancyUnified({ salas, isLoading }: OccupancyUnifiedProps): J
                           {sala.eventos.map((ev, idx) => {
                             const detalhe = ev.tipo === 'aula' ? ev.turma : ev.professor;
                             return (
-                              <div key={`${ev.tipo}-${ev.inicio}-${idx}`} style={eventRowStyle}>
+                              <div key={`${ev.tipo}-${ev.inicio}-${idx}`} style={eventChipStyle}>
+                                <div style={eventChipTopRowStyle}>
+                                  <span style={eventTimeStyle}>
+                                    {ev.inicio}–{ev.fim}
+                                  </span>
+                                  {detalhe && <span style={eventDetailStyle}>{detalhe}</span>}
+                                </div>
                                 <span style={tipoTagStyle}>{TIPO_LABEL[ev.tipo]}</span>
-                                <span style={eventTimeStyle}>
-                                  {ev.inicio}–{ev.fim}
-                                </span>
-                                {detalhe && <span style={eventDetailStyle}>{detalhe}</span>}
                               </div>
                             );
                           })}
@@ -264,7 +266,7 @@ const trStyle: CSSProperties = {
 };
 
 const tdStyle: CSSProperties = {
-  padding: '10px 14px',
+  padding: '12px 16px',
   color: 'var(--color-text)',
   verticalAlign: 'top',
 };
@@ -287,41 +289,63 @@ const freeTextStyle: CSSProperties = {
 const eventsListStyle: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
-  gap: '4px',
+  gap: '6px',
 };
 
-const eventRowStyle: CSSProperties = {
+// Cada evento vira um chip com fundo próprio — mais contraste que texto
+// corrido, mesma linguagem visual de EntryRow em ScheduleSidebar.tsx.
+const eventChipStyle: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '2px',
+  background: 'var(--color-surface-2)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-s)',
+  padding: '6px 10px',
+};
+
+const eventChipTopRowStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
-  gap: '8px',
-  flexWrap: 'wrap',
+  gap: '10px',
+  marginBottom: '3px',
 };
 
+// Neutro (cinza) — ver comentário de TIPO_LABEL acima sobre por que não
+// reaproveita a paleta vermelho/âmbar de RoomAvailabilityPanel.
 const tipoTagStyle: CSSProperties = {
   display: 'inline-block',
+  alignSelf: 'flex-start',
   fontSize: '10px',
   fontWeight: 700,
   padding: '1px 7px',
   borderRadius: 20,
-  background: 'var(--color-surface-2)',
+  background: 'var(--color-bg)',
   color: 'var(--color-muted)',
   textTransform: 'uppercase',
   letterSpacing: '.04em',
   whiteSpace: 'nowrap',
+  flexShrink: 0,
 };
 
 const eventTimeStyle: CSSProperties = {
-  fontFamily: 'DM Mono, monospace',
-  fontSize: '11px',
+  fontFamily: 'DM Sans, system-ui, sans-serif',
+  fontSize: '14px',
   fontWeight: 500,
+  letterSpacing: '.01em',
+  fontVariantNumeric: 'tabular-nums',
   color: 'var(--color-text)',
   whiteSpace: 'nowrap',
+  flexShrink: 0,
 };
 
 const eventDetailStyle: CSSProperties = {
-  fontSize: '11px',
-  color: 'var(--color-muted)',
-  whiteSpace: 'nowrap',
+  fontSize: '13px',
+  fontWeight: 600,
+  color: 'var(--color-text)',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  flex: 1,
+  minWidth: 0,
 };

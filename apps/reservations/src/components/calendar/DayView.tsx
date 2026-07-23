@@ -116,7 +116,8 @@ export function DayView({ date, entries, selected }: DayViewProps) {
                   transform: 'translateY(-6px)',
                   padding: '0 8px',
                   fontSize: '10px',
-                  fontFamily: 'DM Mono, monospace',
+                  fontFamily: 'DM Sans, system-ui, sans-serif',
+                  fontVariantNumeric: 'tabular-nums',
                   color: isNowHour ? 'var(--color-blue)' : 'var(--color-subtle)',
                   fontWeight: isNowHour ? 600 : 400,
                 }}

@@ -214,7 +214,8 @@ export default function AdminConfiguracoesPage(): JSX.Element {
               Versão da API:{' '}
               <span
                 style={{
-                  fontFamily: 'DM Mono, monospace',
+                  fontFamily: 'DM Sans, system-ui, sans-serif',
+                  fontVariantNumeric: 'tabular-nums',
                   fontSize: 12,
                   color: 'var(--color-muted)',
                 }}
@@ -277,7 +278,8 @@ export default function AdminConfiguracoesPage(): JSX.Element {
                       padding: '7px 0 7px 12px',
                       fontSize: 12,
                       color: 'var(--color-text)',
-                      fontFamily: 'DM Mono, monospace',
+                      fontFamily: 'DM Sans, system-ui, sans-serif',
+                      fontVariantNumeric: 'tabular-nums',
                     }}
                   >
                     {value}

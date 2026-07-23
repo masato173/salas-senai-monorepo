@@ -79,7 +79,8 @@ function UserAvatar({ name }: { name: string }): JSX.Element {
         fontWeight: 700,
         color: '#fff',
         flexShrink: 0,
-        fontFamily: 'DM Mono, monospace',
+        fontFamily: 'DM Sans, system-ui, sans-serif',
+        fontVariantNumeric: 'tabular-nums',
         userSelect: 'none',
       }}
     >
@@ -241,7 +242,12 @@ function UserRow({
       {/* Criado em */}
       <td style={{ padding: '12px 16px' }}>
         <span
-          style={{ fontSize: 12, color: 'var(--color-muted)', fontFamily: 'DM Mono, monospace' }}
+          style={{
+            fontSize: 12,
+            color: 'var(--color-muted)',
+            fontFamily: 'DM Sans, system-ui, sans-serif',
+            fontVariantNumeric: 'tabular-nums',
+          }}
         >
           {formatDate(user.createdAt)}
         </span>

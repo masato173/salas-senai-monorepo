@@ -101,7 +101,8 @@ function ServiceCard({
           borderRadius: 4,
           fontSize: 11,
           fontWeight: 700,
-          fontFamily: 'DM Mono, monospace',
+          fontFamily: 'DM Sans, system-ui, sans-serif',
+          fontVariantNumeric: 'tabular-nums',
           background: badge.bg,
           color: badge.color,
         }}
@@ -209,7 +210,8 @@ export default function AdminHealthPage(): JSX.Element {
                     style={{
                       fontSize: 12,
                       fontWeight: 600,
-                      fontFamily: 'DM Mono, monospace',
+                      fontFamily: 'DM Sans, system-ui, sans-serif',
+                      fontVariantNumeric: 'tabular-nums',
                       color: 'var(--color-text)',
                     }}
                   >
@@ -316,7 +318,8 @@ export default function AdminHealthPage(): JSX.Element {
                 style={{
                   fontSize: 12,
                   fontWeight: 600,
-                  fontFamily: 'DM Mono, monospace',
+                  fontFamily: 'DM Sans, system-ui, sans-serif',
+                  fontVariantNumeric: 'tabular-nums',
                   color: 'var(--color-text)',
                 }}
               >
@@ -410,7 +413,8 @@ export default function AdminHealthPage(): JSX.Element {
                             padding: '9px 14px',
                             fontSize: 11,
                             color: 'var(--color-subtle)',
-                            fontFamily: 'DM Mono, monospace',
+                            fontFamily: 'DM Sans, system-ui, sans-serif',
+                            fontVariantNumeric: 'tabular-nums',
                             width: 32,
                           }}
                         >
@@ -421,7 +425,8 @@ export default function AdminHealthPage(): JSX.Element {
                             padding: '9px 14px',
                             fontSize: 12,
                             color: 'var(--color-muted)',
-                            fontFamily: 'DM Mono, monospace',
+                            fontFamily: 'DM Sans, system-ui, sans-serif',
+                            fontVariantNumeric: 'tabular-nums',
                             whiteSpace: 'nowrap',
                           }}
                         >
@@ -435,7 +440,8 @@ export default function AdminHealthPage(): JSX.Element {
                               borderRadius: 4,
                               fontSize: 11,
                               fontWeight: 700,
-                              fontFamily: 'DM Mono, monospace',
+                              fontFamily: 'DM Sans, system-ui, sans-serif',
+                              fontVariantNumeric: 'tabular-nums',
                               background: badge.bg,
                               color: badge.color,
                             }}
@@ -448,7 +454,8 @@ export default function AdminHealthPage(): JSX.Element {
                             padding: '9px 14px',
                             fontSize: 12,
                             color: 'var(--color-muted)',
-                            fontFamily: 'DM Mono, monospace',
+                            fontFamily: 'DM Sans, system-ui, sans-serif',
+                            fontVariantNumeric: 'tabular-nums',
                           }}
                         >
                           {entry.uptime !== null ? formatUptime(entry.uptime) : '—'}
