@@ -33,7 +33,9 @@ function makeReservation(overrides: {
     date: '2026-07-10',
     inicio: overrides.inicio ?? '08:00',
     fim: overrides.fim ?? '10:00',
-    status: overrides.status ?? ReservationStatus.PENDING,
+    // Default APPROVED — só reserva aprovada conta como "ativa" na
+    // disponibilidade (fix do bug de PENDING aparecer como ocupada).
+    status: overrides.status ?? ReservationStatus.APPROVED,
     deletedAt: null,
     user: { name: 'Prof. Teste' },
   };
@@ -70,6 +72,16 @@ describe('AvailabilityService', () => {
       expect(sala1.eventos).toHaveLength(1);
       expect(sala1.eventos[0].tipo).toBe('reserva');
       expect(sala2.status).toBe('livre');
+    });
+
+    it('consulta reservas só com status APPROVED — PENDING não deve aparecer na disponibilidade', async () => {
+      await makeService().getAvailability({ date: '2026-07-10' });
+
+      expect(mockReservationDelegate.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ status: ReservationStatus.APPROVED }),
+        }),
+      );
     });
 
     it('filtro turno=M: reserva 09:00-10:00 aparece (dentro de 07:30-12:00)', async () => {

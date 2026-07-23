@@ -75,11 +75,14 @@ export class AvailabilityService {
       orderBy: { name: 'asc' },
     });
 
-    // Reservas ativas no dia (apenas PENDING e APPROVED)
+    // Reservas ativas no dia — só APPROVED entra na disponibilidade.
+    // PENDING não deve aparecer aqui (sala não está de fato ocupada até
+    // a aprovação); ConflictService continua considerando PENDING+APPROVED
+    // pra bloquear double-booking — contexto diferente, não mexer lá.
     const reservations = await this.prisma.reservation.findMany({
       where: {
         date,
-        status: { in: [ReservationStatus.PENDING, ReservationStatus.APPROVED] },
+        status: ReservationStatus.APPROVED,
         deletedAt: null,
       },
       include: {
