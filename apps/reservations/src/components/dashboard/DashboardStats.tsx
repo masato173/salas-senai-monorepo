@@ -1,21 +1,21 @@
 import { useMemo, type CSSProperties } from 'react';
 
 import { SALAS } from '../../config';
-import type { RegistroLegado, Turno, AvailabilityResult } from '../../types';
+import type { Turno, AvailabilityResult } from '../../types';
 import { formatDataBR, todayYmd } from './scheduleDateUtils';
 import type { DashboardStats as BackendStats } from '../../hooks/useDashboardStats';
 
-// Sprint A3.3 — cards de resumo do Dashboard. Componente PURO de apresentação:
-// recebe `filtered` (mesmo array que alimenta a tabela em OccupancyDashboard)
-// e re-deriva contagens com useMemo. Não busca nada.
-//
-// Convenção de cor dos turnos (espelha planilha mensal + TURNO_STYLE do
-// OccupancyDashboard): Manhã=verde, Tarde=âmbar, Noite=azul. Tokens apenas.
+// Sprint A3.3 — cards de resumo do Dashboard.
+// Unificação Schedule+Reservation: a fonte deixou de ser `filtered`
+// (RegistroLegado[] vindo de Schedule/planilha) — agora tudo deriva de
+// `disponibilidade` (GET /availability, aula+reserva já misturados) e
+// `dashboardStats` (GET /dashboard, quando disponível sobrescreve as
+// contagens locais). Componente PURO de apresentação — não busca nada.
 
 interface DashboardStatsProps {
-  filtered: RegistroLegado[]; // mesmo subset que vai pra tabela
   hoje: string; // YYYY-MM-DD passado pelo pai (já UTC-safe)
-  // S5 — opcional, backward compat. Quando presente, renderiza 3 cards extras.
+  // Sempre presente na Dashboard unificada (só fica ausente antes do
+  // primeiro fetch resolver — os cards degradam pra 0 graciosamente).
   disponibilidade?: AvailabilityResult;
   // F8.5 — stats do backend via SQL. Quando presente, substitui cálculo local.
   dashboardStats?: BackendStats | null;
@@ -35,32 +35,31 @@ const TURNO_LABEL: Record<Turno, string> = {
 };
 
 export function DashboardStats({
-  filtered,
   hoje,
   disponibilidade,
   dashboardStats,
 }: DashboardStatsProps): JSX.Element {
   const stats = useMemo(() => {
-    const salasComAtividade = new Set(filtered.map(r => r.sala)).size;
+    const salas = disponibilidade?.salas ?? [];
+    const eventos = salas.flatMap(s => s.eventos);
 
-    const registrosHoje = filtered.filter(r => r.data === hoje);
-    const ocupacoesHoje = registrosHoje.length;
-    const salasHoje = new Set(registrosHoje.map(r => r.sala)).size;
+    // "Atividade" = aula OU reserva (qualquer coisa que não seja livre).
+    const salasComAtividade = salas.filter(s => s.status !== 'livre').length;
+    const ocupacoesHoje = eventos.length;
+    // Na visão unificada só existe "hoje" (sem histórico multi-data como
+    // no antigo Schedule) — mesma métrica de salasComAtividade.
+    const salasHoje = salasComAtividade;
 
     const porTurno: Record<Turno, number> = { M: 0, V: 0, N: 0 };
-    for (const r of filtered) {
-      if (r.turno) porTurno[r.turno] += 1;
+    for (const e of eventos) {
+      if (e.turno) porTurno[e.turno] += 1;
     }
 
-    // S5 — contagens de disponibilidade (só se prop presente).
-    const dispHoje = disponibilidade?.salas ?? [];
-    const salasLivres = dispHoje.filter(s => s.status === 'livre').length;
-    const salasComAula = dispHoje.filter(
-      s => s.status === 'aula' || s.status === 'conflito',
-    ).length;
-    const salasComReserva = dispHoje.filter(
-      s => s.status === 'reserva' || s.status === 'conflito',
-    ).length;
+    const salasLivres = salas.filter(s => s.status === 'livre').length;
+    const salasComAula = salas.filter(s => s.status === 'aula' || s.status === 'conflito').length;
+    // DashboardStats (backend) não expõe contagem de SALAS com reserva —
+    // só `reservasHoje` (conta EVENTOS, não salas). Sempre derivado aqui.
+    const salasComReserva = salas.filter(s => s.eventos.some(e => e.tipo === 'reserva')).length;
 
     return {
       salasComAtividade,
@@ -71,23 +70,23 @@ export function DashboardStats({
       salasComAula,
       salasComReserva,
     };
-  }, [filtered, hoje, disponibilidade]);
+  }, [disponibilidade]);
 
   // F8.5 — sobrescreve contagens locais com dados do backend quando disponível
   const porTurnoFinal = dashboardStats?.porTurno ?? stats.porTurno;
   const salasLivresFinal = dashboardStats?.salasLivres ?? stats.salasLivres;
   const salasComAulaFinal = dashboardStats?.salasComAula ?? stats.salasComAula;
-  const salasComReservaFinal = dashboardStats?.reservasHoje ?? stats.salasComReserva;
+  const salasComReservaFinal = stats.salasComReserva;
   const ocupacaoPercent = dashboardStats?.ocupacaoPercent ?? null;
 
-  const totalOficial = SALAS.length;
+  const totalOficial = dashboardStats?.totalSalas ?? SALAS.length;
   // Label dinâmico: "hoje" quando a data é hoje, "DD/MM/AAAA" quando filtrada.
   const dataLabel = hoje === todayYmd() ? 'hoje' : formatDataBR(hoje);
 
   return (
     <section style={gridStyle} aria-label="Resumo da ocupação">
       <Card
-        label="Salas com atividade"
+        label="Salas com atividade hoje"
         value={stats.salasComAtividade}
         sub={`de ${totalOficial}`}
       />
@@ -104,7 +103,6 @@ export function DashboardStats({
       {ocupacaoPercent !== null && (
         <Card label="Ocupação" value={ocupacaoPercent} sub="% das salas com aula" />
       )}
-      {/* S5 — disponibilidade de hoje (aditivo, só renderiza se prop presente). */}
       {disponibilidade && (
         <>
           <Card

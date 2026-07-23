@@ -3,8 +3,25 @@ import { RefreshCw, CheckCircle2, AlertCircle, Clock, Database, Zap } from 'luci
 import { createNestjsApiService } from '../../../services/nestjsApiService';
 import { useTriggerSync } from '../../../hooks/useTriggerSync';
 import { useSyncHistory } from '../../../hooks/useSyncHistory';
-import type { AuditLog } from '../../../types';
+import { useSchedule } from '../../../hooks/useSchedule';
+import {
+  applyScheduleFilters,
+  type ScheduleFilterState,
+} from '../../../components/dashboard/applyScheduleFilters';
+import { OccupancyDashboard } from '../../../components/dashboard/OccupancyDashboard';
+import { todayYmd } from '../../../components/dashboard/scheduleDateUtils';
+import type { AuditLog, RegistroLegado } from '../../../types';
 import type { SyncResult } from '@salas-senai/shared';
+
+// Estado inicial dos filtros da tabela histórica de Schedule — migrado de
+// Dashboard/index.tsx na unificação Schedule+Reservation (F-unify).
+const ESTADO_INICIAL_FILTROS_SCHEDULE: ScheduleFilterState = {
+  turma: '',
+  data: '',
+  sala: '',
+  mes: '',
+  turno: 'TODOS',
+};
 
 // ─────────────────────────────────────────────────────────────
 // AdminSyncPage — F6.5
@@ -172,6 +189,47 @@ export default function AdminSyncPage(): JSX.Element {
   const { data: history, status: historyStatus, refetch: refetchHistory } = useSyncHistory(service);
 
   const [confirmVisible, setConfirmVisible] = useState(false);
+
+  // ─── Registros históricos de Schedule (Apps Script) — migrado da
+  // Dashboard na unificação Schedule+Reservation. Esta seção mostra os
+  // dados BRUTOS importados da planilha (não a visão operacional do dia,
+  // que agora vive em GET /availability na Dashboard).
+  const schedule = useSchedule(service);
+  const [filtrosSchedule, setFiltrosSchedule] = useState<ScheduleFilterState>(
+    ESTADO_INICIAL_FILTROS_SCHEDULE,
+  );
+  const [scheduleTablePage, setScheduleTablePage] = useState<number>(1);
+
+  function updateFiltroSchedule<K extends keyof ScheduleFilterState>(
+    key: K,
+    value: ScheduleFilterState[K],
+  ): void {
+    setFiltrosSchedule(prev => ({ ...prev, [key]: value }));
+    setScheduleTablePage(1);
+  }
+
+  function resetFiltrosSchedule(): void {
+    setFiltrosSchedule(ESTADO_INICIAL_FILTROS_SCHEDULE);
+    setScheduleTablePage(1);
+  }
+
+  const registrosSchedule = useMemo<RegistroLegado[]>(
+    () => schedule.data?.registros ?? [],
+    [schedule.data],
+  );
+  const filteredSchedule = useMemo<RegistroLegado[]>(
+    () => applyScheduleFilters(registrosSchedule, filtrosSchedule),
+    [registrosSchedule, filtrosSchedule],
+  );
+  const salasUnicasSchedule = useMemo<string[]>(
+    () => [...new Set(registrosSchedule.map(r => r.sala))].sort((a, b) => a.localeCompare(b)),
+    [registrosSchedule],
+  );
+  const mesesUnicosSchedule = useMemo<string[]>(
+    () => [...new Set(registrosSchedule.map(r => r.mes))],
+    [registrosSchedule],
+  );
+  const hojeSchedule = todayYmd();
 
   const handleTrigger = useCallback(async () => {
     setConfirmVisible(false);
@@ -485,6 +543,38 @@ export default function AdminSyncPage(): JSX.Element {
         {historyRows.map((log, i) => (
           <HistoryRow key={log.id} log={log} isLast={i === historyRows.length - 1} />
         ))}
+      </div>
+
+      {/* ── Registros importados da planilha (Schedule/Apps Script) ──── */}
+      <div style={{ marginTop: 28 }}>
+        <div style={{ marginBottom: 12 }}>
+          <h2
+            style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 600, color: 'var(--color-text)' }}
+          >
+            Registros importados da planilha
+          </h2>
+          <p style={{ margin: 0, fontSize: 13, color: 'var(--color-muted)' }}>
+            Dados brutos de Schedule (aulas) trazidos do Google Apps Script pelo último sync. Ficam
+            estáticos depois que a planilha institucional deixar de ser mantida — a visão
+            operacional do dia (aulas + reservas combinadas) vive na Dashboard.
+          </p>
+        </div>
+        <OccupancyDashboard
+          filtered={filteredSchedule}
+          filtros={filtrosSchedule}
+          onFiltroChange={updateFiltroSchedule}
+          page={scheduleTablePage}
+          onPageChange={setScheduleTablePage}
+          salasUnicas={salasUnicasSchedule}
+          mesesUnicos={mesesUnicosSchedule}
+          status={schedule.status}
+          error={schedule.error}
+          onRefetch={() => {
+            void schedule.refetch();
+          }}
+          onReset={resetFiltrosSchedule}
+          hoje={hojeSchedule}
+        />
       </div>
 
       <style>{`
