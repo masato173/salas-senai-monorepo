@@ -46,6 +46,14 @@ export const ROUTES: RouteConfig[] = [
     requiresAuth: true,
     requiredRole: 'PROFESSOR',
   },
+  {
+    path: '/minha-agenda',
+    label: 'Minha Agenda',
+    pageTitle: 'Minha Agenda · SENAI Salas',
+    icon: 'CalendarCheck',
+    section: 'principal',
+    requiresAuth: true,
+  },
   // ── Gestão ──────────────────────────────────────────────
   {
     path: '/aprovacoes',

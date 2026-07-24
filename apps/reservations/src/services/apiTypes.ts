@@ -41,6 +41,7 @@ export interface ReservationPayload {
   professor: string;
   turma: string;
   observacao: string;
+  ownerUserId?: string; // COORDENADOR/ADMIN: cria em nome deste professor
 }
 
 export interface CreateReservationRequest {
@@ -65,6 +66,7 @@ export interface ReservationRangePayload {
   professor: string;
   turma: string;
   observacao: string;
+  ownerUserId?: string; // COORDENADOR/ADMIN: cria em nome deste professor
 }
 
 export interface CreateReservationRangeRequest {

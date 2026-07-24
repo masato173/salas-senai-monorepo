@@ -102,8 +102,8 @@ describe('STATUS_STYLE', () => {
 });
 
 describe('TIPO_LABEL', () => {
-  it('cobre os 2 tipos de evento (aula/reserva)', () => {
+  it('cobre os 2 tipos de evento (aula/reserva) — visualmente unificados como Aula', () => {
     expect(TIPO_LABEL.aula).toBe('Aula');
-    expect(TIPO_LABEL.reserva).toBe('Reserva');
+    expect(TIPO_LABEL.reserva).toBe('Aula');
   });
 });

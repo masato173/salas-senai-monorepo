@@ -3,6 +3,7 @@ import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Calendar,
+  CalendarCheck,
   FileText,
   Building2,
   Users,
@@ -31,6 +32,7 @@ import { getSocket, disconnectSocket } from '../services/socketClient';
 const ICON_MAP = {
   LayoutDashboard,
   Calendar,
+  CalendarCheck,
   FileText,
   Building2,
   Users,

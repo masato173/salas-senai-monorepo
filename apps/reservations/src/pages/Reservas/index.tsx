@@ -278,6 +278,7 @@ export default function ReservasPage() {
               userId={loggedUser?.id ?? ''}
               userEmail={loggedUser?.email ?? ''}
               professor={loggedUser?.name ?? ''}
+              role={loggedUser?.role ?? ''}
               turma={turma}
               service={service}
               onCancel={() => setShowForm(false)}

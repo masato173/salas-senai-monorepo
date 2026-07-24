@@ -15,6 +15,7 @@ import { DashboardPage } from '../pages/Dashboard';
 
 const AgendamentosPage = lazy(() => import('../pages/Agendamentos'));
 const ReservasPage = lazy(() => import('../pages/Reservas'));
+const MinhaAgendaPage = lazy(() => import('../pages/MinhaAgenda'));
 const AprovacoesPage = lazy(() => import('../pages/Aprovacoes'));
 const PerfilPage = lazy(() => import('../pages/Perfil'));
 const NotFoundPage = lazy(() => import('../pages/NotFound'));
@@ -63,6 +64,16 @@ export const router = createBrowserRouter(
             <ProtectedRoute>
               <Suspense fallback={<RouteLoader />}>
                 <ReservasPage />
+              </Suspense>
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: 'minha-agenda',
+          element: (
+            <ProtectedRoute>
+              <Suspense fallback={<RouteLoader />}>
+                <MinhaAgendaPage />
               </Suspense>
             </ProtectedRoute>
           ),

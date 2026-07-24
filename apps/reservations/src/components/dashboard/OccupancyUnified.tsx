@@ -23,15 +23,18 @@ export const STATUS_STYLE: Record<RoomStatus, { label: string; color: string; bg
   conflito: { label: 'Conflito', color: 'var(--color-red)', bg: 'var(--color-red-l)' },
 };
 
-// Tipo de EVENTO dentro da coluna Eventos — decisão de design: neutro
-// (cinza), não reaproveita a paleta vermelho/âmbar de RoomAvailabilityPanel.
-// Motivo: essa paleta coloriria "aula" de vermelho na mesma linha em que o
-// badge de Status já pode estar vermelho (conflito) ou âmbar (aula) —
-// duas escalas de cor concorrendo na mesma linha. O rótulo em texto já
-// distingue aula/reserva sem precisar de uma segunda cor semântica.
+// Tipo de EVENTO dentro da coluna Eventos — label unificado (decisão de
+// produto: aula e reserva mostram o mesmo texto "Aula", indistinguíveis
+// aqui). Mantém o Record completo por compatibilidade de tipo (SalaEvento
+// ainda tem os 2 valores reais de `tipo`), só o VALOR mudou. Cor também
+// já era neutra (cinza) antes disso — não reaproveita a paleta vermelho/
+// âmbar de RoomAvailabilityPanel, pra não competir com o badge de Status
+// na mesma linha. Com os dois tipos agora textualmente iguais, a coluna
+// Professor é a única forma visual de diferenciar aula (sem professor,
+// vem do Schedule) de reserva (com professor, vem do Reservation).
 export const TIPO_LABEL: Record<SalaEvento['tipo'], string> = {
   aula: 'Aula',
-  reserva: 'Reserva',
+  reserva: 'Aula',
 };
 
 const STATUS_ORDER: Record<RoomStatus, number> = {
@@ -97,6 +100,7 @@ export function OccupancyUnified({ salas, isLoading }: OccupancyUnifiedProps): J
               <tr>
                 <th style={{ ...thStyle, minWidth: '140px' }}>Sala</th>
                 <th style={thStyle}>Status</th>
+                <th style={thStyle}>Professor</th>
                 <th style={thStyle}>Eventos</th>
               </tr>
             </thead>
@@ -117,6 +121,22 @@ export function OccupancyUnified({ salas, isLoading }: OccupancyUnifiedProps): J
                       >
                         {statusStyle.label}
                       </span>
+                    </td>
+                    <td style={tdStyle}>
+                      {isFree ? (
+                        <span style={freeTextStyle}>—</span>
+                      ) : (
+                        <div style={eventsListStyle}>
+                          {sala.eventos.map((ev, idx) => (
+                            <div
+                              key={`prof-${ev.tipo}-${ev.inicio}-${idx}`}
+                              style={professorRowStyle}
+                            >
+                              {ev.professor ?? '—'}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </td>
                     <td style={tdStyle}>
                       {isFree ? (
@@ -290,6 +310,23 @@ const eventsListStyle: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: '6px',
+};
+
+// Coluna Professor — mesmo container flex/gap de eventsListStyle (pra
+// empilhar 1 linha por evento em paralelo aos chips da coluna Eventos),
+// mas cada linha aqui é texto solto (sem chip). minHeight aproxima a
+// altura real de um eventChipStyle de 2 linhas (horário + detalhe, o caso
+// comum já que aula quase sempre tem turma e reserva quase sempre tem
+// professor): padding 6px*2 + borda 1px*2 + linha de horário ~20px +
+// linha de detalhe ~16px ≈ 46px. Não é alinhamento pixel-perfect
+// garantido (chips de 1 linha ficam mais baixos que o esperado), mas é
+// a aproximação mais estável sem medir DOM em runtime.
+const professorRowStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  minHeight: '46px',
+  fontSize: '12px',
+  color: 'var(--color-text)',
 };
 
 // Cada evento vira um chip com fundo próprio — mais contraste que texto

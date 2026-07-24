@@ -279,6 +279,7 @@ export function createNestjsApiService(): AppsScriptService & ReservationAdminAp
               fim: req.payload.fim,
               turma: req.payload.turma !== '' ? req.payload.turma : undefined,
               notes: req.payload.observacao !== '' ? req.payload.observacao : undefined,
+              ...(req.payload.ownerUserId ? { ownerUserId: req.payload.ownerUserId } : {}),
             }),
           },
         );
@@ -420,6 +421,7 @@ export function createNestjsApiService(): AppsScriptService & ReservationAdminAp
             fim: req.payload.fim,
             turma: req.payload.turma !== '' ? req.payload.turma : undefined,
             notes: req.payload.observacao !== '' ? req.payload.observacao : undefined,
+            ...(req.payload.ownerUserId ? { ownerUserId: req.payload.ownerUserId } : {}),
           }),
         });
 

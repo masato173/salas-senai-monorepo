@@ -8,6 +8,7 @@ import { useCreateReservation } from '../../hooks/useCreateReservation';
 import { useCreateReservationRange } from '../../hooks/useCreateReservationRange';
 import { useUpdateReservation } from '../../hooks/useUpdateReservation';
 import { useUpdateReservationGroup } from '../../hooks/useUpdateReservationGroup';
+import { useListProfessors } from '../../hooks/useListProfessors';
 import { expandDateRange } from '../../utils/dateRange';
 import { buildUpdatePayload } from './buildUpdatePayload';
 import type {
@@ -60,6 +61,9 @@ interface ReservationFormProps {
   userId: string;
   userEmail: string;
   professor: string;
+  // COORDENADOR/ADMIN habilita o seletor de "reservar em nome de" (proxy).
+  // Ausente/outro valor: comportamento idêntico ao anterior (sem seletor).
+  role?: string;
   turma: string;
   service: ReservationFormService;
   onSuccess?: (reservation?: Reservation) => void;
@@ -87,6 +91,7 @@ export function ReservationForm({
   userId,
   userEmail,
   professor,
+  role,
   turma,
   service,
   onSuccess,
@@ -104,6 +109,12 @@ export function ReservationForm({
 
   const isEditing = mode === 'edit-single' || mode === 'edit-group';
   const isEditGroup = mode === 'edit-group';
+
+  // Proxy: COORDENADOR/ADMIN podem reservar em nome de um professor.
+  // '' (default) = "eu mesmo" — mesmo userId/professor de sempre.
+  const isProxyAllowed = role === 'COORDENADOR' || role === 'ADMIN';
+  const professors = useListProfessors(isProxyAllowed);
+  const [selectedProfessorId, setSelectedProfessorId] = useState<string>('');
 
   // Estado interno renomeado de 'mode' → 'period' na Fase D2 pra nao colidir
   // com a prop publica 'mode'. No edit, `period` eh forcado 'single' via computacao
@@ -233,6 +244,7 @@ export function ReservationForm({
             professor,
             turma,
             observacao: form.reason,
+            ...(selectedProfessorId !== '' ? { ownerUserId: selectedProfessorId } : {}),
           },
         });
 
@@ -341,6 +353,7 @@ export function ReservationForm({
         professor,
         turma,
         observacao: form.reason,
+        ...(selectedProfessorId !== '' ? { ownerUserId: selectedProfessorId } : {}),
       },
     });
 
@@ -381,6 +394,7 @@ export function ReservationForm({
     onSuccess,
     registros,
     reservas,
+    selectedProfessorId,
   ]);
 
   // ─────────────────────────────────────────────────────────────
@@ -574,6 +588,27 @@ export function ReservationForm({
             ))}
           </ul>
         </div>
+      )}
+
+      {/* Proxy — só COORDENADOR/ADMIN, só no create (update não leva
+          ownerUserId no payload, então não faz sentido mostrar no edit). */}
+      {!isEditing && isProxyAllowed && (
+        <Field label="Professor (reservar em nome de)" htmlFor="sel-professor">
+          <select
+            id="sel-professor"
+            value={selectedProfessorId}
+            onChange={e => setSelectedProfessorId(e.target.value)}
+            disabled={professors.loading}
+            style={inputStyle}
+          >
+            <option value="">Eu mesmo ({professor})</option>
+            {professors.data.map(p => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </Field>
       )}
 
       {/* Datas do grupo — read-only no edit-group (informativo) */}
