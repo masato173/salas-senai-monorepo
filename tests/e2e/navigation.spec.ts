@@ -45,6 +45,21 @@ test.describe('Navegação e proteção de rotas', () => {
     });
   });
 
+  test.describe('PROFESSOR', () => {
+    test('PROFESSOR acessa /minha-agenda sem redirect', async ({ page }) => {
+      // /minha-agenda: requiresAuth true, sem requiredRole (router/config.ts)
+      // — qualquer role autenticada deve carregar sem redirect.
+      const auth = await setupProfessorSession(page);
+      if (auth === null) {
+        test.skip();
+        return;
+      }
+      await page.goto('/minha-agenda');
+      await expect(page).not.toHaveURL('/login');
+      await expect(page).toHaveURL('/minha-agenda');
+    });
+  });
+
   test.describe('ADMIN', () => {
     test('sidebar exibe seção Admin para ADMIN', async ({ adminPage }) => {
       await adminPage.goto('/');

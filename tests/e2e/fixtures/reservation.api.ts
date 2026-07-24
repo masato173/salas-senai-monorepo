@@ -4,6 +4,7 @@ interface ReservationData {
   inicio: string;
   fim: string;
   notes?: string;
+  ownerUserId?: string;
 }
 
 interface ReservationListItem {
@@ -57,6 +58,27 @@ export class ReservationApi {
     const json = (await res.json()) as { data?: ReservationListItem[] } | ReservationListItem[];
     // Backend pode retornar { data: [...] } ou array direto — trata os dois casos
     return Array.isArray(json) ? json : (json.data ?? []);
+  }
+
+  // GET /reservations/:id — ReservationsService.findOne retorna o registro
+  // cru do Prisma (status/userId no nível raiz), sem envelope.
+  async getById(id: string): Promise<{ id: string; status: string; userId: string }> {
+    const res = await fetch(`${this.apiUrl}/reservations/${id}`, {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`[ReservationApi] getById failed: ${res.status}`);
+    return res.json() as Promise<{ id: string; status: string; userId: string }>;
+  }
+
+  // GET /users/professors — COORDENADOR|ADMIN. UsersService.listProfessors
+  // retorna UserPublicDto[] ({ id, name, email, role, active, createdAt });
+  // tipagem aqui é um subconjunto proposital, só os campos usados nos specs.
+  async listProfessors(): Promise<{ id: string; name: string; email: string }[]> {
+    const res = await fetch(`${this.apiUrl}/users/professors`, {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`[ReservationApi] listProfessors failed: ${res.status}`);
+    return res.json() as Promise<{ id: string; name: string; email: string }[]>;
   }
 
   async sweepE2E(): Promise<void> {

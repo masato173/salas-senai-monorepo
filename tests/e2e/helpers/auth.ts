@@ -29,3 +29,19 @@ export async function setupProfessorSession(page: Page): Promise<LoginResponse |
     return null;
   }
 }
+
+export async function setupCoordenadorSession(page: Page): Promise<LoginResponse | null> {
+  try {
+    const auth = await loginViaApi(
+      API_URL,
+      process.env['E2E_COORDENADOR_EMAIL'] ?? '',
+      process.env['E2E_COORDENADOR_PASSWORD'] ?? '',
+    );
+    await injectAuth(page, auth);
+    return auth;
+  } catch {
+    // Coordenador de teste pode não existir no banco.
+    // Specs que dependem devem chamar test.skip() se retorno for null.
+    return null;
+  }
+}
