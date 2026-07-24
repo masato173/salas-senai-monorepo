@@ -39,6 +39,16 @@ export class UsersController {
     });
   }
 
+  // CRÍTICO: 'professors' declarado ANTES de qualquer futura rota :id neste
+  // controller, mesmo padrão de rooms.controller.ts (admin/all vs :id).
+  // Hoje não há conflito real (não existe @Get(':id') aqui), mas mantém o
+  // hábito do projeto de rota estática antes de dinâmica.
+  @Roles(Role.COORDENADOR, Role.ADMIN)
+  @Get('professors')
+  listProfessors(): Promise<UserPublicDto[]> {
+    return this.usersService.listProfessors();
+  }
+
   @Patch(':id/role')
   @HttpCode(HttpStatus.OK)
   updateRole(

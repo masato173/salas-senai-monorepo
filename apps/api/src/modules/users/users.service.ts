@@ -70,6 +70,13 @@ export class UsersService {
     };
   }
 
+  // Lista de professores ativos pra COORDENADOR/ADMIN criarem reserva em
+  // nome de alguém (proxy) — sem paginação, o frontend povoa um seletor.
+  async listProfessors(): Promise<UserPublicDto[]> {
+    const users = await this.repo.findAllProfessors();
+    return users.map(toPublicDto);
+  }
+
   async updateRole(id: string, role: Role, requester: RequestUser): Promise<UserPublicDto> {
     const existing = await this.repo.findById(id);
     if (!existing) throw new NotFoundException(`Usuário ${id} não encontrado.`);

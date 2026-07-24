@@ -19,6 +19,12 @@ import type { RequestUser } from '../auth/strategies/jwt.strategy';
 import { RealtimeService } from '../realtime/realtime.service';
 import type { CreateReservationRangeDto } from './dtos/create-reservation-range.dto';
 
+// Auto-aprovação: COORDENADOR/ADMIN criam já APPROVED; PROFESSOR cai em
+// PENDING (fluxo de aprovação normal). Usado em create() e createRange().
+function initialStatus(role: string): ReservationStatus {
+  return role === 'PROFESSOR' ? ReservationStatus.PENDING : ReservationStatus.APPROVED;
+}
+
 interface FindAllParams {
   roomId?: string | undefined;
   date?: string | undefined;
@@ -94,6 +100,9 @@ export class ReservationsService {
   async create(dto: CreateReservationDto, currentUser: RequestUser): Promise<Reservation> {
     this.assertValidTimes(dto.inicio, dto.fim);
 
+    // Proxy: leitura simples de validação, fora da transaction (sem lock).
+    const targetUserId = await this.resolveOwnerUserId(dto.ownerUserId, currentUser);
+
     const createdRes = await this.prisma.$transaction(async tx => {
       // Advisory lock por (roomId, date): serializa escritas concorrentes
       // na mesma sala+dia, evitando race conditions.
@@ -119,14 +128,14 @@ export class ReservationsService {
 
       const reservation = await tx.reservation.create({
         data: {
-          userId: currentUser.userId,
+          userId: targetUserId,
           roomId: dto.roomId,
           date: dto.date,
           inicio: dto.inicio,
           fim: dto.fim,
           turma: dto.turma ?? null,
           notes: dto.notes ?? null,
-          status: ReservationStatus.PENDING,
+          status: initialStatus(currentUser.role),
         },
       });
 
@@ -356,6 +365,25 @@ export class ReservationsService {
     return { count: updated.length, reservations: updated };
   }
 
+  // Proxy: PROFESSOR sempre cria pra si mesmo (ownerUserId é ignorado, ainda
+  // que enviado). COORDENADOR/ADMIN com ownerUserId criam em nome do
+  // professor informado — valida existência + ativo antes de aceitar, senão
+  // NotFoundException (mesma mensagem pra "não existe" e "inativo", não
+  // vaza qual dos dois é o caso).
+  private async resolveOwnerUserId(
+    ownerUserId: string | undefined,
+    currentUser: RequestUser,
+  ): Promise<string> {
+    if (currentUser.role === 'PROFESSOR' || !ownerUserId) {
+      return currentUser.userId;
+    }
+    const owner = await this.prisma.user.findUnique({ where: { id: ownerUserId } });
+    if (!owner || !owner.active) {
+      throw new NotFoundException(`Usuário "${ownerUserId}" não encontrado ou inativo.`);
+    }
+    return owner.id;
+  }
+
   private assertValidTimes(inicio: string, fim: string): void {
     if (inicio >= fim) {
       throw new BadRequestException('O horário de início deve ser anterior ao horário de fim.');
@@ -394,6 +422,10 @@ export class ReservationsService {
       throw new BadRequestException(`Sala "${room.name}" está desativada.`);
     }
 
+    // Proxy: mesma validação de create(), uma vez antes do loop (não repetir
+    // a query 60x — mesmo raciocínio do room.findUnique acima).
+    const targetUserId = await this.resolveOwnerUserId(dto.ownerUserId, currentUser);
+
     const groupId = crypto.randomUUID();
     const reservations: Reservation[] = [];
     const skipped: Array<{ date: string; reason: string }> = [];
@@ -419,7 +451,7 @@ export class ReservationsService {
 
         const created = await tx.reservation.create({
           data: {
-            userId: currentUser.userId,
+            userId: targetUserId,
             roomId: dto.roomId,
             groupId,
             date: data,
@@ -427,7 +459,7 @@ export class ReservationsService {
             fim: dto.fim,
             turma: dto.turma ?? null,
             notes: dto.notes ?? null,
-            status: ReservationStatus.PENDING,
+            status: initialStatus(currentUser.role),
           },
         });
 

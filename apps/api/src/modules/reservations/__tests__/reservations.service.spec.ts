@@ -20,6 +20,7 @@ const mockTx = {
 const mockPrisma = {
   room: { findUnique: vi.fn() },
   reservation: { findMany: vi.fn(), findUnique: vi.fn() },
+  user: { findUnique: vi.fn() },
   $transaction: vi
     .fn()
     .mockImplementation((fn: (tx: typeof mockTx) => Promise<unknown>) => fn(mockTx)),
@@ -48,6 +49,7 @@ function makeService(): ReservationsService {
 
 const adminUser = { userId: 'admin-1', email: 'admin@senai.edu', role: 'ADMIN' };
 const profUser = { userId: 'prof-1', email: 'prof@senai.edu', role: 'PROFESSOR' };
+const coordUser = { userId: 'coord-1', email: 'coord@senai.edu', role: 'COORDENADOR' };
 
 const baseReservation = {
   id: 'res-1',
@@ -124,6 +126,76 @@ describe('ReservationsService', () => {
       await expect(makeService().create({ ...dto, fim: '23:30' }, profUser)).rejects.toThrow(
         BadRequestException,
       );
+    });
+
+    // ── Auto-aprovação ─────────────────────────────────────────────────
+    it('PROFESSOR cria reserva com status PENDING', async () => {
+      await makeService().create(dto, profUser);
+      expect(mockTx.reservation.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: ReservationStatus.PENDING }),
+        }),
+      );
+    });
+
+    it('COORDENADOR cria reserva já com status APPROVED (auto-aprovação)', async () => {
+      await makeService().create(dto, coordUser);
+      expect(mockTx.reservation.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: ReservationStatus.APPROVED }),
+        }),
+      );
+    });
+
+    it('ADMIN cria reserva já com status APPROVED (auto-aprovação)', async () => {
+      await makeService().create(dto, adminUser);
+      expect(mockTx.reservation.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: ReservationStatus.APPROVED }),
+        }),
+      );
+    });
+
+    // ── Proxy ownerUserId ──────────────────────────────────────────────
+    it('PROFESSOR ignora ownerUserId — reserva sempre gravada no próprio userId', async () => {
+      await makeService().create({ ...dto, ownerUserId: 'outro-user' }, profUser);
+      expect(mockTx.reservation.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ userId: profUser.userId }) }),
+      );
+      expect(mockPrisma.user.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('COORDENADOR sem ownerUserId cria a reserva pra si mesmo', async () => {
+      await makeService().create(dto, coordUser);
+      expect(mockTx.reservation.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ userId: coordUser.userId }) }),
+      );
+      expect(mockPrisma.user.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('COORDENADOR com ownerUserId válido cria a reserva em nome do professor informado', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'prof-2', active: true });
+
+      await makeService().create({ ...dto, ownerUserId: 'prof-2' }, coordUser);
+
+      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({ where: { id: 'prof-2' } });
+      expect(mockTx.reservation.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ userId: 'prof-2' }) }),
+      );
+    });
+
+    it('lança NotFoundException quando ownerUserId não existe', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      await expect(
+        makeService().create({ ...dto, ownerUserId: 'fantasma' }, coordUser),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('lança NotFoundException quando ownerUserId existe mas está inativo', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'prof-3', active: false });
+      await expect(
+        makeService().create({ ...dto, ownerUserId: 'prof-3' }, coordUser),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -297,6 +369,37 @@ describe('ReservationsService', () => {
         mockTx,
         expect.objectContaining({ action: 'CREATE_RESERVATION' }),
       );
+    });
+
+    it('PROFESSOR: todas as ocorrências do range saem com status PENDING', async () => {
+      mockConflictService.hasConflict.mockResolvedValue(false);
+
+      await makeService().createRange(rangeDto, profUser);
+
+      expect(mockTx.reservation.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: ReservationStatus.PENDING }),
+        }),
+      );
+    });
+
+    it('COORDENADOR com ownerUserId: range inteiro sai APPROVED e gravado no professor informado', async () => {
+      mockConflictService.hasConflict.mockResolvedValue(false);
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'prof-2', active: true });
+
+      await makeService().createRange({ ...rangeDto, ownerUserId: 'prof-2' }, coordUser);
+
+      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({ where: { id: 'prof-2' } });
+      expect(mockTx.reservation.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            userId: 'prof-2',
+            status: ReservationStatus.APPROVED,
+          }),
+        }),
+      );
+      // valida ownerUserId 1x antes do loop, não 1x por data
+      expect(mockPrisma.user.findUnique).toHaveBeenCalledTimes(1);
     });
   });
 

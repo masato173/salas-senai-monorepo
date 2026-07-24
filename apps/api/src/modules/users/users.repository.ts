@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import type { User, Role } from '@prisma/client';
+import { Role } from '@prisma/client';
+import type { User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 interface CreateUserData {
@@ -71,5 +72,14 @@ export class UsersRepository {
 
   updateById(id: string, data: UpdateUserData): Promise<User> {
     return this.prisma.user.update({ where: { id }, data });
+  }
+
+  // Lista simples (sem paginação) pra povoar o seletor de "criar em nome de"
+  // do coordenador/admin — só professores ativos e não deletados.
+  findAllProfessors(): Promise<User[]> {
+    return this.prisma.user.findMany({
+      where: { role: Role.PROFESSOR, active: true, deletedAt: null },
+      orderBy: { name: 'asc' },
+    });
   }
 }

@@ -28,4 +28,12 @@ export class CreateReservationDto {
   @IsString()
   @MaxLength(500)
   notes?: string;
+
+  // Proxy: COORDENADOR/ADMIN podem criar em nome de um professor. Sem
+  // validação de existência aqui — o service confirma via prisma.user
+  // (ver ReservationsService.resolveOwnerUserId). PROFESSOR ignora este
+  // campo mesmo se enviado.
+  @IsOptional()
+  @IsString()
+  ownerUserId?: string;
 }
