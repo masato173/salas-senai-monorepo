@@ -13,7 +13,6 @@ const LoginPage = lazy(() => import('../pages/Login'));
 // ─────────────────────────────────────────────────────────────
 import { DashboardPage } from '../pages/Dashboard';
 
-const AgendamentosPage = lazy(() => import('../pages/Agendamentos'));
 const ReservasPage = lazy(() => import('../pages/Reservas'));
 const MinhaAgendaPage = lazy(() => import('../pages/MinhaAgenda'));
 const AprovacoesPage = lazy(() => import('../pages/Aprovacoes'));
@@ -49,14 +48,6 @@ export const router = createBrowserRouter(
         {
           index: true,
           element: <DashboardPage />,
-        },
-        {
-          path: 'agendamentos',
-          element: (
-            <Suspense fallback={<RouteLoader />}>
-              <AgendamentosPage />
-            </Suspense>
-          ),
         },
         {
           path: 'reservas',

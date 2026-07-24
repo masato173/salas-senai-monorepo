@@ -1,5 +1,5 @@
 import { useMemo, useState, type CSSProperties } from 'react';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Table, Clock } from 'lucide-react';
 
 import { useRealtimeSocket } from '../../hooks/useRealtimeSocket';
 import { useAvailabilityBackend } from '../../hooks/useAvailabilityBackend';
@@ -7,8 +7,17 @@ import { useDashboardStats } from '../../hooks/useDashboardStats';
 import { DashboardStats } from '../../components/dashboard/DashboardStats';
 import { OccupancyUnified } from '../../components/dashboard/OccupancyUnified';
 import { ScheduleHeader } from '../../components/calendar/ScheduleHeader';
+import { DayView } from '../../components/calendar/DayView';
+import { mapToEntries } from '../../components/dashboard/mapToEntries';
 import { todayYmd } from '../../components/dashboard/scheduleDateUtils';
 import type { DisponibilidadeSala } from '../../types';
+
+type DashboardViewMode = 'table' | 'timeline';
+
+const VIEW_MODE_OPTIONS: { value: DashboardViewMode; label: string; Icon: typeof Table }[] = [
+  { value: 'table', label: 'Tabela', Icon: Table },
+  { value: 'timeline', label: 'Linha do tempo', Icon: Clock },
+];
 
 // Sprint A3 — Dashboard nativo (cards + tabela de ocupação). Sem iframe.
 //
@@ -90,6 +99,9 @@ export function filterSalas(
 export function DashboardPage(): JSX.Element {
   const [date, setDate] = useState(todayYmd());
   const [search, setSearch] = useState<DashboardSearch>({ turma: '', sala: '', turno: 'TODOS' });
+  // Alterna a apresentação dos dados já carregados (tabela/linha do tempo) —
+  // não dispara refetch, os dois modos consomem o mesmo filteredSalas.
+  const [viewMode, setViewMode] = useState<DashboardViewMode>('table');
 
   // Fonte de dados única do dia — sem fallback local (useAvailability,
   // que dependia de Schedule, saiu de cena com a unificação). enabled:true
@@ -111,6 +123,10 @@ export function DashboardPage(): JSX.Element {
     () => filterSalas(disp.data?.salas ?? [], search),
     [disp.data, search],
   );
+
+  // Entradas pro modo "linha do tempo" (DayView) — mesma fonte já filtrada,
+  // sem busca adicional (mesmo padrão de Agendamentos/index.tsx).
+  const entries = useMemo(() => mapToEntries(filteredSalas), [filteredSalas]);
 
   return (
     <div>
@@ -251,9 +267,57 @@ export function DashboardPage(): JSX.Element {
                   </button>
                 );
               })}
+
+              {/* Tabela / Linha do tempo — mesmo padrão pill do turno acima,
+                  à direita. Só troca apresentação, não refaz a busca. */}
+              <div
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}
+              >
+                <span style={{ ...searchLabelStyle, marginBottom: 0, marginRight: '4px' }}>
+                  Visualização
+                </span>
+                {VIEW_MODE_OPTIONS.map(o => {
+                  const active = viewMode === o.value;
+                  const Icon = o.Icon;
+                  return (
+                    <button
+                      key={o.value}
+                      type="button"
+                      onClick={() => setViewMode(o.value)}
+                      aria-pressed={active}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        height: '32px',
+                        padding: '0 14px',
+                        borderRadius: 'var(--radius-s)',
+                        border: active
+                          ? '1px solid var(--color-brand)'
+                          : '1px solid var(--color-border)',
+                        background: active ? 'var(--color-brand)' : 'var(--color-surface)',
+                        color: active ? '#fff' : 'var(--color-muted)',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        fontFamily: 'inherit',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                        transition: 'background .15s, border-color .15s, color .15s',
+                      }}
+                    >
+                      <Icon size={13} strokeWidth={1.75} />
+                      {o.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            <OccupancyUnified salas={filteredSalas} isLoading={disp.loading} />
+            {viewMode === 'table' ? (
+              <OccupancyUnified salas={filteredSalas} isLoading={disp.loading} />
+            ) : (
+              <DayView date={date} entries={entries} selected={null} />
+            )}
           </>
         )}
       </div>

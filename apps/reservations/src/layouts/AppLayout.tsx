@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
-  Calendar,
   CalendarCheck,
   FileText,
   Building2,
@@ -28,10 +27,10 @@ import { PageTransition } from '../router/PageTransition';
 import { ROUTES, getBreadcrumbs, ROUTE_SECTIONS } from '../router/config';
 import { useAuthStore, selectAccessToken, selectUser } from '../store/authStore';
 import { getSocket, disconnectSocket } from '../services/socketClient';
+import { useRealtimeSocket } from '../hooks/useRealtimeSocket';
 
 const ICON_MAP = {
   LayoutDashboard,
-  Calendar,
   CalendarCheck,
   FileText,
   Building2,
@@ -77,6 +76,35 @@ export function AppLayout() {
       disconnectSocket();
     }
   }, [accessToken]);
+
+  // Notificação efêmera na sidebar (não sobrevive a reload — não há campo
+  // no schema hoje pra diferenciar quem criou de quem é o dono da reserva
+  // de forma persistente). Mora aqui porque AppLayout já tem role + rota
+  // atual; evita duplicar esse estado em cada página.
+  //   PROFESSOR: indicador em "Minha Agenda" quando uma reserva EM SEU NOME
+  //     é criada (payload.userId é sempre o dono — inclusive em reservas
+  //     por proxy do coordenador, ver ReservationsService.resolveOwnerUserId).
+  //   COORDENADOR|ADMIN: indicador em "Reservas" quando uma reserva nova
+  //     nasce PENDING (sinal de que precisa de aprovação).
+  // Some sozinho ao visitar a rota notificada (useEffect abaixo).
+  const [notifyPath, setNotifyPath] = useState<string | null>(null);
+
+  useRealtimeSocket({
+    onReservationEvent: (event, payload) => {
+      if (event !== 'reservation.created') return;
+      if (userRole === 'PROFESSOR') {
+        if (payload.userId === currentUser?.id) setNotifyPath('/minha-agenda');
+      } else if (userRole === 'COORDENADOR' || userRole === 'ADMIN') {
+        if (payload.status === 'PENDING') setNotifyPath('/reservas');
+      }
+    },
+  });
+
+  useEffect(() => {
+    if (notifyPath !== null && location.pathname === notifyPath) {
+      setNotifyPath(null);
+    }
+  }, [location.pathname, notifyPath]);
 
   // Sidebar state
   const [collapsed, setCollapsed] = useState(() => ls('sidebar-collapsed') === '1');
@@ -157,9 +185,15 @@ export function AppLayout() {
                       end={route.path === '/'}
                       data-label={route.label}
                       className={({ isActive }) => `sidebar-item${isActive ? ' active' : ''}`}
+                      aria-label={
+                        route.path === notifyPath ? `${route.label} (nova notificação)` : undefined
+                      }
                     >
                       <span className="sidebar-icon" aria-hidden="true">
                         {Icon && <Icon size={16} strokeWidth={1.75} />}
+                        {route.path === notifyPath && (
+                          <span className="sidebar-notify-dot" aria-hidden="true" />
+                        )}
                       </span>
                       <span className="sidebar-label">{route.label}</span>
                     </NavLink>

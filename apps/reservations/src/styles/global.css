@@ -280,10 +280,31 @@ a {
   display: grid;
   place-items: center;
   opacity: 0.8;
+  position: relative;
 }
 .sidebar-item.active .sidebar-icon,
 .sidebar-item:hover .sidebar-icon {
   opacity: 1;
+}
+.sidebar-notify-dot {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent-l);
+  animation: notifyPulse 1.8s ease-in-out infinite;
+}
+@keyframes notifyPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px var(--color-accent-l);
+  }
+  50% {
+    box-shadow: 0 0 0 4px var(--color-accent-l);
+  }
 }
 .sidebar-label {
   font-size: 13px;
@@ -624,6 +645,45 @@ a {
   margin-top: 12px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+/* ── FullCalendar — popover "+N mais" (glass) ────────────
+   fc-theme-standard aplica background/border próprios em
+   `.fc-theme-standard .fc-popover` (2 classes) — `.fc.fc-theme-standard`
+   (3 classes) garante que este override vença independente da ordem
+   de injeção do <style> do FullCalendar. Mesmos tokens de .avail-card/
+   .calendar-placeholder (glass já estabelecido no projeto). */
+.fc.fc-theme-standard .fc-popover {
+  background: var(--color-surface);
+  backdrop-filter: blur(var(--glass-blur-s)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur-s)) saturate(140%);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-m), var(--glass-sheen);
+  overflow: hidden;
+  color: var(--color-text);
+  font-family: 'DM Sans', system-ui, sans-serif;
+  animation: pageFadeIn var(--dur) var(--ease) both;
+}
+.fc.fc-theme-standard .fc-popover-header {
+  background: var(--color-surface-2);
+  border-bottom: 1px solid var(--color-border);
+  padding: 8px 10px;
+}
+.fc.fc-theme-standard .fc-popover-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.fc.fc-theme-standard .fc-popover-close {
+  color: var(--color-muted);
+  transition: color var(--dur);
+}
+.fc.fc-theme-standard .fc-popover-close:hover {
+  color: var(--color-text);
+}
+.fc.fc-theme-standard .fc-popover-body {
+  padding: 6px;
 }
 
 /* ── Page transition ──────────────────────────────────── */

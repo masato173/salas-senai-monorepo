@@ -6,7 +6,6 @@ describe('ROUTES config', () => {
     const paths = ROUTES.map(r => r.path);
     for (const p of [
       '/',
-      '/agendamentos',
       '/reservas',
       '/aprovacoes',
       '/admin',
@@ -36,10 +35,6 @@ describe('ROUTES config', () => {
     expect(ROUTES.find(r => r.path === '/')?.requiresAuth).toBeFalsy();
   });
 
-  it('agendamentos não requer auth', () => {
-    expect(ROUTES.find(r => r.path === '/agendamentos')?.requiresAuth).toBeFalsy();
-  });
-
   it('reservas requer auth com role PROFESSOR', () => {
     const r = ROUTES.find(r => r.path === '/reservas');
     expect(r?.requiresAuth).toBe(true);
@@ -62,10 +57,9 @@ describe('ROUTES config', () => {
 });
 
 describe('ROUTE_SECTIONS', () => {
-  it('seção principal tem Dashboard, Agendamentos e Reservas', () => {
+  it('seção principal tem Dashboard e Reservas', () => {
     const paths = ROUTE_SECTIONS.principal.map(r => r.path);
     expect(paths).toContain('/');
-    expect(paths).toContain('/agendamentos');
     expect(paths).toContain('/reservas');
   });
 
@@ -95,7 +89,7 @@ describe('ROUTE_SECTIONS', () => {
 
 describe('getRouteByPath()', () => {
   it('retorna rota para path existente', () => {
-    expect(getRouteByPath('/agendamentos')?.label).toBe('Agendamentos');
+    expect(getRouteByPath('/reservas')?.label).toBe('Reservas');
   });
 
   it('retorna rota raiz para /', () => {
@@ -114,12 +108,12 @@ describe('getBreadcrumbs()', () => {
     expect(crumbs[0]).toEqual({ label: 'Dashboard', path: '/' });
   });
 
-  it('/agendamentos retorna [Dashboard, Agendamentos]', () => {
-    const crumbs = getBreadcrumbs('/agendamentos');
+  it('/reservas retorna [Dashboard, Reservas]', () => {
+    const crumbs = getBreadcrumbs('/reservas');
     expect(crumbs).toHaveLength(2);
     expect(crumbs[0].label).toBe('Dashboard');
-    expect(crumbs[1].label).toBe('Agendamentos');
-    expect(crumbs[1].path).toBe('/agendamentos');
+    expect(crumbs[1].label).toBe('Reservas');
+    expect(crumbs[1].path).toBe('/reservas');
   });
 
   it('path desconhecido retorna só [Dashboard]', () => {
@@ -130,7 +124,6 @@ describe('getBreadcrumbs()', () => {
 describe('hasAccess()', () => {
   it('rota pública — acessa sem auth', () => {
     expect(hasAccess('/', false)).toBe(true);
-    expect(hasAccess('/agendamentos', false)).toBe(true);
   });
 
   it('rota protegida — bloqueada sem auth', () => {

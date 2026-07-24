@@ -30,14 +30,6 @@ export const ROUTES: RouteConfig[] = [
     requiresAuth: false,
   },
   {
-    path: '/agendamentos',
-    label: 'Agendamentos',
-    pageTitle: 'Agendamentos · SENAI Salas',
-    icon: 'Calendar',
-    section: 'principal',
-    requiresAuth: false,
-  },
-  {
     path: '/reservas',
     label: 'Reservas',
     pageTitle: 'Reservas · SENAI Salas',
