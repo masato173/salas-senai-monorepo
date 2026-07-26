@@ -1,0 +1,15 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "layout-transition",
+        "value": "*",
+        "files": ["apps/reservations/src/styles/global.css"],
+        "createdAt": "2026-07-25T16:09:41.668Z",
+        "reason": "User confirmed .main-wrap margin-left transition on sidebar collapse is intentional — rare user-triggered action, content needs genuine reflow to fill freed space"
+      }
+    ]
+  }
+}

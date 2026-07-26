@@ -24,3 +24,6 @@ apps/reservations/coverage/
 
 # Variáveis de ambiente de teste (credenciais E2E)
 .env.test
+
+# Claude Code hooks — logs locais, não versionar
+.claude/hooks/*-log.txt
