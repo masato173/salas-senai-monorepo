@@ -24,6 +24,10 @@ export interface MyReservation {
   deletedAt: string | null;
   room?: { id: string; name: string };
   user?: { id: string; name: string; email: string };
+  // Quem de fato criou a reserva — só difere de userId em reserva por
+  // proxy (COORDENADOR/ADMIN criando em nome de um professor). Pós-F9.9.
+  createdByUserId?: string | null;
+  createdBy?: { id: string; name: string } | null;
 }
 
 interface UseMyReservationsResult {

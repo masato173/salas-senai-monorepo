@@ -33,6 +33,18 @@ enum ReservationStatus {
   CANCELLED
 }
 
+// Fase C1 — enum criado agora (mesma migration de createdByUserId) pra
+// evitar uma segunda migration em produção logo depois. NENHUMA lógica de
+// notificação é implementada nesta fase — isso é Fase C2 (missão futura).
+enum NotificationType {
+  RESERVATION_PENDING
+  RESERVATION_CONFIRMED
+  RESERVATION_REJECTED
+  RESERVATION_CANCELLED
+  RESERVATION_RESCHEDULED
+  RESERVATION_REMINDER
+}
+
 // ─── Models ──────────────────────────────────────────────────────────────────
 
 model User {
@@ -43,6 +55,10 @@ model User {
   role         Role          @default(PROFESSOR)
   active       Boolean       @default(true)
   reservations Reservation[]
+  // Reservas criadas por este usuário em nome de outro (proxy) — dono
+  // real fica em Reservation.userId; aqui é sempre quem clicou em criar.
+  createdReservations Reservation[]  @relation("ReservationCreatedBy")
+  notifications       Notification[]
   auditLogs    AuditLog[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
@@ -75,8 +91,14 @@ model Reservation {
   turma           String?
   notes           String?
   clientRequestId String?           @unique
+  // Quem de fato criou a reserva — só difere de userId em reserva por
+  // proxy (COORDENADOR/ADMIN criando em nome de um professor). Opcional
+  // pra não quebrar reservas já existentes antes desta migration.
+  createdByUserId String?
+  createdBy       User?             @relation("ReservationCreatedBy", fields: [createdByUserId], references: [id])
   user            User              @relation(fields: [userId], references: [id])
   room            Room              @relation(fields: [roomId], references: [id])
+  notifications   Notification[]
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   deletedAt       DateTime?
@@ -87,6 +109,23 @@ model Reservation {
   @@index([groupId])
   // F9.6 — availability/dashboard filtram por (date, status) sem roomId
   @@index([date, status])
+}
+
+model Notification {
+  id            String           @id @default(cuid())
+  userId        String
+  reservationId String?
+  type          NotificationType
+  title         String
+  body          String
+  read          Boolean          @default(false)
+  createdAt     DateTime         @default(now())
+
+  user        User         @relation(fields: [userId], references: [id])
+  reservation Reservation? @relation(fields: [reservationId], references: [id])
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
 }
 
 model AuditLog {

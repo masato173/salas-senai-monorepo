@@ -197,6 +197,31 @@ describe('ReservationsService', () => {
         makeService().create({ ...dto, ownerUserId: 'prof-3' }, coordUser),
       ).rejects.toThrow(NotFoundException);
     });
+
+    // ── createdByUserId (Fase C1) ──────────────────────────────────────
+    it('grava createdByUserId com o userId de quem criou', async () => {
+      await makeService().create(dto, profUser);
+      expect(mockTx.reservation.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ createdByUserId: profUser.userId }),
+        }),
+      );
+    });
+
+    it('proxy: COORDENADOR cria em nome de professor — userId é do professor, createdByUserId é do coordenador (diferentes)', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'prof-2', active: true });
+
+      await makeService().create({ ...dto, ownerUserId: 'prof-2' }, coordUser);
+
+      expect(mockTx.reservation.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            userId: 'prof-2',
+            createdByUserId: coordUser.userId,
+          }),
+        }),
+      );
+    });
   });
 
   // ── update ────────────────────────────────────────────────────────────────
@@ -400,6 +425,35 @@ describe('ReservationsService', () => {
       );
       // valida ownerUserId 1x antes do loop, não 1x por data
       expect(mockPrisma.user.findUnique).toHaveBeenCalledTimes(1);
+    });
+
+    // ── createdByUserId (Fase C1) ──────────────────────────────────────
+    it('grava createdByUserId em todas as ocorrências do range', async () => {
+      mockConflictService.hasConflict.mockResolvedValue(false);
+
+      await makeService().createRange(rangeDto, profUser);
+
+      expect(mockTx.reservation.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ createdByUserId: profUser.userId }),
+        }),
+      );
+    });
+
+    it('proxy no range: userId é do professor, createdByUserId é do coordenador (diferentes)', async () => {
+      mockConflictService.hasConflict.mockResolvedValue(false);
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'prof-2', active: true });
+
+      await makeService().createRange({ ...rangeDto, ownerUserId: 'prof-2' }, coordUser);
+
+      expect(mockTx.reservation.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            userId: 'prof-2',
+            createdByUserId: coordUser.userId,
+          }),
+        }),
+      );
     });
   });
 

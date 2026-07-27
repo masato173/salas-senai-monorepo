@@ -1,6 +1,10 @@
 import { type CSSProperties } from 'react';
 import { AlertCircle } from 'lucide-react';
-import { useMyReservations, type MyReservationStatus } from '../../hooks/useMyReservations';
+import {
+  useMyReservations,
+  type MyReservationStatus,
+  type MyReservation,
+} from '../../hooks/useMyReservations';
 import { useRealtimeSocket } from '../../hooks/useRealtimeSocket';
 
 // Minha Agenda — GET /reservations?mine=true. Mostra as reservas do usuário
@@ -20,6 +24,17 @@ const STATUS_STYLE: Record<MyReservationStatus, { label: string; color: string; 
 function formatDataBR(iso: string): string {
   const [y, m, d] = iso.split('-');
   return `${d}/${m}/${y}`;
+}
+
+// Pura e exportada — decide se mostra o badge "via {nome}" (reserva criada
+// por outra pessoa em proxy: createdByUserId existe e é diferente do dono).
+// Testável sem renderizar (padrão do projeto — ver sortSalas em
+// OccupancyUnified.tsx pro mesmo raciocínio de extrair lógica pura).
+export function proxyBadgeLabel(
+  r: Pick<MyReservation, 'userId' | 'createdByUserId' | 'createdBy'>,
+): string | null {
+  if (!r.createdByUserId || r.createdByUserId === r.userId) return null;
+  return `via ${r.createdBy?.name ?? '—'}`;
 }
 
 export default function MinhaAgendaPage(): JSX.Element {
@@ -96,10 +111,23 @@ export default function MinhaAgendaPage(): JSX.Element {
               <tbody>
                 {sorted.map(r => {
                   const s = STATUS_STYLE[r.status];
+                  const proxyLabel = proxyBadgeLabel(r);
                   return (
                     <tr key={r.id} style={trStyle}>
                       <td style={tdStyle}>{formatDataBR(r.date)}</td>
-                      <td style={{ ...tdStyle, fontWeight: 600 }}>{r.room?.name ?? '—'}</td>
+                      <td style={tdStyle}>
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'flex-start',
+                            gap: '3px',
+                          }}
+                        >
+                          <span style={{ fontWeight: 600 }}>{r.room?.name ?? '—'}</span>
+                          {proxyLabel && <span style={proxyBadgeStyle}>{proxyLabel}</span>}
+                        </div>
+                      </td>
                       <td style={{ ...tdStyle, color: 'var(--color-muted)' }}>{r.turma || '—'}</td>
                       <td style={{ ...tdStyle, fontVariantNumeric: 'tabular-nums' }}>
                         {r.inicio}–{r.fim}
@@ -269,4 +297,13 @@ const badgeStyle: CSSProperties = {
   padding: '3px 10px',
   borderRadius: 20,
   whiteSpace: 'nowrap',
+};
+
+// Mesmo shape de badgeStyle (pill) — cor neutra porque não é status, é
+// metadado (quem criou), então não usa nenhuma das 4 cores semânticas
+// (ver DESIGN.md — The Status-Only Color Rule).
+const proxyBadgeStyle: CSSProperties = {
+  ...badgeStyle,
+  background: 'var(--color-surface-2)',
+  color: 'var(--color-muted)',
 };

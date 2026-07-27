@@ -75,6 +75,9 @@ export class ReservationsService {
       include: {
         room: true,
         user: { select: { id: true, name: true, email: true } },
+        // Quem criou a reserva (pode diferir do dono em proxy) — permite ao
+        // frontend mostrar "criada por X" sem query extra (Minha Agenda).
+        createdBy: { select: { id: true, name: true } },
       },
       orderBy: [{ date: 'asc' }, { inicio: 'asc' }],
       ...(paginate ? { skip: (page - 1) * pageSize, take: pageSize } : {}),
@@ -136,6 +139,9 @@ export class ReservationsService {
           turma: dto.turma ?? null,
           notes: dto.notes ?? null,
           status: initialStatus(currentUser.role),
+          // Quem de fato criou — diferente de targetUserId só em proxy
+          // (COORDENADOR/ADMIN criando em nome de um professor).
+          createdByUserId: currentUser.userId,
         },
       });
 
@@ -460,6 +466,8 @@ export class ReservationsService {
             turma: dto.turma ?? null,
             notes: dto.notes ?? null,
             status: initialStatus(currentUser.role),
+            // Mesmo raciocínio de create() — quem criou, não o dono (targetUserId).
+            createdByUserId: currentUser.userId,
           },
         });
 

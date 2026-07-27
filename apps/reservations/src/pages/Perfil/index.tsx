@@ -1,6 +1,6 @@
 import { type CSSProperties, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Shield, LogOut } from 'lucide-react';
+import { Mail, Shield, LogOut, CalendarCheck } from 'lucide-react';
 import { useAuthStore, selectUser } from '../../store/authStore';
 
 const ROLE_LABEL: Record<string, string> = {
@@ -137,9 +137,33 @@ export default function PerfilPage(): JSX.Element {
 
             <button
               type="button"
-              onClick={handleLogout}
+              onClick={() => void navigate('/minha-agenda')}
               style={{
                 marginTop: 24,
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                padding: '10px 16px',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius)',
+                background: 'var(--color-surface)',
+                color: 'var(--color-text)',
+                fontWeight: 600,
+                fontSize: 13,
+                cursor: 'pointer',
+              }}
+            >
+              <CalendarCheck size={15} strokeWidth={1.75} />
+              Ver Minha Agenda
+            </button>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              style={{
+                marginTop: 10,
                 width: '100%',
                 display: 'flex',
                 alignItems: 'center',
