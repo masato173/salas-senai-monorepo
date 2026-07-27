@@ -44,11 +44,43 @@ const EVENTS: ReservationEvent[] = [
   'reservation.cancelled',
 ];
 
+// Fase C2 — notificação persistente. Payload mínimo já traz title/body
+// prontos (ver NotificationEventPayload no backend, realtime.service.ts) —
+// frontend não precisa montar mensagem nem fazer query extra.
+export type NotificationEvent = 'notification.created';
+
+export type NotificationTypeValue =
+  | 'RESERVATION_PENDING'
+  | 'RESERVATION_CONFIRMED'
+  | 'RESERVATION_REJECTED'
+  | 'RESERVATION_CANCELLED'
+  | 'RESERVATION_RESCHEDULED'
+  | 'RESERVATION_REMINDER';
+
+export interface NotificationEventPayload {
+  id: string;
+  type: NotificationTypeValue;
+  title: string;
+  body: string;
+  createdAt: string;
+  read: boolean;
+}
+
+type NotificationEventCallback = (payload: NotificationEventPayload) => void;
+
 // Singleton
 let instance: Socket | null = null;
 
 // Mini-emitter: Set<EventCallback> — sem biblioteca externa
 const listeners = new Set<EventCallback>();
+
+// Segundo mini-emitter, em paralelo ao de reserva — mesmo padrão (Set +
+// subscribe/unsubscribe), mas tipado separado. Decisão consciente: o
+// mini-emitter de reserva é fortemente tipado só pra ReservationEvent;
+// generalizar os dois num só exigiria um union type tocando o código já
+// em produção — menor risco manter dois emitters paralelos e idênticos
+// em espírito do que arriscar o existente.
+const notificationListeners = new Set<NotificationEventCallback>();
 
 function registerSocketListeners(socket: Socket): void {
   // Registra socket.on 1× por evento — nunca acumula handlers
@@ -62,6 +94,16 @@ function registerSocketListeners(socket: Socket): void {
           console.error('[Realtime] listener error:', ev, err);
         }
       });
+    });
+  });
+
+  socket.on('notification.created', (payload: NotificationEventPayload) => {
+    notificationListeners.forEach(cb => {
+      try {
+        cb(payload);
+      } catch (err) {
+        console.error('[Realtime] notification listener error:', err);
+      }
     });
   });
 }
@@ -99,5 +141,13 @@ export function subscribeToReservationEvents(cb: EventCallback): () => void {
   listeners.add(cb);
   return () => {
     listeners.delete(cb);
+  };
+}
+
+// Mesmo padrão — mini-emitter separado pra notification.created (Fase C2).
+export function subscribeToNotificationEvents(cb: NotificationEventCallback): () => void {
+  notificationListeners.add(cb);
+  return () => {
+    notificationListeners.delete(cb);
   };
 }

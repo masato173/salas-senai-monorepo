@@ -29,6 +29,7 @@ import { hasRole } from '../router/ProtectedRoute';
 import { useAuthStore, selectAccessToken, selectUser } from '../store/authStore';
 import { getSocket, disconnectSocket } from '../services/socketClient';
 import { useRealtimeSocket } from '../hooks/useRealtimeSocket';
+import { NotificationBell } from '../components/ui/NotificationBell';
 
 const ICON_MAP = {
   LayoutDashboard,
@@ -269,6 +270,7 @@ export function AppLayout() {
 
           {/* Actions */}
           <div className="topbar-actions">
+            <NotificationBell />
             <button
               className="topbar-btn icon-only"
               onClick={toggleTheme}

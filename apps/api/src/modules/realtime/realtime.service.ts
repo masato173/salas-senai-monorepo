@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { Reservation } from '@prisma/client';
+import type { Reservation, NotificationType } from '@prisma/client';
 import { RealtimeGateway } from './realtime.gateway';
 
 // Payload mínimo — sem campos sensíveis do usuário (passwordHash etc.)
@@ -14,6 +14,17 @@ type ReservationEvent =
   | 'reservation.approved'
   | 'reservation.rejected'
   | 'reservation.cancelled';
+
+// Fase C2 — payload mínimo pro frontend renderizar a notificação sem
+// query extra (title/body já vêm prontos, decidido na criação).
+export interface NotificationEventPayload {
+  id: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  createdAt: string;
+  read: boolean;
+}
 
 // Intermediário entre ReservationsService e RealtimeGateway.
 // Falha no emit nunca afeta a transação da reserva (try/catch interno).
@@ -40,6 +51,20 @@ export class RealtimeService {
 
   reservationCancelled(reservation: Reservation): void {
     this.emit('reservation.cancelled', reservation);
+  }
+
+  // Fase C2 — emite DIRECIONADO (server.to(userId), não broadcast global)
+  // pra room nomeada com o userId (ver RealtimeGateway.handleConnection).
+  // Mesmo isolamento de falha do emit() de reserva abaixo — nunca propaga
+  // erro pra quem chamou (NotificationsService.notify já persistiu no
+  // banco antes disso; falha aqui não desfaz a criação).
+  notificationCreated(userId: string, payload: NotificationEventPayload): void {
+    try {
+      this.gateway.server.to(userId).emit('notification.created', payload);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[Realtime] Emit failed: notification.created', e);
+    }
   }
 
   private emit(event: ReservationEvent, data: Reservation): void {

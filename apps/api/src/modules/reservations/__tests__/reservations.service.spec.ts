@@ -5,7 +5,7 @@ import {
   BadRequestException,
   ForbiddenException,
 } from '@nestjs/common';
-import { ReservationStatus } from '@prisma/client';
+import { ReservationStatus, NotificationType } from '@prisma/client';
 import { ReservationsService } from '../reservations.service';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
@@ -20,7 +20,7 @@ const mockTx = {
 const mockPrisma = {
   room: { findUnique: vi.fn() },
   reservation: { findMany: vi.fn(), findUnique: vi.fn() },
-  user: { findUnique: vi.fn() },
+  user: { findUnique: vi.fn(), findMany: vi.fn() },
   $transaction: vi
     .fn()
     .mockImplementation((fn: (tx: typeof mockTx) => Promise<unknown>) => fn(mockTx)),
@@ -36,6 +36,7 @@ const mockRealtimeService = {
   reservationApproved: vi.fn(),
   reservationRejected: vi.fn(),
 };
+const mockNotificationsService = { notify: vi.fn(), notifyMany: vi.fn() };
 
 function makeService(): ReservationsService {
   return new ReservationsService(
@@ -44,6 +45,7 @@ function makeService(): ReservationsService {
     mockOwnershipService as never,
     mockAuditService as never,
     mockRealtimeService as never,
+    mockNotificationsService as never,
   );
 }
 
@@ -73,6 +75,12 @@ describe('ReservationsService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockAuditService.log.mockResolvedValue(undefined);
+    mockNotificationsService.notify.mockResolvedValue(undefined);
+    mockNotificationsService.notifyMany.mockResolvedValue(undefined);
+    // Default: nenhum aprovador ativo — notifyPendingApprovers faz early
+    // return sem tocar room/user.findUnique. Testes que verificam a
+    // notificação de fato sobrescrevem isso.
+    mockPrisma.user.findMany.mockResolvedValue([]);
   });
 
   // ── create ────────────────────────────────────────────────────────────────
@@ -222,6 +230,31 @@ describe('ReservationsService', () => {
         }),
       );
     });
+
+    // ── Notificação — evento 1 (Fase C2) ────────────────────────────────
+    it('PROFESSOR cria reserva PENDING — notifica todos os COORDENADOR/ADMIN ativos', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([{ id: 'coord-1' }, { id: 'admin-1' }]);
+      mockPrisma.room.findUnique.mockResolvedValue({ id: 'room-1', name: '01 Sala' });
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'prof-1', name: 'Prof. Silva' });
+
+      await makeService().create(dto, profUser);
+
+      expect(mockNotificationsService.notifyMany).toHaveBeenCalledWith(
+        ['coord-1', 'admin-1'],
+        expect.objectContaining({ type: NotificationType.RESERVATION_PENDING }),
+      );
+    });
+
+    it('COORDENADOR cria reserva já APPROVED — não dispara notificação de pendência', async () => {
+      await makeService().create(dto, coordUser);
+      expect(mockNotificationsService.notifyMany).not.toHaveBeenCalled();
+    });
+
+    it('nenhum aprovador ativo — não chama notifyMany (early return)', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([]);
+      await makeService().create(dto, profUser);
+      expect(mockNotificationsService.notifyMany).not.toHaveBeenCalled();
+    });
   });
 
   // ── update ────────────────────────────────────────────────────────────────
@@ -255,6 +288,28 @@ describe('ReservationsService', () => {
       await expect(makeService().update('res-1', { fim: '11:00' }, profUser)).rejects.toThrow(
         ForbiddenException,
       );
+    });
+
+    // ── Notificação — evento 5 (Fase C2) ────────────────────────────────
+    // baseReservation.userId === 'prof-1' === profUser.userId
+    it('notifica quando OUTRA pessoa reprograma a reserva (currentUser !== dono)', async () => {
+      await makeService().update('res-1', { fim: '11:00' }, adminUser);
+      expect(mockNotificationsService.notify).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'prof-1',
+          type: NotificationType.RESERVATION_RESCHEDULED,
+        }),
+      );
+    });
+
+    it('NÃO notifica quando o próprio dono edita a própria reserva', async () => {
+      await makeService().update('res-1', { fim: '11:00' }, profUser);
+      expect(mockNotificationsService.notify).not.toHaveBeenCalled();
+    });
+
+    it('NÃO notifica quando só notes/turma mudam (não é reprogramação de data/horário/sala)', async () => {
+      await makeService().update('res-1', { notes: 'nova nota' }, adminUser);
+      expect(mockNotificationsService.notify).not.toHaveBeenCalled();
     });
   });
 
@@ -295,6 +350,63 @@ describe('ReservationsService', () => {
         new ForbiddenException('Sem permissão.'),
       );
       await expect(makeService().cancel('res-1', profUser)).rejects.toThrow(ForbiddenException);
+    });
+
+    // ── Notificação — evento 4 (Fase C2) ────────────────────────────────
+    // baseReservation.userId === 'prof-1' === profUser.userId
+    it('notifica quando OUTRA pessoa cancela (ex: COORDENADOR/ADMIN cancelando em nome do professor)', async () => {
+      await makeService().cancel('res-1', adminUser);
+      expect(mockNotificationsService.notify).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 'prof-1', type: NotificationType.RESERVATION_CANCELLED }),
+      );
+    });
+
+    it('NÃO notifica quando o próprio dono cancela a própria reserva', async () => {
+      await makeService().cancel('res-1', profUser);
+      expect(mockNotificationsService.notify).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── updateStatus — notificação, eventos 2 e 3 (Fase C2) ────────────────────
+  // Não havia describe() pra updateStatus() antes desta missão — cobre só o
+  // disparo de notificação (escopo desta tarefa), não a suite completa do
+  // método.
+  describe('updateStatus() — notificação de confirmação/rejeição (Fase C2)', () => {
+    beforeEach(() => {
+      mockPrisma.reservation.findUnique.mockResolvedValue(baseReservation); // userId: 'prof-1'
+      mockTx.reservation.update.mockResolvedValue(baseReservation);
+    });
+
+    it('APPROVED — notifica o dono da reserva com RESERVATION_CONFIRMED', async () => {
+      mockTx.reservation.update.mockResolvedValue({
+        ...baseReservation,
+        status: ReservationStatus.APPROVED,
+      });
+
+      await makeService().updateStatus('res-1', ReservationStatus.APPROVED, adminUser);
+
+      expect(mockNotificationsService.notify).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'prof-1',
+          type: NotificationType.RESERVATION_CONFIRMED,
+        }),
+      );
+    });
+
+    it('REJECTED — notifica o dono da reserva com RESERVATION_REJECTED', async () => {
+      mockTx.reservation.update.mockResolvedValue({
+        ...baseReservation,
+        status: ReservationStatus.REJECTED,
+      });
+
+      await makeService().updateStatus('res-1', ReservationStatus.REJECTED, adminUser);
+
+      expect(mockNotificationsService.notify).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'prof-1',
+          type: NotificationType.RESERVATION_REJECTED,
+        }),
+      );
     });
   });
 
@@ -425,6 +537,34 @@ describe('ReservationsService', () => {
       );
       // valida ownerUserId 1x antes do loop, não 1x por data
       expect(mockPrisma.user.findUnique).toHaveBeenCalledTimes(1);
+    });
+
+    // ── Notificação — evento 1 agregado (Fase C2) ───────────────────────
+    it('PROFESSOR: range inteiro PENDING dispara UMA notificação agregada (não uma por data)', async () => {
+      mockConflictService.hasConflict.mockResolvedValue(false);
+      mockPrisma.user.findMany.mockResolvedValue([{ id: 'coord-1' }]);
+      // NÃO sobrescrever mockPrisma.room.findUnique aqui — o beforeEach de
+      // createRange() já mockou { available: true }, necessário pra
+      // validação inicial da sala não lançar BadRequestException antes de
+      // chegar no código de notificação (mesmo mock serve as duas chamadas).
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'prof-1', name: 'Prof. Silva' });
+
+      await makeService().createRange(rangeDto, profUser);
+
+      expect(mockNotificationsService.notifyMany).toHaveBeenCalledTimes(1);
+      expect(mockNotificationsService.notifyMany).toHaveBeenCalledWith(
+        ['coord-1'],
+        expect.objectContaining({ type: NotificationType.RESERVATION_PENDING }),
+      );
+    });
+
+    it('COORDENADOR com ownerUserId: range sai APPROVED — não dispara notificação de pendência', async () => {
+      mockConflictService.hasConflict.mockResolvedValue(false);
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'prof-2', active: true });
+
+      await makeService().createRange({ ...rangeDto, ownerUserId: 'prof-2' }, coordUser);
+
+      expect(mockNotificationsService.notifyMany).not.toHaveBeenCalled();
     });
 
     // ── createdByUserId (Fase C1) ──────────────────────────────────────

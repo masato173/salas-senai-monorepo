@@ -17,6 +17,7 @@ import { RealtimeModule } from './modules/realtime/realtime.module';
 import { SyncModule } from './modules/sync/sync.module';
 import { SchedulesModule } from './modules/schedules/schedules.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 
@@ -62,6 +63,7 @@ const isProduction = process.env['NODE_ENV'] === 'production';
     SyncModule,
     SchedulesModule,
     DashboardModule,
+    NotificationsModule,
   ],
   providers: [
     // Ordem importa: throttling roda ANTES da autenticação — brute force em

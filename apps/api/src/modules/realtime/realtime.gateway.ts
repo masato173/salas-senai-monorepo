@@ -40,6 +40,12 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
         email: payload.email,
         role: payload.role,
       };
+      // Fase C2 — room nomeada com o próprio userId: permite emitir
+      // notificação DIRECIONADA (server.to(userId).emit(...)) sem broadcast
+      // global. join() retorna Promise<void> | void dependendo do adapter
+      // (confirmado no .d.ts do socket.io instalado) — não precisamos
+      // aguardar, só evitar floating promise.
+      void client.join(payload.sub);
     } catch {
       // Token inválido ou expirado — desconecta sem vazar detalhes do erro
       client.disconnect();
@@ -47,6 +53,11 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   handleDisconnect(_client: Socket): void {
-    // No-op nesta fase — cleanup de rooms e sessões virá em F4.10c
+    // No-op — nenhum cleanup manual de room necessário. Confirmado lendo o
+    // código-fonte do socket.io instalado (socket.js): o fluxo interno de
+    // disconnect chama _cleanup() -> leaveAll(), removendo o socket de
+    // TODAS as rooms (inclusive a room de userId da Fase C2) antes mesmo
+    // do evento "disconnect" ser emitido — não é suposição, é o
+    // comportamento real do pacote.
   }
 }

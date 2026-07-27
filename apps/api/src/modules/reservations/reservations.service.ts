@@ -5,7 +5,7 @@ import {
   ConflictException as NestConflictException,
   BadRequestException,
 } from '@nestjs/common';
-import { ReservationStatus } from '@prisma/client';
+import { ReservationStatus, Role, NotificationType } from '@prisma/client';
 import type { Reservation } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConflictService } from './conflict.service';
@@ -17,6 +17,7 @@ import type { UpdateReservationGroupDto } from './dtos/update-reservation-group.
 import type { UpdateReservationSelectedDto } from './dtos/update-reservation-selected.dto';
 import type { RequestUser } from '../auth/strategies/jwt.strategy';
 import { RealtimeService } from '../realtime/realtime.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import type { CreateReservationRangeDto } from './dtos/create-reservation-range.dto';
 
 // Auto-aprovação: COORDENADOR/ADMIN criam já APPROVED; PROFESSOR cai em
@@ -49,6 +50,7 @@ export class ReservationsService {
     private readonly ownershipService: OwnershipService,
     private readonly auditService: AuditService,
     private readonly realtimeService: RealtimeService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async findAll(params: FindAllParams): Promise<Reservation[]> {
@@ -155,6 +157,20 @@ export class ReservationsService {
       return reservation;
     });
     this.realtimeService.reservationCreated(createdRes);
+    // Evento 1 (Fase C2) — notifica aprovadores só quando a reserva nasceu
+    // PENDING (role PROFESSOR). Depois da transaction já ter sucesso —
+    // nunca antes, nunca impede a resposta desta chamada.
+    if (createdRes.status === ReservationStatus.PENDING) {
+      await this.notifyPendingApprovers({
+        reservationId: createdRes.id,
+        roomId: createdRes.roomId,
+        ownerUserId: createdRes.userId,
+        date: createdRes.date,
+        inicio: createdRes.inicio,
+        fim: createdRes.fim,
+        count: 1,
+      });
+    }
     return createdRes;
   }
 
@@ -214,6 +230,26 @@ export class ReservationsService {
       return updated;
     });
     this.realtimeService.reservationUpdated(updatedRes);
+    // Evento 5 (Fase C2) — só quando (a) algo que de fato reprograma a
+    // reserva mudou (data/horário/sala — não turma/notes) e (b) quem editou
+    // não é o dono (cancelar/editar a própria reserva não gera aviso sobre
+    // a própria ação, mesma regra do evento 4).
+    const isReschedule =
+      dto.roomId !== undefined ||
+      dto.date !== undefined ||
+      dto.inicio !== undefined ||
+      dto.fim !== undefined;
+    if (isReschedule && currentUser.userId !== existing.userId) {
+      await this.notifySafe(() =>
+        this.notificationsService.notify({
+          userId: existing.userId,
+          type: NotificationType.RESERVATION_RESCHEDULED,
+          title: 'Reserva reprogramada',
+          body: `Sua reserva foi reprogramada para ${updatedRes.date}, ${updatedRes.inicio}–${updatedRes.fim}.`,
+          reservationId: updatedRes.id,
+        }),
+      );
+    }
     return updatedRes;
   }
 
@@ -245,6 +281,20 @@ export class ReservationsService {
       return cancelled;
     });
     this.realtimeService.reservationCancelled(cancelledRes);
+    // Evento 4 (Fase C2) — só quando foi OUTRA pessoa que cancelou (ex:
+    // COORDENADOR cancelando em nome de um professor). Cancelar a própria
+    // reserva não gera aviso sobre a própria ação.
+    if (currentUser.userId !== cancelledRes.userId) {
+      await this.notifySafe(() =>
+        this.notificationsService.notify({
+          userId: cancelledRes.userId,
+          type: NotificationType.RESERVATION_CANCELLED,
+          title: 'Reserva cancelada',
+          body: `Sua reserva de ${cancelledRes.date}, ${cancelledRes.inicio}–${cancelledRes.fim}, foi cancelada.`,
+          reservationId: cancelledRes.id,
+        }),
+      );
+    }
     return cancelledRes;
   }
 
@@ -286,8 +336,28 @@ export class ReservationsService {
     });
     if (status === ReservationStatus.APPROVED) {
       this.realtimeService.reservationApproved(statusRes);
+      // Evento 2 (Fase C2)
+      await this.notifySafe(() =>
+        this.notificationsService.notify({
+          userId: statusRes.userId,
+          type: NotificationType.RESERVATION_CONFIRMED,
+          title: 'Reserva confirmada',
+          body: `Sua reserva de ${statusRes.date}, ${statusRes.inicio}–${statusRes.fim}, foi confirmada.`,
+          reservationId: statusRes.id,
+        }),
+      );
     } else {
       this.realtimeService.reservationRejected(statusRes);
+      // Evento 3 (Fase C2)
+      await this.notifySafe(() =>
+        this.notificationsService.notify({
+          userId: statusRes.userId,
+          type: NotificationType.RESERVATION_REJECTED,
+          title: 'Reserva recusada',
+          body: `Sua reserva de ${statusRes.date}, ${statusRes.inicio}–${statusRes.fim}, foi recusada.`,
+          reservationId: statusRes.id,
+        }),
+      );
     }
     return statusRes;
   }
@@ -388,6 +458,61 @@ export class ReservationsService {
       throw new NotFoundException(`Usuário "${ownerUserId}" não encontrado ou inativo.`);
     }
     return owner.id;
+  }
+
+  // Isolamento de falha (Fase C2) — nenhuma notificação pode fazer a
+  // operação principal de reserva falhar. Sempre chamado depois que a
+  // operação já teve sucesso.
+  private async notifySafe(fn: () => Promise<unknown>): Promise<void> {
+    try {
+      await fn();
+    } catch (e) {
+      this.logger.warn(`Falha ao criar notificação: ${String(e)}`);
+    }
+  }
+
+  // Evento 1 (Fase C2) — notifica todos os COORDENADOR/ADMIN ativos que uma
+  // reserva PENDING precisa de aprovação. count>1 (createRange) agrega numa
+  // única mensagem em vez de uma notificação por data.
+  private async notifyPendingApprovers(params: {
+    reservationId: string;
+    roomId: string;
+    ownerUserId: string;
+    date: string;
+    inicio: string;
+    fim: string;
+    count: number;
+  }): Promise<void> {
+    try {
+      const approvers = await this.prisma.user.findMany({
+        where: { role: { in: [Role.COORDENADOR, Role.ADMIN] }, active: true },
+        select: { id: true },
+      });
+      if (approvers.length === 0) return;
+
+      const [room, owner] = await Promise.all([
+        this.prisma.room.findUnique({ where: { id: params.roomId }, select: { name: true } }),
+        this.prisma.user.findUnique({ where: { id: params.ownerUserId }, select: { name: true } }),
+      ]);
+      const professorNome = owner?.name ?? 'Um professor';
+      const salaNome = room?.name ?? 'uma sala';
+      const body =
+        params.count > 1
+          ? `${professorNome} solicitou ${params.count} reservas de ${salaNome}, ${params.inicio}–${params.fim}, a partir de ${params.date}.`
+          : `${professorNome} solicitou ${salaNome} em ${params.date}, ${params.inicio}–${params.fim}.`;
+
+      await this.notificationsService.notifyMany(
+        approvers.map(a => a.id),
+        {
+          type: NotificationType.RESERVATION_PENDING,
+          title: 'Nova reserva aguardando aprovação',
+          body,
+          reservationId: params.reservationId,
+        },
+      );
+    } catch (e) {
+      this.logger.warn(`Falha ao notificar aprovadores de reserva pendente: ${String(e)}`);
+    }
   }
 
   private assertValidTimes(inicio: string, fim: string): void {
@@ -497,6 +622,24 @@ export class ReservationsService {
 
     for (const reservation of reservations) {
       this.realtimeService.reservationCreated(reservation);
+    }
+
+    // Evento 1 (Fase C2) — decisão: UMA notificação agregada pro range
+    // inteiro, não uma por data (60 notificações individuais numa reserva
+    // de período seria spam inutilizável). roomId/inicio/fim são idênticos
+    // em todas as ocorrências do range — só a data varia — então a primeira
+    // reserva criada é representativa o suficiente pro link/contexto.
+    if (reservations.length > 0 && initialStatus(currentUser.role) === ReservationStatus.PENDING) {
+      const first = reservations[0];
+      await this.notifyPendingApprovers({
+        reservationId: first.id,
+        roomId: first.roomId,
+        ownerUserId: first.userId,
+        date: first.date,
+        inicio: first.inicio,
+        fim: first.fim,
+        count: reservations.length,
+      });
     }
 
     return { count: reservations.length, reservations };
