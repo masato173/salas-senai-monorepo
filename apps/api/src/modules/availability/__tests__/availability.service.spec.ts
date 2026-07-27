@@ -26,6 +26,7 @@ function makeReservation(overrides: {
   inicio?: string;
   fim?: string;
   status?: ReservationStatus;
+  turma?: string | null;
 }) {
   return {
     id: 'res-1',
@@ -36,8 +37,22 @@ function makeReservation(overrides: {
     // Default APPROVED — só reserva aprovada conta como "ativa" na
     // disponibilidade (fix do bug de PENDING aparecer como ocupada).
     status: overrides.status ?? ReservationStatus.APPROVED,
+    turma: overrides.turma ?? null,
     deletedAt: null,
     user: { name: 'Prof. Teste' },
+  };
+}
+
+function makeSchedule(overrides: { sala?: string; inicio?: string; fim?: string }) {
+  return {
+    id: 'sch-1',
+    date: '2026-07-10',
+    sala: overrides.sala ?? '01 Sala',
+    turma: 'APB.ADM.148',
+    mes: 'Julho',
+    turno: null,
+    inicio: overrides.inicio ?? '07:00',
+    fim: overrides.fim ?? '09:00',
   };
 }
 
@@ -46,6 +61,10 @@ describe('AvailabilityService', () => {
     vi.clearAllMocks();
     mockRoomDelegate.findMany.mockResolvedValue(ROOMS);
     mockReservationDelegate.findMany.mockResolvedValue([]);
+    // clearAllMocks() não reseta a implementação (só calls/results) — sem
+    // isso, um teste que seta schedule vazaria pro próximo via o mesmo
+    // mock. Reset explícito aqui, igual ao padrão já usado pra reservation.
+    mockScheduleDelegate.findMany.mockResolvedValue([]);
   });
 
   describe('getAvailability()', () => {
@@ -130,6 +149,58 @@ describe('AvailabilityService', () => {
 
       expect(result.salas.find(s => s.sala === '01 Sala')!.status).toBe('livre');
       expect(result.salas.find(s => s.sala === '02 Lab. Elétrica')!.status).toBe('reserva');
+    });
+
+    it('aula de manhã + reserva de tarde, mesma sala, sem sobreposição → status "aula" (não "conflito")', async () => {
+      mockScheduleDelegate.findMany.mockResolvedValue([
+        makeSchedule({ sala: '01 Sala', inicio: '07:00', fim: '09:00' }),
+      ]);
+      mockReservationDelegate.findMany.mockResolvedValue([
+        makeReservation({ roomId: 'r1', inicio: '14:00', fim: '16:00' }),
+      ]);
+
+      const result = await makeService().getAvailability({ date: '2026-07-10' });
+
+      const sala1 = result.salas.find(s => s.sala === '01 Sala')!;
+      expect(sala1.status).toBe('aula');
+      expect(sala1.eventos).toHaveLength(2);
+    });
+
+    it('aula e reserva com sobreposição real de horário, mesma sala → status "conflito"', async () => {
+      mockScheduleDelegate.findMany.mockResolvedValue([
+        makeSchedule({ sala: '01 Sala', inicio: '08:00', fim: '10:00' }),
+      ]);
+      mockReservationDelegate.findMany.mockResolvedValue([
+        makeReservation({ roomId: 'r1', inicio: '09:00', fim: '11:00' }),
+      ]);
+
+      const result = await makeService().getAvailability({ date: '2026-07-10' });
+
+      const sala1 = result.salas.find(s => s.sala === '01 Sala')!;
+      expect(sala1.status).toBe('conflito');
+    });
+
+    it('evento de reserva com turma preenchida inclui o campo turma', async () => {
+      mockReservationDelegate.findMany.mockResolvedValue([
+        makeReservation({ roomId: 'r1', turma: 'DEV-2026' }),
+      ]);
+
+      const result = await makeService().getAvailability({ date: '2026-07-10' });
+      const evento = result.salas.find(s => s.sala === '01 Sala')!.eventos[0];
+
+      expect(evento.turma).toBe('DEV-2026');
+    });
+
+    it('evento de reserva sem turma (null) não inclui o campo turma no objeto', async () => {
+      mockReservationDelegate.findMany.mockResolvedValue([
+        makeReservation({ roomId: 'r1', turma: null }),
+      ]);
+
+      const result = await makeService().getAvailability({ date: '2026-07-10' });
+      const evento = result.salas.find(s => s.sala === '01 Sala')!.eventos[0];
+
+      expect(evento.turma).toBeUndefined();
+      expect('turma' in evento).toBe(false);
     });
   });
 

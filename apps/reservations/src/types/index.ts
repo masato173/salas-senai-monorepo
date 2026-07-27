@@ -108,7 +108,7 @@ export interface SalaEvento {
   inicio: string; // HH:MM
   fim: string; // HH:MM
   turno?: Turno | null; // presente em aula; ausente em reserva
-  turma?: string; // presente em aula
+  turma?: string; // sempre em aula; em reserva só quando a reserva tem turma
   professor?: string; // presente em reserva
   id?: string; // id da reserva (tipo=reserva)
 }

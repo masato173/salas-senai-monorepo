@@ -144,7 +144,15 @@ export function OccupancyUnified({ salas, isLoading }: OccupancyUnifiedProps): J
                       ) : (
                         <div style={eventsListStyle}>
                           {sala.eventos.map((ev, idx) => {
-                            const detalhe = ev.tipo === 'aula' ? ev.turma : ev.professor;
+                            // Aula: só turma (como sempre). Reserva: professor + turma
+                            // juntos quando a reserva tem turma ("Professor · Turma"),
+                            // senão só professor (comportamento anterior preservado).
+                            const detalhe =
+                              ev.tipo === 'aula'
+                                ? ev.turma
+                                : ev.turma
+                                  ? `${ev.professor} · ${ev.turma}`
+                                  : ev.professor;
                             return (
                               <div key={`${ev.tipo}-${ev.inicio}-${idx}`} style={eventChipStyle}>
                                 <div style={eventChipTopRowStyle}>

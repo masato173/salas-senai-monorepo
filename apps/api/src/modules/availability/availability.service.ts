@@ -140,16 +140,28 @@ export class AvailabilityService {
           fim: r.fim,
           professor: r.user.name,
           id: r.id,
+          // turma é opcional em Reservation (String?) — guard !== null, não
+          // !== undefined, porque o Prisma tipa campo nullable como T|null
+          // (exactOptionalPropertyTypes — padrão do projeto).
+          ...(r.turma !== null ? { turma: r.turma } : {}),
         });
       }
 
-      // Status dominante (pior caso: conflito > aula > reserva > livre)
-      const temAula = eventos.some(e => e.tipo === 'aula');
-      const temReserva = eventos.some(e => e.tipo === 'reserva');
+      // Status dominante (pior caso: conflito > aula > reserva > livre).
+      // 'conflito' exige SOBREPOSIÇÃO REAL de horário entre aula e reserva
+      // (reutiliza overlaps(), a mesma fórmula canônica do resto do
+      // projeto) — antes bastava ter os dois tipos no dia sem checar
+      // horário, o que gerava falso positivo (ex.: aula de manhã + reserva
+      // à tarde na mesma sala virava "conflito" sem sobreposição real,
+      // divergindo do ConflictService, que aceitava a reserva).
+      const aulas = eventos.filter(e => e.tipo === 'aula');
+      const reservasDoDia = eventos.filter(e => e.tipo === 'reserva');
+      const temConflitoReal = aulas.some(a => reservasDoDia.some(r => overlaps(a, r)));
+
       let status: RoomStatus = 'livre';
-      if (temAula && temReserva) status = 'conflito';
-      else if (temAula) status = 'aula';
-      else if (temReserva) status = 'reserva';
+      if (temConflitoReal) status = 'conflito';
+      else if (aulas.length > 0) status = 'aula';
+      else if (reservasDoDia.length > 0) status = 'reserva';
 
       return { sala: room.name, status, eventos };
     });

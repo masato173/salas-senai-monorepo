@@ -2,7 +2,11 @@
 
 # Cérebro persistente do projeto — leia ANTES de qualquer tarefa
 
-# Atualizado: 2026-07-22 | Fase atual: F9.9 completo — pré-deploy produção
+# Atualizado: 2026-07-26 | Fase atual: F9.9 completo + pós-F9 (auto-aprovação/proxy,
+
+# dashboard unificado com toggle, notificação de sidebar, hooks Claude Code, DESIGN.md/PRODUCT.md) —
+
+# pré-deploy produção
 
 ---
 
@@ -84,6 +88,47 @@ pelo RoomsModule. RoomsService.create/update/softDelete rodam
 dentro de $transaction e auditam CREATE_ROOM/UPDATE_ROOM/
 DEACTIVATE_ROOM com entityType: 'Room'.
 
+✅ PÓS-F9.9 (sem número de fase formal — trabalho incremental):
+
+- Fix: AvailabilityService incluía reservas PENDING como ocupação em
+  GET /availability (deveria ser só APPROVED) — corrigido, com teste
+  novo pro where-clause.
+- Auto-aprovação por role: ReservationsService.initialStatus(role) —
+  PENDING pra PROFESSOR, APPROVED pra COORDENADOR/ADMIN.
+- Reserva por proxy: CreateReservationDto/CreateReservationRangeDto
+  ganharam ownerUserId? opcional. resolveOwnerUserId() valida (User
+  ativo) e grava a reserva com userId = ownerUserId quando quem chama
+  é COORDENADOR/ADMIN; PROFESSOR sempre ignora o campo.
+- Novo endpoint GET /users/professors (COORDENADOR|ADMIN) via
+  UsersRepository.findAllProfessors().
+- Frontend: seletor de professor em ReservationForm (proxy), nova
+  página/rota /minha-agenda (useMyReservations, GET /reservations?mine=true),
+  Dashboard ganhou toggle Tabela/Linha do tempo (reaproveita DayView,
+  mapToEntries extraído pra components/dashboard/mapToEntries.ts,
+  compartilhado com Agendamentos), notificação efêmera na sidebar
+  (AppLayout.tsx: dot pulsante em Minha Agenda pro dono da reserva
+  criada, ou em Reservas quando nasce PENDING pra COORDENADOR/ADMIN —
+  via useRealtimeSocket, some ao visitar a rota).
+- FullCalendar (/reservas): dayMaxEvents ligado (popover "+N mais"
+  nativo) + popover restilizado com os tokens glass do projeto.
+- /agendamentos: rota removida de vez (não só do menu — tirada de
+  router/index.tsx e router/config.ts, seguindo o mesmo padrão de
+  /salas /turmas /relatorios /configuracoes). Arquivo da página
+  mantido, só não é mais roteável.
+- ConflictAlert.tsx reescrito: usava classes Tailwind, mas o projeto
+  nunca teve Tailwind instalado (renderizava sem estilo em produção,
+  dentro do fluxo real de criação de reserva) — ver Bug #12.
+  StatusBadge.tsx/LoadingSkeleton.tsx (mesmo padrão Tailwind, sem
+  nenhum import em uso) deletados.
+- Foco de teclado visível (`:focus-visible`, global.css) adicionado —
+  não existia nenhuma regra de foco antes.
+- DESIGN.md + PRODUCT.md + .impeccable/ criados em apps/reservations/
+  via skill Impeccable — ver seção DESIGN SYSTEM abaixo (agora aponta
+  pra lá como fonte primária de tokens, não duplica tudo aqui).
+- Hooks do Claude Code adicionados (.claude/hooks/): bloqueio de
+  edição de .env\* (exceto .env.example) + eslint --fix automático
+  pós-edit em .ts/.tsx. Ver seção AUTOMAÇÃO CLAUDE CODE.
+
 ⏳ PENDENTE PRÉ-DEPLOY REAL:
 
 - Criar conta/projeto Railway + configurar env vars
@@ -164,6 +209,14 @@ Causa raiz: eslint não declarado como devDependency + falta root:true
 nos .eslintrc.cjs de apps/api e apps/reservations
 → Fix: eslint como devDep na raiz + root:true nos dois configs
 
+#12 components/ui/_.tsx usando classes Tailwind — projeto nunca teve
+Tailwind instalado (renderizava sem nenhum estilo em produção)
+→ ConflictAlert.tsx (em uso real em ReservationForm.tsx) reescrito com
+tokens do design system (var(--color-_)); StatusBadge.tsx e
+LoadingSkeleton.tsx (mesmo padrão, sem nenhum import em uso) deletados
+→ Fix geral: sempre grep por className Tailwind quando for tocar
+components/ui/ — não existe garantia de que o arquivo já foi migrado
+
 ---
 
 ## CONVENÇÕES CRÍTICAS DE CÓDIGO
@@ -239,19 +292,25 @@ PATCH /rooms/:id ADMIN (com auditoria UPDATE_ROOM)
 DELETE /rooms/:id ADMIN (soft delete, auditoria DEACTIVATE_ROOM)
 GET /reservations JWT (filtros: roomId, date, status, mine, page, pageSize)
 GET /reservations/:id JWT
-POST /reservations PROFESSOR | COORDENADOR | ADMIN (valida data passada + conflito + lock)
-POST /reservations/range PROFESSOR | COORDENADOR | ADMIN (lock+conflito por data, skip em conflito, max 60 dias)
+POST /reservations PROFESSOR | COORDENADOR | ADMIN (valida data passada + conflito + lock;
+aceita ownerUserId? opcional — proxy, só COORDENADOR/ADMIN; status inicial PENDING pra
+PROFESSOR, APPROVED pra COORDENADOR/ADMIN — ReservationsService.initialStatus(role))
+POST /reservations/range PROFESSOR | COORDENADOR | ADMIN (lock+conflito por data, skip em
+conflito, max 60 dias, mesmo suporte a ownerUserId? do create())
 PATCH /reservations/:id JWT (qualquer role autenticada)
 PATCH /reservations/:id/status COORDENADOR|ADMIN (APPROVED|REJECTED)
 PATCH /reservations/group/:id JWT (qualquer role autenticada)
 PATCH /reservations/selected JWT (qualquer role autenticada)
 DELETE /reservations/:id JWT (soft delete via deletedAt, idempotente)
-GET /availability @Public (date obrigatório, turno opcional)
+GET /availability @Public (date obrigatório, turno opcional; considera só
+reservas APPROVED — PENDING não conta como ocupação, fix pós-F9.9)
 GET /schedules @Public → { registros, turnoMap }
 GET /dashboard @Public → DashboardResult (contadores SQL)
 POST /sync/schedules ADMIN → guard vazio + DELETE + INSERT batch 500
 GET /audit ADMIN (filtros: entityType, entityId, userId, action, from, to, page, limit)
 GET /users ADMIN (filtros role, search, isActive, page, limit)
+GET /users/professors COORDENADOR|ADMIN (UsersRepository.findAllProfessors() —
+usado pelo seletor de proxy no ReservationForm)
 PATCH /users/:id/role ADMIN (audita UPDATE_ROLE, entityType 'User')
 PATCH /users/:id/active ADMIN (audita SET_ACTIVE, entityType 'User')
 WebSocket /rooms JWT handshake
@@ -342,12 +401,18 @@ useSchedule.ts ← GET /schedules (usado apenas em /admin/sync)
 useAvailability.ts ← Forma B, local/derivado (Schedule+reservas) — ainda
 usado em Reservas/index.tsx, não removido na unificação da Dashboard
 useRealtimeSocket.ts
+useMyReservations.ts ← GET /reservations?mine=true (Minha Agenda)
+useListProfessors.ts ← GET /users/professors (seletor de proxy)
 
 pages/
 Dashboard/index.tsx ← unificado via GET /availability + navegação de
-data (ScheduleHeader) + busca (turma/sala/turno)
-Agendamentos/index.tsx ← dados reais + mapToEntries + filtros
-Reservas/index.tsx
+data (ScheduleHeader) + busca (turma/sala/turno) + toggle Tabela/Linha
+do tempo (OccupancyUnified ↔ DayView, via mapToEntries)
+Agendamentos/index.tsx ← arquivo mantido, mas SEM ROTA — /agendamentos
+saiu de router/index.tsx e router/config.ts (pós-F9.9)
+Reservas/index.tsx ← ReservationForm com seletor de professor (proxy,
+só renderiza pra COORDENADOR/ADMIN)
+MinhaAgenda/index.tsx ← rota /minha-agenda, useMyReservations
 Aprovacoes/index.tsx
 Admin/Sync/index.tsx ← tabela histórica de Schedule (useSchedule +
 applyScheduleFilters + OccupancyDashboard) + botão de sync
@@ -363,13 +428,28 @@ applyScheduleFilters.ts ← função pura, usada só por Admin/Sync agora
 DashboardStats.tsx ← cards de resumo (fonte: disponibilidade + dashboardStats,
 não usa mais RegistroLegado/filtered desde a unificação)
 scheduleDateUtils.ts ← todayYmd(), ymdToUtcDate(), formatDataBR()
+mapToEntries.ts ← extraído de Agendamentos/index.tsx, compartilhado com
+Dashboard (toggle Linha do tempo) — DisponibilidadeSala[] → SidebarEntry[]
 calendar/
 ScheduleHeader.tsx ← navegação de data reutilizável (Dashboard + Agendamentos),
 prop title? opcional (default 'Agendamentos')
 ScheduleFilters.tsx ← filtros turma/tipo/turno (usado em Agendamentos)
 ScheduleSidebar.tsx ← lista de salas com eventos
-DayView.tsx ← grade de horas com blocos posicionados
+DayView.tsx ← grade de horas com blocos posicionados; agora também usado
+pelo Dashboard (não só Agendamentos)
 AvailabilityCards.tsx ← cards livres/ocupadas/pendentes
+ui/
+ConflictAlert.tsx ← reescrito pós-F9.9 (era Tailwind sem efeito, ver Bug #12);
+usado em ReservationForm.tsx
+reservations/
+ReservationCalendar.tsx ← wrapper do FullCalendar; dayMaxEvents ligado +
+popover "+N mais" restilizado com tokens glass (global.css)
+
+layouts/
+AppLayout.tsx ← shell (sidebar+topbar); dono da notificação efêmera de
+sidebar pós-F9.9 (useRealtimeSocket + notifyPath, dot pulsante — ver
+PÓS-F9.9 acima). Não persiste entre sessões (sem campo no schema hoje
+pra diferenciar quem criou de quem é o dono).
 
 store/
 authStore.ts ← Zustand — selectUser, selectAccessToken, clearAuth
@@ -377,7 +457,8 @@ tokenStorage.ts ← localStorage swappable
 
 router/
 config.ts ← ROUTES[] — seções: principal/gestao/admin (sistema ficou
-vazia após remover /salas /turmas /relatorios /configuracoes)
+vazia após remover /salas /turmas /relatorios /configuracoes; /agendamentos
+saiu também pós-F9.9, mesmo padrão)
 index.tsx ← createBrowserRouter com basename BASE_URL
 PageTransition.tsx
 RouteLoader.tsx
@@ -390,58 +471,81 @@ NOTA: DM Mono REMOVIDA — usar DM Sans + fontVariantNumeric:tabular-nums
 
 ## DESIGN SYSTEM
 
-### Tokens principais (valores reais em global.css — conferir antes de
+### Fonte primária agora é apps/reservations/DESIGN.md (+ .impeccable/design.json)
 
-### assumir, esta seção já passou por 3 rounds de ajuste "liquid glass"
+Gerado via skill Impeccable (`/impeccable document`) direto do global.css real.
+North Star: "The Liquid Glass Deck". O bloco abaixo é um resumo — em caso de
+dúvida ou divergência, DESIGN.md manda, não este resumo (mesma regra anti-
+invenção do resto do projeto). Named Rules documentadas lá: The Rare Ember
+Rule (laranja nunca preenche área grande), The Status-Only Color Rule,
+The Tabular Numbers Rule, The One Voice Rule, The Sheen-Always Rule,
+The Two-Blur Rule.
 
-### nesta fase e valores antigos ficam obsoletos rápido)
+### CORREÇÃO — a versão anterior desta seção estava errada
+
+`--glass-strong` e `--glass-soft-bg` (gradientes) **não existem** em
+global.css — nunca existiram. `--sidebar-bg` é um rgba chapado
+(`rgba(15, 36, 64, 0.82)`), não um gradiente diagonal. Isso ficou errado
+aqui por pelo menos um round de atualização sem ser pego. Valores reais
+abaixo, confirmados lendo o arquivo (não copiados de versão anterior
+deste MEMORY.md):
 
 ```css
---color-brand: #1e3a5f /* navy SENAI — nunca mudou */ --color-accent: #e07c2b
-  /* laranja SENAI — nunca mudou */ --color-bg: #f4f5f7 /* base sólida; o gradiente mesh
-                                                       é uma CAMADA no body, não troca
-                                                       o valor deste token */ --color-surface: rgba(
-    255,
-    255,
-    255,
-    0.7
-  )
-  --color-surface-2: rgba(255, 255, 255, 0.48) --color-border: rgba(17, 24, 39, 0.08)
-  /* tint = hex de --color-text */ --color-border-2: rgba(17, 24, 39, 0.16) --color-text: #111827
-  --color-muted: #6b7280 --color-subtle: #9ca3af --color-green: #16a34a / --color-green-l: #dcfce7
-  --color-amber: #b45309 / --color-amber-l: #fef3c7 --color-red: #dc2626 / --color-red-l: #fee2e2
-  --color-blue: #2563eb / --color-blue-l: #dbeafe
-  --sidebar-bg: linear-gradient(135deg, rgba(10, 26, 48, 0.85), rgba(20, 46, 74, 0.79))
-  --radius: 12px --radius-s: 8px --glass-blur-s: 22px
-  /* usado via backdrop-filter: blur(var(--glass-blur-s)) */ --glass-blur-l: 38px
-  /* sidebar — o mais pronunciado */ --glass-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.5)
-  /* dark: rgba(255,255,255,.08) */
-  --glass-strong: linear-gradient(135deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.65))
-  --glass-soft-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.35));
+--color-brand:
+  #1e3a5f /* navy SENAI ("SENAI Ink" no DESIGN.md) */ --color-brand-2: #2a4f80
+    /* stop mais claro, só no gradiente da sidebar */ --color-accent: #e07c2b
+    /* laranja ("SENAI Ember") — uso raro, nunca fundo grande */ --color-accent-l: #fef0e4
+    /* claro; dark: rgba(224,124,43,.15) */ --color-bg: #f4f5f7
+    /* base sólida atrás do mesh gradient do body; dark: #0d1117 */
+    --color-surface: rgba(255, 255, 255, 0.7) /* dark: rgba(22,27,34,.62) */
+    --color-surface-2: rgba(255, 255, 255, 0.48) /* dark: rgba(28,33,40,.5) */
+    --color-border: rgba(17, 24, 39, 0.08) /* dark: rgba(255,255,255,.08) */
+    --color-border-2: rgba(17, 24, 39, 0.16) /* dark: rgba(255,255,255,.14) */ --color-text: #111827
+    --color-muted: #6b7280 --color-subtle: #9ca3af /* dark: #e6edf3/#8b949e/#6e7681 */
+    --color-green: #16a34a / -l: #dcfce7 --color-amber: #b45309 / -l: #fef3c7 --color-red: #dc2626 /
+    -l: #fee2e2 --color-blue: #2563eb / -l: #dbeafe --sidebar-bg: rgba(15, 36, 64, 0.82)
+    /* rgba chapado, NÃO gradiente */ --radius: 12px --radius-s: 8px
+    /* + 20px "pill" pra badges, não tokenizado */ --shadow-s: 0 1px 2px rgba(17, 24, 39, 0.04),
+  0 2px 10px rgba(17, 24, 39, 0.05) --shadow-m: 0 4px 18px rgba(17, 24, 39, 0.08),
+  0 14px 36px rgba(17, 24, 39, 0.06) /* overlays flutuantes */ --glass-blur-s: 22px
+    /* cards/popovers */ --glass-blur-l: 38px /* só sidebar — só esses 2 valores existem */
+    --glass-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.5) /* dark: rgba(255,255,255,.08) */
+    --ease: cubic-bezier(0.4, 0, 0.2, 1) --dur: 180ms;
 ```
 
-### Liquid glass (aplicado em global.css — 3 rounds nesta fase)
+### Liquid glass — receita real (3 partes, sempre junto)
 
-- body: gradiente mesh radial em 2 camadas (navy dominante + accent
-  discreto, opacidade do accent reduzida à metade no round mais recente
-  — só navy+accent, NUNCA cores semânticas no mesh)
-- .sidebar: `background: var(--sidebar-bg)` (gradiente diagonal navy
-  2 camadas, não rgba chapada) + `backdrop-filter: blur(var(--glass-blur-l)) saturate(165%)`
-  - `box-shadow: var(--glass-sheen)` — o glass mais pronunciado do sistema
-- .topbar, .avail-card, .calendar-placeholder: `background: var(--glass-strong)`
-  - backdrop-filter blur(var(--glass-blur-s)) saturate(140-150%) + glass-sheen
-- .slot-item: `background: var(--glass-soft-bg)` (elemento secundário/aninhado)
+```css
+background: var(--color-surface); /* ou -2, elemento aninhado */
+backdrop-filter: blur(var(--glass-blur-s)) saturate(140-150%);
+box-shadow: var(--shadow-s), var(--glass-sheen); /* --shadow-m em overlay flutuante */
+```
+
+- Aplicada em: .topbar, .avail-card, .calendar-placeholder, .fc-popover
+  (FullCalendar, pós-F9.9), cards genéricos — todos com essa receita idêntica,
+  não um token único de "glass forte"
+- .sidebar: `background: var(--sidebar-bg)` (rgba chapado) + blur 38px
+  (o mais pronunciado) + saturate(165%) + `box-shadow: var(--glass-sheen)`
+- .slot-item: `background: var(--color-surface-2)` + `backdrop-filter: blur(8px)`
+  (elemento secundário/aninhado — blur menor, fora do padrão de 2 valores)
+- body: gradiente mesh radial em 2 camadas (navy + accent, opacidade do
+  accent reduzida à metade) — só navy+accent, nunca cor semântica no mesh
 - Dark mode: mesmos tokens com rgba escuros; --sidebar-bg NÃO é sobrescrito
   no dark (sidebar é intencionalmente theme-invariant)
+- `:focus-visible` global (pós-F9.9): outline 2px var(--color-blue) !important
+  (precisa !important pra vencer outline:'none' inline nos inputStyle/buttonStyle)
 
 ---
 
 ## SITEMAP ATUAL
 
 PRINCIPAL (todos)
-/ Dashboard (unificado — Schedule+Reservation via /availability + filtros)
-/agendamentos Agendamentos (dados reais + DayView)
-/reservas PROFESSOR+
+/ Dashboard (unificado — Schedule+Reservation via /availability + filtros +
+toggle Tabela/Linha do tempo, pós-F9.9)
+/reservas PROFESSOR+ (seletor de proxy pra COORDENADOR/ADMIN, pós-F9.9)
+
+AUTENTICADO (qualquer role)
+/minha-agenda Minha Agenda (pós-F9.9 — GET /reservations?mine=true)
 
 GESTÃO (COORDENADOR+)
 /aprovacoes COORDENADOR+
@@ -460,6 +564,8 @@ ADMIN (ADMIN only)
 
 REMOVIDOS DA NAVEGAÇÃO (arquivos mantidos, rotas removidas):
 /salas, /turmas, /relatorios, /configuracoes (stubs fase 4/5)
+/agendamentos (pós-F9.9 — dessa vez rota removida de verdade, não só
+escondida do menu; arquivo Agendamentos/index.tsx continua existindo)
 
 ---
 
@@ -467,9 +573,17 @@ REMOVIDOS DA NAVEGAÇÃO (arquivos mantidos, rotas removidas):
 
 ## nesta sessão, checar antes de confiar cegamente)
 
-Frontend (apps/reservations): 296 testes (30 suites)
-Backend (apps/api): 57 testes (5 suites)
-E2E (Playwright): 23 passando, 9 skip (legado)
+Frontend (apps/reservations): 296 testes (30 suites) — contagem anterior a
+pós-F9.9; ganhou testes novos (availability where-clause, users repository/
+service) mas não foi re-somado, não inventar total novo aqui
+Backend (apps/api): 57 testes (5 suites) — idem, mais testes de
+reservations.service.spec.ts (auto-aprovação/proxy) desde então
+E2E (Playwright): 23 passando, 9 skip (legado) — mais recente que isso:
+tests/e2e/proxy-and-approval.spec.ts (4 testes novos, cobrindo auto-
+aprovação por role, proxy de professor, bug fix de PENDING em
+/availability) + 1 teste novo em navigation.spec.ts (/minha-agenda pra
+PROFESSOR). setupCoordenadorSession adicionado em helpers/auth.ts.
+Total exato não confirmado nesta sessão — rodar antes de confiar.
 NOTA: o projeto NÃO usa @testing-library/react em lugar nenhum — todos
 os testes de componente React cobrem funções puras extraídas
 (sortSalas, getViewState, filterSalas, applyScheduleFilters), nunca
@@ -497,16 +611,38 @@ Job deploy-frontend: gh-pages via VITE_API_URL_PROD ← AINDA NÃO CRIADO
 
 ---
 
+## AUTOMAÇÃO CLAUDE CODE (.claude/, pós-F9.9)
+
+hooks/block-env-edit.mjs ← PreToolUse (Edit|Write), exit code 2: bloqueia
+edição de .env/.env.\* (exceto .env.example). Testado — recusa mesmo
+pedido inofensivo de adicionar uma linha.
+hooks/lint-after-edit.mjs ← PostToolUse (Edit|Write), sempre exit 0: roda
+`eslint --fix` em todo .ts/.tsx tocado, loga em .claude/hooks/lint-log.txt
+(fora do versionamento), só imprime stdout se achar problema.
+settings.json ← registra os dois hooks acima.
+skills/controle-salas-senai/ ← skill do projeto (regras deste MEMORY.md +
+anti-invenção + bugs históricos, carregada no início de qualquer trabalho).
+Recomendado pelo plugin claude-code-setup (Anthropic) após análise do
+projeto — não confundir com config pessoal do usuário (MCP servers como
+Supabase/context7/obsidian são do ambiente Claude Code, não do projeto,
+não documentados aqui).
+
+---
+
 ## PADRÕES OBRIGATÓRIOS
 
 ### Anti-invenção (regra #1)
 
 SEMPRE ler arquivos-fonte antes de propor código.
 NUNCA inventar estrutura, interfaces, tipos ou imports.
-Esta sessão já pegou valores assumidos errados em pelo menos 3 missões
-(sidebar rgba, índice do Reservation, entityType do AuditLog) — sempre
-que uma instrução descrever um valor "atual" sem eu ter acabado de ler
-o arquivo, ler antes de aplicar, não confiar na descrição.
+Múltiplas sessões já pegaram valores assumidos errados (sidebar rgba,
+índice do Reservation, entityType do AuditLog, e — pós-F9.9 — a própria
+seção DESIGN SYSTEM deste MEMORY.md, que documentava `--glass-strong`/
+`--glass-soft-bg` como se existissem e `--sidebar-bg` como gradiente,
+quando o global.css real nunca teve isso) — sempre que uma instrução
+(ou este próprio arquivo) descrever um valor "atual" sem eu ter acabado
+de ler o arquivo fonte, ler antes de aplicar, não confiar na descrição —
+nem na deste MEMORY.md.
 
 ### Instanciação do service (F9.7 — sem fallback Apps Script)
 
