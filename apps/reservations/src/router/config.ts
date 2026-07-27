@@ -64,7 +64,9 @@ export const ROUTES: RouteConfig[] = [
     icon: 'LayoutDashboard',
     section: 'admin',
     requiresAuth: true,
-    requiredRole: 'ADMIN',
+    // Aberto pra COORDENADOR (pós-F9.9, Fase B) — hasRole() em
+    // ProtectedRoute.tsx é hierárquico (>= COORDENADOR), libera ADMIN também.
+    requiredRole: 'COORDENADOR',
   },
   {
     path: '/admin/usuarios',
@@ -73,7 +75,7 @@ export const ROUTES: RouteConfig[] = [
     icon: 'UserCog',
     section: 'admin',
     requiresAuth: true,
-    requiredRole: 'ADMIN',
+    requiredRole: 'COORDENADOR',
   },
   {
     path: '/admin/permissoes',
@@ -82,7 +84,7 @@ export const ROUTES: RouteConfig[] = [
     icon: 'ShieldCheck',
     section: 'admin',
     requiresAuth: true,
-    requiredRole: 'ADMIN',
+    requiredRole: 'COORDENADOR',
   },
   {
     path: '/admin/auditoria',
@@ -91,7 +93,7 @@ export const ROUTES: RouteConfig[] = [
     icon: 'ScrollText',
     section: 'admin',
     requiresAuth: true,
-    requiredRole: 'ADMIN',
+    requiredRole: 'COORDENADOR',
   },
   {
     path: '/admin/sync',

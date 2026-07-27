@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { PageTransition } from '../router/PageTransition';
 import { ROUTES, getBreadcrumbs, ROUTE_SECTIONS } from '../router/config';
+import { hasRole } from '../router/ProtectedRoute';
 import { useAuthStore, selectAccessToken, selectUser } from '../store/authStore';
 import { getSocket, disconnectSocket } from '../services/socketClient';
 import { useRealtimeSocket } from '../hooks/useRealtimeSocket';
@@ -167,38 +168,54 @@ export function AppLayout() {
         {/* Nav sections */}
         <nav className="sidebar-nav" aria-label="Navegação principal">
           {(['principal', 'gestao', 'sistema'] as const as string[])
-            .concat(userRole === 'ADMIN' ? ['admin'] : [])
+            // Fase B — seção 'admin' abre pra COORDENADOR também (4 das 10
+            // rotas admin liberam COORDENADOR; as outras 6 continuam ADMIN
+            // via requiredRole em router/config.ts). O filtro por rota logo
+            // abaixo (hasRole) é quem decide quais das 10 aparecem — esta
+            // condição só decide se a SEÇÃO existe.
+            .concat(userRole === 'ADMIN' || userRole === 'COORDENADOR' ? ['admin'] : [])
             // Seções sem rotas (ex: 'sistema' após remover as abas stub) não
-            // renderizam cabeçalho órfão.
-            .filter(section => ROUTE_SECTIONS[section as keyof typeof ROUTE_SECTIONS].length > 0)
+            // renderizam cabeçalho órfão. Reutiliza hasRole (mesma hierarquia
+            // de ProtectedRoute.tsx, não duplicada) pra já contar só as
+            // rotas que o usuário realmente pode ver.
+            .filter(
+              section =>
+                ROUTE_SECTIONS[section as keyof typeof ROUTE_SECTIONS].filter(
+                  route => !route.requiredRole || hasRole(userRole, route.requiredRole),
+                ).length > 0,
+            )
             .map(section => (
               <div key={section}>
                 <div className="sidebar-section-label">
                   {SECTION_LABELS[section as keyof typeof SECTION_LABELS]}
                 </div>
-                {ROUTE_SECTIONS[section as keyof typeof ROUTE_SECTIONS].map(route => {
-                  const Icon = ICON_MAP[route.icon as IconName];
-                  return (
-                    <NavLink
-                      key={route.path}
-                      to={route.path}
-                      end={route.path === '/'}
-                      data-label={route.label}
-                      className={({ isActive }) => `sidebar-item${isActive ? ' active' : ''}`}
-                      aria-label={
-                        route.path === notifyPath ? `${route.label} (nova notificação)` : undefined
-                      }
-                    >
-                      <span className="sidebar-icon" aria-hidden="true">
-                        {Icon && <Icon size={16} strokeWidth={1.75} />}
-                        {route.path === notifyPath && (
-                          <span className="sidebar-notify-dot" aria-hidden="true" />
-                        )}
-                      </span>
-                      <span className="sidebar-label">{route.label}</span>
-                    </NavLink>
-                  );
-                })}
+                {ROUTE_SECTIONS[section as keyof typeof ROUTE_SECTIONS]
+                  .filter(route => !route.requiredRole || hasRole(userRole, route.requiredRole))
+                  .map(route => {
+                    const Icon = ICON_MAP[route.icon as IconName];
+                    return (
+                      <NavLink
+                        key={route.path}
+                        to={route.path}
+                        end={route.path === '/'}
+                        data-label={route.label}
+                        className={({ isActive }) => `sidebar-item${isActive ? ' active' : ''}`}
+                        aria-label={
+                          route.path === notifyPath
+                            ? `${route.label} (nova notificação)`
+                            : undefined
+                        }
+                      >
+                        <span className="sidebar-icon" aria-hidden="true">
+                          {Icon && <Icon size={16} strokeWidth={1.75} />}
+                          {route.path === notifyPath && (
+                            <span className="sidebar-notify-dot" aria-hidden="true" />
+                          )}
+                        </span>
+                        <span className="sidebar-label">{route.label}</span>
+                      </NavLink>
+                    );
+                  })}
               </div>
             ))}
         </nav>

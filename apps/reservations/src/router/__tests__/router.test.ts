@@ -47,12 +47,36 @@ describe('ROUTES config', () => {
     expect(r?.requiredRole).toBe('COORDENADOR');
   });
 
-  it('rotas admin requerem role ADMIN', () => {
+  // Fase B — 4 das 10 rotas admin abrem pra COORDENADOR (hierárquico:
+  // COORDENADOR e ADMIN passam), as outras 6 continuam ADMIN-only.
+  it('4 rotas admin abrem para COORDENADOR (Dashboard Admin, Usuários, Permissões, Auditoria)', () => {
+    const abertas = ['/admin', '/admin/usuarios', '/admin/permissoes', '/admin/auditoria'];
+    for (const p of abertas) {
+      const r = ROUTES.find(r => r.path === p);
+      expect(r?.requiredRole, `${p} deveria requerer COORDENADOR`).toBe('COORDENADOR');
+    }
+  });
+
+  it('6 rotas admin permanecem ADMIN-only (sync, sistema, configuracoes, logs, api, health)', () => {
+    const restritas = [
+      '/admin/sync',
+      '/admin/sistema',
+      '/admin/configuracoes',
+      '/admin/logs',
+      '/admin/api',
+      '/admin/health',
+    ];
+    for (const p of restritas) {
+      const r = ROUTES.find(r => r.path === p);
+      expect(r?.requiredRole, `${p} deveria continuar ADMIN-only`).toBe('ADMIN');
+    }
+  });
+
+  it('seção admin tem exatamente 10 rotas — 4 abertas pra COORDENADOR, 6 ADMIN-only', () => {
     const adminRoutes = ROUTES.filter(r => r.section === 'admin');
     expect(adminRoutes.length).toBe(10);
-    for (const r of adminRoutes) {
-      expect(r.requiredRole, `${r.path} deve requerer ADMIN`).toBe('ADMIN');
-    }
+    expect(adminRoutes.filter(r => r.requiredRole === 'COORDENADOR')).toHaveLength(4);
+    expect(adminRoutes.filter(r => r.requiredRole === 'ADMIN')).toHaveLength(6);
   });
 });
 

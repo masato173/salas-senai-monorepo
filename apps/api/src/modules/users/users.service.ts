@@ -1,7 +1,12 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
-import type { User, Role } from '@prisma/client';
-import { Prisma } from '@prisma/client';
+import type { User } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersRepository } from './users.repository';
 import type { FindAllResult } from './users.repository';
@@ -80,6 +85,24 @@ export class UsersService {
   async updateRole(id: string, role: Role, requester: RequestUser): Promise<UserPublicDto> {
     const existing = await this.repo.findById(id);
     if (!existing) throw new NotFoundException(`Usuário ${id} não encontrado.`);
+
+    // Gates de segurança — só se aplicam a COORDENADOR (ADMIN é o nível
+    // máximo do sistema, sem restrição adicional). Nunca confiar só no
+    // @Roles do controller pra isso: sem isso, COORDENADOR conseguiria se
+    // auto-promover a ADMIN ou mexer em outro COORDENADOR/ADMIN via uma
+    // interface legítima (Fase B — segurança).
+    if (requester.role === 'COORDENADOR') {
+      if (role === Role.ADMIN) {
+        throw new ForbiddenException('Coordenador não pode promover usuário a ADMIN.');
+      }
+      if (existing.role === Role.ADMIN) {
+        throw new ForbiddenException('Coordenador não pode alterar um usuário ADMIN.');
+      }
+      if (existing.role === Role.COORDENADOR) {
+        throw new ForbiddenException('Coordenador não pode alterar outro COORDENADOR.');
+      }
+    }
+
     const updated = await this.repo.updateById(id, { role });
     await this.prisma.auditLog.create({
       data: {
@@ -97,6 +120,20 @@ export class UsersService {
   async setActive(id: string, isActive: boolean, requester: RequestUser): Promise<UserPublicDto> {
     const existing = await this.repo.findById(id);
     if (!existing) throw new NotFoundException(`Usuário ${id} não encontrado.`);
+
+    // Mesmos gates de updateRole — COORDENADOR só ativa/desativa PROFESSOR,
+    // nunca ADMIN nem outro COORDENADOR (nem a si mesmo). Independe do
+    // valor de isActive: a restrição é sobre QUEM pode ser alvo, não sobre
+    // a direção da mudança.
+    if (requester.role === 'COORDENADOR') {
+      if (existing.role === Role.ADMIN) {
+        throw new ForbiddenException('Coordenador não pode alterar status de um usuário ADMIN.');
+      }
+      if (existing.role === Role.COORDENADOR) {
+        throw new ForbiddenException('Coordenador não pode alterar status de outro COORDENADOR.');
+      }
+    }
+
     const updated = await this.repo.updateById(id, { active: isActive });
     await this.prisma.auditLog.create({
       data: {

@@ -26,12 +26,14 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps):
 }
 
 // Hierarquia de roles: ADMIN > COORDENADOR > PROFESSOR
-const ROLE_HIERARCHY: Record<string, number> = {
+// Exportada — AppLayout.tsx reusa pra filtrar a sidebar pela mesma
+// hierarquia, em vez de duplicar a constante (ver Fase B, segurança).
+export const ROLE_HIERARCHY: Record<string, number> = {
   PROFESSOR: 1,
   COORDENADOR: 2,
   ADMIN: 3,
 };
 
-function hasRole(userRole: string, required: string): boolean {
+export function hasRole(userRole: string, required: string): boolean {
   return (ROLE_HIERARCHY[userRole] ?? 0) >= (ROLE_HIERARCHY[required] ?? 0);
 }

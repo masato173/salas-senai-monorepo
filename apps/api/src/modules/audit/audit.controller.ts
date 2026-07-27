@@ -4,7 +4,9 @@ import { AuditService } from './audit.service';
 import type { AuditListResult } from './audit.service';
 import { Roles } from '../../common/decorators/roles.decorator';
 
-@Roles(Role.ADMIN)
+// Fase B — leitura só, sem ação destrutiva: abre pra COORDENADOR também,
+// mesmo padrão de listProfessors em UsersController.
+@Roles(Role.COORDENADOR, Role.ADMIN)
 @Controller('audit')
 export class AuditController {
   constructor(private readonly auditService: AuditService) {}

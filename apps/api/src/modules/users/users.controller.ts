@@ -28,6 +28,7 @@ interface AuthenticatedRequest {
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
+  @Roles(Role.COORDENADOR, Role.ADMIN)
   @Get()
   listUsers(@Query() query: ListUsersQueryDto): Promise<PaginatedResult<UserPublicDto>> {
     return this.usersService.listUsers({
@@ -49,6 +50,7 @@ export class UsersController {
     return this.usersService.listProfessors();
   }
 
+  @Roles(Role.COORDENADOR, Role.ADMIN)
   @Patch(':id/role')
   @HttpCode(HttpStatus.OK)
   updateRole(
@@ -59,6 +61,7 @@ export class UsersController {
     return this.usersService.updateRole(id, dto.role, req.user);
   }
 
+  @Roles(Role.COORDENADOR, Role.ADMIN)
   @Patch(':id/active')
   @HttpCode(HttpStatus.OK)
   setActive(
