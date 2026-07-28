@@ -7,14 +7,40 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import type { Server, Socket } from 'socket.io';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
+import { resolveCorsOrigins } from '../../common/cors-origins.util';
 
 // Namespace /rooms — auth JWT no handshake (F4.10b).
 // Cliente envia token em: io('/rooms', { auth: { token: accessToken } })
 // Conexões sem token válido são desconectadas antes de receber eventos.
+//
+// CORS configurável via CORS_ORIGIN (Fase C3 — antes era hardcoded só pra
+// localhost, quebraria em produção com o frontend real no GitHub Pages).
+// Mesma função de main.ts (resolveCorsOrigins), não duplica o fallback.
+//
+// TIMING (investigado nesta sessão, não é suposição): a opção `cors` deste
+// decorator é avaliada em IMPORT TIME (quando este arquivo é carregado),
+// antes do NestJS terminar de subir a aplicação — mais cedo que a fase de
+// DI onde o ConfigModule normalmente resolveria variáveis via
+// ConfigService. Funciona hoje porque:
+//   1. ConfigModule (apps/api/src/modules/config/config.module.ts) chama
+//      NestConfigModule.forRoot({...}) dentro do próprio @Module() — isso
+//      roda dotenv.config() de forma SÍNCRONA assim que config.module.ts é
+//      importado (não espera o bootstrap do Nest).
+//   2. ConfigModule é o PRIMEIRO import em app.module.ts, bem antes de
+//      RealtimeModule — CommonJS resolve imports em ordem, então .env já
+//      está em process.env quando este arquivo (e o decorator abaixo) roda.
+//   3. Em produção (Railway), isso nem importa: a plataforma injeta env vars
+//      em process.env antes do processo Node existir, independente de
+//      ordem de import.
+// Fragilidade real, mas não um bug hoje: se a ordem de imports em
+// app.module.ts mudar (RealtimeModule antes de ConfigModule), isso
+// quebraria em dev local — o fallback de localhost ainda cobre esse caso,
+// então não é crítico. Não implementei nada mais robusto sem evidência de
+// que isso realmente quebra hoje.
 @WebSocketGateway({
   namespace: '/rooms',
   cors: {
-    origin: ['http://localhost:5173', 'http://localhost:4173'],
+    origin: resolveCorsOrigins(),
     credentials: true,
   },
 })

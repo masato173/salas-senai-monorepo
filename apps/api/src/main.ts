@@ -4,6 +4,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
+import { resolveCorsOrigins } from './common/cors-origins.util';
 
 async function bootstrap(): Promise<void> {
   // bufferLogs: segura os logs do boot até o Pino assumir (useLogger abaixo)
@@ -29,14 +30,11 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
-  // F9.1 — origens CORS configuráveis via CORS_ORIGIN (lista separada por vírgula).
-  // Fallback preserva o comportamento local: dev server (5173) e preview (4173).
-  const corsOrigins = process.env['CORS_ORIGIN']
-    ? process.env['CORS_ORIGIN'].split(',').map(o => o.trim())
-    : ['http://localhost:5173', 'http://localhost:4173'];
-
+  // F9.1 — origens CORS configuráveis via CORS_ORIGIN. Mesma função usada
+  // pelo CORS do WebSocket em RealtimeGateway (Fase C3) — não duplicar o
+  // fallback de localhost nos dois lugares.
   app.enableCors({
-    origin: corsOrigins,
+    origin: resolveCorsOrigins(),
     credentials: true,
   });
 
