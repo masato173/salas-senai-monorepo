@@ -82,7 +82,7 @@ export const router = createBrowserRouter(
         {
           path: 'admin',
           element: (
-            <ProtectedRoute requiredRole="ADMIN">
+            <ProtectedRoute requiredRole="COORDENADOR">
               <AdminLayout />
             </ProtectedRoute>
           ),
@@ -122,49 +122,61 @@ export const router = createBrowserRouter(
             {
               path: 'sync',
               element: (
-                <Suspense fallback={<RouteLoader />}>
-                  <AdminSyncPage />
-                </Suspense>
+                <ProtectedRoute requiredRole="ADMIN">
+                  <Suspense fallback={<RouteLoader />}>
+                    <AdminSyncPage />
+                  </Suspense>
+                </ProtectedRoute>
               ),
             },
             {
               path: 'sistema',
               element: (
-                <Suspense fallback={<RouteLoader />}>
-                  <AdminSistemaPage />
-                </Suspense>
+                <ProtectedRoute requiredRole="ADMIN">
+                  <Suspense fallback={<RouteLoader />}>
+                    <AdminSistemaPage />
+                  </Suspense>
+                </ProtectedRoute>
               ),
             },
             {
               path: 'configuracoes',
               element: (
-                <Suspense fallback={<RouteLoader />}>
-                  <AdminConfiguracoesPage />
-                </Suspense>
+                <ProtectedRoute requiredRole="ADMIN">
+                  <Suspense fallback={<RouteLoader />}>
+                    <AdminConfiguracoesPage />
+                  </Suspense>
+                </ProtectedRoute>
               ),
             },
             {
               path: 'logs',
               element: (
-                <Suspense fallback={<RouteLoader />}>
-                  <AdminLogsPage />
-                </Suspense>
+                <ProtectedRoute requiredRole="ADMIN">
+                  <Suspense fallback={<RouteLoader />}>
+                    <AdminLogsPage />
+                  </Suspense>
+                </ProtectedRoute>
               ),
             },
             {
               path: 'api',
               element: (
-                <Suspense fallback={<RouteLoader />}>
-                  <AdminApiPage />
-                </Suspense>
+                <ProtectedRoute requiredRole="ADMIN">
+                  <Suspense fallback={<RouteLoader />}>
+                    <AdminApiPage />
+                  </Suspense>
+                </ProtectedRoute>
               ),
             },
             {
               path: 'health',
               element: (
-                <Suspense fallback={<RouteLoader />}>
-                  <AdminHealthPage />
-                </Suspense>
+                <ProtectedRoute requiredRole="ADMIN">
+                  <Suspense fallback={<RouteLoader />}>
+                    <AdminHealthPage />
+                  </Suspense>
+                </ProtectedRoute>
               ),
             },
           ],
