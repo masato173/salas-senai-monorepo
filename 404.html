@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="SENAI Salas — Sistema de gestão e agendamento de salas" />
+  <title>SENAI Salas</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { margin: 0; background: #f4f5f7; font-family: 'DM Sans', system-ui, sans-serif; }
+    [data-theme="dark"] body { background: #0d1117; }
+    #root-loader {
+      position: fixed; inset: 0; display: flex;
+      flex-direction: column; align-items: center; justify-content: center;
+      gap: 16px;
+    }
+    .loader-ring {
+      width: 36px; height: 36px; border-radius: 50%;
+      border: 3px solid #e4e6ea; border-top-color: #1e3a5f;
+      animation: spin .7s linear infinite;
+    }
+    .loader-text { font-size: 13px; color: #6b7280; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+  <script>
+    (function() {
+      try {
+        var t = localStorage.getItem('theme');
+        if (t) document.documentElement.dataset.theme = t;
+        else if (window.matchMedia('(prefers-color-scheme: dark)').matches)
+          document.documentElement.dataset.theme = 'dark';
+      } catch(e) {}
+    })();
+  </script>
+  <script type="module" crossorigin src="/assets/index-D-FetLy-.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/react-vendor-BdBPzOCq.js">
+  <link rel="modulepreload" crossorigin href="/assets/zustand-Dz1QTqTt.js">
+  <link rel="modulepreload" crossorigin href="/assets/lucide-Bvxn_TEf.js">
+  <link rel="stylesheet" crossorigin href="/assets/index-zDVOBi5L.css">
+</head>
+<body>
+  <div id="root">
+    <div id="root-loader">
+      <div class="loader-ring"></div>
+      <span class="loader-text">Carregando SENAI Salas...</span>
+    </div>
+  </div>
+</body>
+</html>
