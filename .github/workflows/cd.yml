@@ -94,8 +94,12 @@ jobs:
       # para o monorepo pnpm). O CI já validou build + testes neste SHA,
       # por isso não há rebuild aqui. --ci: falha o workflow se o build
       # do Railway falhar.
+      # Railway nomeou o serviço automaticamente como '@salas-senai/api'
+      # (herdado do escopo npm do package.json), que tem caracteres
+      # problemáticos pra CLI (@, /). Usar o ID do serviço (estável, não
+      # muda se o nome mudar) é mais robusto do que tentar casar strings de nome.
       - name: Deploy no Railway
-        run: railway up --service salas-senai-api --ci
+        run: railway up --service 2c6ad92a-4af2-4414-b801-cd322650e675 --ci
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
