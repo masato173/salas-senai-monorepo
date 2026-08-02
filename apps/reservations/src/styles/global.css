@@ -1,28 +1,39 @@
 /* ════════════════════════════════════════════════════════
    DESIGN TOKENS — mesmos do index.html legado
    Qualquer mudança aqui reflete em todo o sistema
-════════════════════════════════════════════════════════ */
+
+   REDESIGN DARK-FIRST (Fase 1, 2026-08-01): :root agora é a base DARK
+   (era a base light, com [data-theme='dark'] como override). Inversão
+   mecânica: os valores que estavam em [data-theme='dark'] viraram a
+   base; os valores que estavam no :root light viraram o override em
+   [data-theme='light'] logo abaixo. Nenhum nome de token mudou — só
+   qual bloco é "padrão" e qual é "override". Tokens sem diferença
+   entre os temas (--color-brand*, --color-accent, --color-green/
+   -amber/-red/-blue "cheios", --sidebar-*, --radius*, --glass-blur-*,
+   --ease, --dur) continuam declarados só uma vez aqui, sem duplicar
+   em [data-theme='light'] — não existe [data-theme='dark'] mais
+   porque dark já É o :root agora. */
 :root {
-  --color-bg: #f4f5f7;
-  --color-surface: rgba(255, 255, 255, 0.7);
-  --color-surface-2: rgba(255, 255, 255, 0.48);
-  --color-border: rgba(17, 24, 39, 0.08);
-  --color-border-2: rgba(17, 24, 39, 0.16);
-  --color-text: #111827;
-  --color-muted: #6b7280;
-  --color-subtle: #9ca3af;
+  --color-bg: #07111f;
+  --color-surface: rgba(19, 33, 56, 0.6);
+  --color-surface-2: rgba(24, 40, 66, 0.46);
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-2: rgba(255, 255, 255, 0.14);
+  --color-text: #e6edf3;
+  --color-muted: #8b949e;
+  --color-subtle: #6e7681;
   --color-brand: #1e3a5f;
   --color-brand-2: #2a4f80;
   --color-accent: #e07c2b;
-  --color-accent-l: #fef0e4;
+  --color-accent-l: rgba(224, 124, 43, 0.15);
   --color-green: #16a34a;
-  --color-green-l: #dcfce7;
+  --color-green-l: rgba(22, 163, 74, 0.15);
   --color-amber: #b45309;
-  --color-amber-l: #fef3c7;
+  --color-amber-l: rgba(180, 83, 9, 0.15);
   --color-red: #dc2626;
-  --color-red-l: #fee2e2;
+  --color-red-l: rgba(220, 38, 38, 0.15);
   --color-blue: #2563eb;
-  --color-blue-l: #dbeafe;
+  --color-blue-l: rgba(37, 99, 235, 0.15);
   --sidebar-w: 240px;
   --sidebar-w-collapsed: 64px;
   --sidebar-bg: rgba(15, 36, 64, 0.82);
@@ -32,36 +43,44 @@
   --sidebar-active-bg: rgba(255, 255, 255, 0.1);
   --sidebar-icon: rgba(255, 255, 255, 0.45);
   --header-h: 56px;
-  --header-bg: rgba(255, 255, 255, 0.72);
-  --header-border: rgba(17, 24, 39, 0.08);
+  --header-bg: rgba(19, 33, 56, 0.58);
+  --header-border: rgba(255, 255, 255, 0.08);
   --radius: 12px;
   --radius-s: 8px;
-  --shadow-s: 0 1px 2px rgba(17, 24, 39, 0.04), 0 2px 10px rgba(17, 24, 39, 0.05);
-  --shadow-m: 0 4px 18px rgba(17, 24, 39, 0.08), 0 14px 36px rgba(17, 24, 39, 0.06);
+  /* Dark precisa de sombra bem mais forte que o light pra profundidade
+     ler — o [data-theme='dark'] antigo nem tinha --shadow-s/-m próprios
+     (usava os valores claros, quase invisíveis num fundo escuro). */
+  --shadow-s: 0 2px 4px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.35);
+  --shadow-m: 0 8px 24px rgba(0, 0, 0, 0.45), 0 20px 48px rgba(0, 0, 0, 0.4);
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
   --dur: 180ms;
   --glass-blur-s: 22px;
   --glass-blur-l: 38px;
-  --glass-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  --glass-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
-[data-theme='dark'] {
-  --color-bg: #0d1117;
-  --color-surface: rgba(22, 27, 34, 0.62);
-  --color-surface-2: rgba(28, 33, 40, 0.5);
-  --color-border: rgba(255, 255, 255, 0.08);
-  --color-border-2: rgba(255, 255, 255, 0.14);
-  --color-text: #e6edf3;
-  --color-muted: #8b949e;
-  --color-subtle: #6e7681;
-  --header-bg: rgba(22, 27, 34, 0.58);
-  --header-border: rgba(255, 255, 255, 0.08);
-  --color-accent-l: rgba(224, 124, 43, 0.15);
-  --color-blue-l: rgba(37, 99, 235, 0.15);
-  --color-green-l: rgba(22, 163, 74, 0.15);
-  --color-amber-l: rgba(180, 83, 9, 0.15);
-  --color-red-l: rgba(220, 38, 38, 0.15);
-  --glass-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+/* Override — restaura os valores claros originais (era o :root antes
+   da Fase 1). Só os tokens que realmente diferem entre os temas
+   precisam estar aqui. */
+[data-theme='light'] {
+  --color-bg: #f4f5f7;
+  --color-surface: rgba(255, 255, 255, 0.7);
+  --color-surface-2: rgba(255, 255, 255, 0.48);
+  --color-border: rgba(17, 24, 39, 0.08);
+  --color-border-2: rgba(17, 24, 39, 0.16);
+  --color-text: #111827;
+  --color-muted: #6b7280;
+  --color-subtle: #9ca3af;
+  --color-accent-l: #fef0e4;
+  --color-green-l: #dcfce7;
+  --color-amber-l: #fef3c7;
+  --color-red-l: #fee2e2;
+  --color-blue-l: #dbeafe;
+  --header-bg: rgba(255, 255, 255, 0.72);
+  --header-border: rgba(17, 24, 39, 0.08);
+  --shadow-s: 0 1px 2px rgba(17, 24, 39, 0.04), 0 2px 10px rgba(17, 24, 39, 0.05);
+  --shadow-m: 0 4px 18px rgba(17, 24, 39, 0.08), 0 14px 36px rgba(17, 24, 39, 0.06);
+  --glass-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
 /* ── Reset ────────────────────────────────────────────── */
@@ -75,13 +94,18 @@
 html {
   font-size: 14px;
 }
+/* Dark-first: glows frios só de navy (--color-brand/--color-brand-2),
+   sem laranja no fundo — o ember fica reservado pra elementos pontuais
+   (Rare Ember Rule), nunca mais cobrindo área grande do body. Mesmas
+   4 posições/elipses de antes, só recoloridas — mantém a composição,
+   tira a cor quente. */
 body {
   font-family: 'DM Sans', system-ui, sans-serif;
   background:
-    radial-gradient(ellipse 55% 50% at 15% 12%, rgba(30, 58, 95, 0.14), transparent 60%),
-    radial-gradient(ellipse 50% 45% at 10% 88%, rgba(224, 124, 43, 0.12), transparent 58%),
-    radial-gradient(ellipse 60% 50% at 88% 8%, rgba(30, 58, 95, 0.16), transparent 62%),
-    radial-gradient(ellipse 55% 48% at 80% 94%, rgba(224, 124, 43, 0.1), transparent 60%),
+    radial-gradient(ellipse 55% 50% at 15% 12%, rgba(42, 79, 128, 0.22), transparent 60%),
+    radial-gradient(ellipse 50% 45% at 10% 88%, rgba(30, 58, 95, 0.16), transparent 58%),
+    radial-gradient(ellipse 60% 50% at 88% 8%, rgba(42, 79, 128, 0.2), transparent 62%),
+    radial-gradient(ellipse 55% 48% at 80% 94%, rgba(30, 58, 95, 0.14), transparent 60%),
     var(--color-bg);
   background-attachment: fixed;
   color: var(--color-text);
@@ -89,12 +113,14 @@ body {
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
 }
-[data-theme='dark'] body {
+/* Light — mesh original preservado (navy + laranja), inalterado desde
+   antes da Fase 1. */
+[data-theme='light'] body {
   background:
-    radial-gradient(ellipse 55% 50% at 15% 12%, rgba(42, 79, 128, 0.2), transparent 60%),
-    radial-gradient(ellipse 50% 45% at 10% 88%, rgba(224, 124, 43, 0.15), transparent 58%),
-    radial-gradient(ellipse 60% 50% at 88% 8%, rgba(42, 79, 128, 0.19), transparent 62%),
-    radial-gradient(ellipse 55% 48% at 80% 94%, rgba(224, 124, 43, 0.12), transparent 60%),
+    radial-gradient(ellipse 55% 50% at 15% 12%, rgba(30, 58, 95, 0.14), transparent 60%),
+    radial-gradient(ellipse 50% 45% at 10% 88%, rgba(224, 124, 43, 0.12), transparent 58%),
+    radial-gradient(ellipse 60% 50% at 88% 8%, rgba(30, 58, 95, 0.16), transparent 62%),
+    radial-gradient(ellipse 55% 48% at 80% 94%, rgba(224, 124, 43, 0.1), transparent 60%),
     var(--color-bg);
   background-attachment: fixed;
 }
@@ -121,7 +147,10 @@ a {
 }
 .page-content {
   flex: 1;
-  padding: 24px 24px 48px;
+  /* padding-top compensa a topbar ter virado position:fixed (pill
+     flutuante, fora do fluxo normal) — 16px de gap acima da pill +
+     altura da pill + 20px de respiro antes do conteúdo começar. */
+  padding: calc(var(--header-h) + 36px) 24px 48px;
   min-width: 0;
 }
 
@@ -376,21 +405,34 @@ a {
   overflow: hidden;
 }
 
-/* ── Topbar ───────────────────────────────────────────── */
+/* ── Topbar — pill flutuante (Fase 1) ────────────────────
+   position:fixed (não mais sticky-em-fluxo) pra flutuar de verdade
+   sobre o conteúdo, com margem visível dos dois lados. left acompanha
+   a largura real da sidebar (expandida/colapsada) via o seletor
+   .main-wrap.collapsed abaixo — mesma lógica que .main-wrap já usa
+   pra margin-left. border-radius 28px = metade de --header-h (56px),
+   cápsula/stadium de verdade, não só "bem arredondado". */
 .topbar {
-  position: sticky;
-  top: 0;
+  position: fixed;
+  top: 16px;
+  left: calc(var(--sidebar-w) + 24px);
+  right: 24px;
   z-index: 50;
   height: var(--header-h);
   background: var(--header-bg);
   backdrop-filter: blur(var(--glass-blur-s)) saturate(150%);
   -webkit-backdrop-filter: blur(var(--glass-blur-s)) saturate(150%);
-  border-bottom: 1px solid var(--header-border);
-  box-shadow: var(--glass-sheen);
+  border: 1px solid var(--header-border);
+  border-radius: 28px;
+  box-shadow: var(--shadow-m), var(--glass-sheen);
   display: flex;
   align-items: center;
   padding: 0 20px;
   gap: 12px;
+  transition: left var(--dur) var(--ease);
+}
+.main-wrap.collapsed .topbar {
+  left: calc(var(--sidebar-w-collapsed) + 24px);
 }
 .topbar-mobile-toggle {
   display: none;
@@ -647,6 +689,165 @@ a {
   letter-spacing: 0.05em;
 }
 
+/* ── FullCalendar — grade, toolbar e eventos ─────────────
+   FullCalendar não tem tema dark/light nativo — fc-theme-standard vem
+   com cores fixas (bordas cinza claro, botões azul estilo Bootstrap)
+   que não respeitam os tokens do projeto. Tudo abaixo usa só tokens já
+   existentes — nenhuma cor nova, nenhum raio fora de --radius-s (8px,
+   já documentado). O wrapper (.fc está dentro de ReservationCalendar.tsx)
+   já é glass com padding — a grade em si fica com bordas hairline nos
+   tokens, sem precisar de cantos arredondados próprios. */
+.fc {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  color: var(--color-text);
+}
+.fc .fc-toolbar {
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px !important;
+}
+.fc .fc-toolbar-title {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  color: var(--color-text);
+  /* O locale pt-br entrega tudo minúsculo ("agosto de 2026") —
+     text-transform: capitalize deixaria "De" maiúsculo na preposição.
+     ::first-letter capitaliza só o "a" inicial, sem mexer no resto. */
+}
+.fc .fc-toolbar-title::first-letter {
+  text-transform: uppercase;
+}
+.fc .fc-button {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-muted);
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+  border-radius: var(--radius-s);
+  padding: 6px 12px;
+  box-shadow: none;
+  transition:
+    background var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+.fc .fc-button:hover {
+  background: var(--color-surface-2);
+  border-color: var(--color-border-2);
+  color: var(--color-text);
+}
+.fc .fc-button:focus {
+  box-shadow: none;
+}
+.fc .fc-button-primary:not(:disabled).fc-button-active,
+.fc .fc-button-primary:not(:disabled):active {
+  background: var(--color-brand);
+  border-color: var(--color-brand);
+  color: #fff;
+}
+.fc .fc-button:disabled {
+  opacity: 0.5;
+}
+
+/* Grade — bordas hairline nos tokens, sem cinza fixo do FullCalendar */
+.fc-theme-standard td,
+.fc-theme-standard th,
+.fc-theme-standard .fc-scrollgrid {
+  border-color: var(--color-border);
+}
+.fc .fc-col-header-cell {
+  background: var(--color-surface-2);
+  padding: 8px 0;
+}
+.fc .fc-col-header-cell-cushion {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  padding: 4px;
+}
+.fc .fc-daygrid-day-number {
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+  padding: 6px 8px;
+}
+.fc .fc-daygrid-day-frame {
+  transition: background var(--dur) var(--ease);
+}
+.fc .fc-daygrid-day:hover .fc-daygrid-day-frame {
+  background: var(--color-surface-2);
+}
+/* "Hoje" — único uso de laranja na grade, ponto único (Rare Ember Rule) */
+.fc .fc-daygrid-day.fc-day-today {
+  background: var(--color-accent-l);
+}
+.fc .fc-daygrid-day.fc-day-today .fc-daygrid-day-number {
+  color: var(--color-accent);
+  font-weight: 700;
+}
+.fc .fc-day-other .fc-daygrid-day-number {
+  color: var(--color-subtle);
+}
+
+/* Eventos — nesta tela todos são reservas já filtradas por APPROVED
+   (Reservas/index.tsx), então uma cor semântica única (verde = aprovada,
+   mesma convenção dos badges de status do projeto) é consistente, não
+   uma paleta nova. */
+.fc .fc-daygrid-event {
+  background: var(--color-green-l);
+  border: 1px solid transparent;
+  border-radius: var(--radius-s);
+  padding: 2px 6px;
+  margin: 2px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-green);
+  cursor: pointer;
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
+}
+.fc .fc-daygrid-event:hover {
+  background: var(--color-green);
+  color: #fff;
+  box-shadow: var(--shadow-s);
+}
+.fc .fc-event-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.fc .fc-daygrid-more-link {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-blue);
+}
+.fc .fc-timegrid-event {
+  background: var(--color-green-l);
+  border: 1px solid var(--color-green);
+  border-radius: var(--radius-s);
+  color: var(--color-green);
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+.fc .fc-timegrid-event:hover {
+  background: var(--color-green);
+  color: #fff;
+}
+.fc .fc-timegrid-slot-label,
+.fc .fc-timegrid-axis {
+  font-size: 11px;
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ── FullCalendar — popover "+N mais" (glass) ────────────
    fc-theme-standard aplica background/border próprios em
    `.fc-theme-standard .fc-popover` (2 classes) — `.fc.fc-theme-standard`
@@ -713,6 +914,21 @@ a {
   .main-wrap {
     margin-left: 0 !important;
   }
+  /* Pill espremida numa tela estreita fica ruim — volta a ser barra
+     full-width sticky-em-fluxo (como era antes da Fase 1). !important
+     no left/margin pelo mesmo motivo do .main-wrap acima: garante que
+     um .collapsed persistido do desktop não vaze pro layout mobile. */
+  .topbar {
+    position: sticky;
+    top: 0;
+    left: 0 !important;
+    right: auto;
+    margin: 0 !important;
+    border-radius: 0;
+    border: none;
+    border-bottom: 1px solid var(--header-border);
+    box-shadow: var(--glass-sheen);
+  }
   .topbar-mobile-toggle {
     display: flex;
   }
@@ -738,4 +954,22 @@ a {
 :focus-visible {
   outline: 2px solid var(--color-blue) !important;
   outline-offset: 2px !important;
+}
+
+/* ── DatePicker / TimePicker (components/ui/) — hover ─────
+   Inline style não cobre :hover — as classes abaixo só existem pra
+   isso, o resto do visual (cor, glass, layout) vem do style inline dos
+   componentes. */
+.ui-picker-trigger:hover:not(:disabled) {
+  background: var(--color-surface-2);
+  border-color: var(--color-border-2);
+}
+.ui-picker-nav-btn:hover {
+  background: var(--color-border);
+}
+.ui-picker-day:hover:not(:disabled):not(.ui-picker-day--selected) {
+  background: var(--color-surface-2) !important;
+}
+.ui-picker-option:hover:not(.ui-picker-option--selected) {
+  background: var(--color-surface-2);
 }

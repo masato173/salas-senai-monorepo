@@ -9,6 +9,13 @@
         "files": ["apps/reservations/src/styles/global.css"],
         "createdAt": "2026-07-25T16:09:41.668Z",
         "reason": "User confirmed .main-wrap margin-left transition on sidebar collapse is intentional — rare user-triggered action, content needs genuine reflow to fill freed space"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": ["apps/reservations/src/components/dashboard/DashboardStats.tsx"],
+        "createdAt": "2026-07-31T23:16:07.918Z",
+        "reason": "User confirmed: TurnoCard borderLeft is semantic status color (M/V/N turno), not decorative — follows DESIGN.md Status-Only Color Rule, pre-existing pattern explicitly preserved by mission scope"
       }
     ]
   }

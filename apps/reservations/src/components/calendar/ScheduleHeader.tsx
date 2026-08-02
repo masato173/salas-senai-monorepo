@@ -1,6 +1,7 @@
 import React from 'react';
 import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
 import { todayYmd } from '../dashboard/scheduleDateUtils';
+import { DatePicker } from '../ui/DatePicker';
 
 interface ScheduleHeaderProps {
   date: string; // YYYY-MM-DD
@@ -98,24 +99,17 @@ export function ScheduleHeader({ date, onChange, isLoading, title }: ScheduleHea
           </button>
         </div>
 
-        {/* Input de data */}
-        <input
-          type="date"
-          value={date}
-          onChange={e => e.target.value && onChange(e.target.value)}
-          style={{
-            height: '34px',
-            padding: '0 10px',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-s)',
-            background: 'var(--color-surface)',
-            color: 'var(--color-text)',
-            fontFamily: 'inherit',
-            fontSize: '12px',
-            cursor: 'pointer',
-            outline: 'none',
-          }}
-        />
+        {/* Seletor de data — largura fixa (150px): aqui é um item numa
+            linha flex ao lado de botões, não um campo de formulário que
+            deve ocupar a largura toda (padrão do DatePicker). */}
+        <div style={{ width: '150px' }}>
+          <DatePicker
+            value={date}
+            onChange={v => v !== '' && onChange(v)}
+            aria-label="Selecionar data"
+            align="right"
+          />
+        </div>
       </div>
     </div>
   );

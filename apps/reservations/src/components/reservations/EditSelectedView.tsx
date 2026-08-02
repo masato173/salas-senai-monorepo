@@ -5,6 +5,7 @@ import { SALAS } from '../../config';
 import { validateTimeInput } from '../../validators/conflict';
 import { useUpdateReservationSelected } from '../../hooks/useUpdateReservationSelected';
 import { MiniCalendar } from './MiniCalendar';
+import { TimePicker } from '../ui/TimePicker';
 import type { ReservationFormService } from './ReservationForm';
 import type {
   UpdateReservationSelectedRequest,
@@ -237,24 +238,10 @@ export function EditSelectedView({
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
         <Field label="Início *" htmlFor="esel-inicio" hint="HH:MM">
-          <input
-            id="esel-inicio"
-            type="time"
-            value={inicio}
-            onChange={e => setInicio(e.target.value)}
-            disabled={isLoading}
-            style={inputStyle}
-          />
+          <TimePicker id="esel-inicio" value={inicio} onChange={setInicio} disabled={isLoading} />
         </Field>
         <Field label="Fim *" htmlFor="esel-fim" hint="HH:MM">
-          <input
-            id="esel-fim"
-            type="time"
-            value={fim}
-            onChange={e => setFim(e.target.value)}
-            disabled={isLoading}
-            style={inputStyle}
-          />
+          <TimePicker id="esel-fim" value={fim} onChange={setFim} disabled={isLoading} />
         </Field>
       </div>
 

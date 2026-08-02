@@ -157,7 +157,7 @@ function TurnoCard({ turno, value }: TurnoCardProps): JSX.Element {
       style={{
         ...cardStyle,
         borderLeft: `3px solid ${TURNO_ACCENT[turno]}`,
-        paddingLeft: 'calc(14px - 2px)', // compensa o 3px da borda pra alinhar texto
+        paddingLeft: 'calc(16px - 2px)', // compensa o 3px da borda pra alinhar texto
       }}
     >
       <span style={cardLabelStyle}>{TURNO_LABEL[turno]}</span>
@@ -177,15 +177,24 @@ const gridStyle: CSSProperties = {
   gap: '12px',
 };
 
+// Receita de vidro de 3 partes (surface + backdrop-filter + shadow com
+// sheen) — mesma de .avail-card/.calendar-placeholder em global.css,
+// aplicada aqui pra alinhar os cards de estatística ao resto do "Liquid
+// Glass Deck" (decisão registrada no relatório da missão de polimento
+// visual do Dashboard: legibilidade do número não é afetada, já que o
+// texto renderiza sobre --color-surface a 70% opaco independente do blur
+// — blur só afeta o que aparece através da margem translúcida).
 const cardStyle: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: '4px',
-  padding: '14px',
+  padding: '16px',
   background: 'var(--color-surface)',
+  backdropFilter: 'blur(var(--glass-blur-s)) saturate(140%)',
+  WebkitBackdropFilter: 'blur(var(--glass-blur-s)) saturate(140%)',
   border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-s)',
-  boxShadow: 'var(--shadow-s)',
+  borderRadius: 'var(--radius)',
+  boxShadow: 'var(--shadow-s), var(--glass-sheen)',
 };
 
 const cardLabelStyle: CSSProperties = {

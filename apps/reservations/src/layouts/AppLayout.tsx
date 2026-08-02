@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -29,6 +29,8 @@ import { hasRole } from '../router/ProtectedRoute';
 import { useAuthStore, selectAccessToken, selectUser } from '../store/authStore';
 import { getSocket, disconnectSocket } from '../services/socketClient';
 import { useRealtimeSocket } from '../hooks/useRealtimeSocket';
+import { usePendingReservations } from '../hooks/usePendingReservations';
+import { createNestjsApiService } from '../services/nestjsApiService';
 import { NotificationBell } from '../components/ui/NotificationBell';
 
 const ICON_MAP = {
@@ -108,15 +110,40 @@ export function AppLayout() {
     }
   }, [location.pathname, notifyPath]);
 
+  // Dot PERSISTENTE no ícone "Aprovações" — diferente do notifyPath acima
+  // (efêmero, some ao visitar a rota): fica visível enquanto existir pelo
+  // menos 1 reserva PENDING no sistema, some sozinho quando a fila esvazia.
+  // Só relevante pra COORDENADOR/ADMIN — mesmo wiring de service de
+  // Aprovacoes/index.tsx (createNestjsApiService + usePendingReservations
+  // com status:'PENDING'); autoFetch desligado pra PROFESSOR (que já nem
+  // vê a rota /aprovacoes na sidebar, filtrada por hasRole abaixo) pra não
+  // disparar um fetch que essa role não usa.
+  const canApprove = userRole === 'COORDENADOR' || userRole === 'ADMIN';
+  const service = useMemo(() => createNestjsApiService(), []);
+  const pending = usePendingReservations(service, { status: 'PENDING' }, { autoFetch: canApprove });
+  const hasPendingApprovals = canApprove && (pending.data?.reservations.length ?? 0) > 0;
+
+  // Mesmo padrão do Dashboard (disp.refetch() em onReservationEvent) —
+  // qualquer evento de reserva pode ter criado/aprovado/rejeitado uma
+  // PENDING, então recarrega sem filtrar por tipo de evento.
+  useRealtimeSocket({
+    onReservationEvent: () => {
+      if (canApprove) void pending.refetch();
+    },
+  });
+
   // Sidebar state
   const [collapsed, setCollapsed] = useState(() => ls('sidebar-collapsed') === '1');
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Theme state
+  // Theme state — dark-first (Fase 1, 2026-08-01): escolha salva sempre
+  // vence; sem escolha salva, abre em dark (não segue mais
+  // prefers-color-scheme). Mesmo default já aplicado no <html> de
+  // index.html antes do React montar, pra não piscar light→dark.
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     const saved = ls('theme');
     if (saved === 'dark' || saved === 'light') return saved;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    return 'dark';
   });
 
   useEffect(() => {
@@ -204,12 +231,15 @@ export function AppLayout() {
                         aria-label={
                           route.path === notifyPath
                             ? `${route.label} (nova notificação)`
-                            : undefined
+                            : route.path === '/aprovacoes' && hasPendingApprovals
+                              ? `${route.label} (reservas pendentes)`
+                              : undefined
                         }
                       >
                         <span className="sidebar-icon" aria-hidden="true">
                           {Icon && <Icon size={16} strokeWidth={1.75} />}
-                          {route.path === notifyPath && (
+                          {(route.path === notifyPath ||
+                            (route.path === '/aprovacoes' && hasPendingApprovals)) && (
                             <span className="sidebar-notify-dot" aria-hidden="true" />
                           )}
                         </span>

@@ -178,14 +178,18 @@ export function DashboardPage(): JSX.Element {
         ) : (
           <>
             {/* Busca — painel simples (turma + sala), sem os filtros de
-                turno/roomType de ScheduleFilters (não se aplicam aqui). */}
+                turno/roomType de ScheduleFilters (não se aplicam aqui).
+                Receita de vidro de 3 partes — mesmo tratamento dos cards
+                de estatística acima, consistência entre os blocos da página. */}
             <div
               style={{
                 background: 'var(--color-surface)',
+                backdropFilter: 'blur(var(--glass-blur-s)) saturate(140%)',
+                WebkitBackdropFilter: 'blur(var(--glass-blur-s)) saturate(140%)',
                 border: '1px solid var(--color-border)',
                 borderRadius: 'var(--radius)',
                 padding: '12px 16px',
-                boxShadow: 'var(--shadow-s)',
+                boxShadow: 'var(--shadow-s), var(--glass-sheen)',
                 display: 'flex',
                 flexWrap: 'wrap',
                 gap: '12px',
@@ -222,14 +226,17 @@ export function DashboardPage(): JSX.Element {
             </div>
 
             {/* Turno — barra separada, largura total, mesmo padrão visual
-                de ScheduleFilters (pill buttons ⊙☀🌤🌙). */}
+                de ScheduleFilters (pill buttons ⊙☀🌤🌙). Mesmo vidro do
+                painel de busca acima — consistência entre os blocos. */}
             <div
               style={{
                 background: 'var(--color-surface)',
+                backdropFilter: 'blur(var(--glass-blur-s)) saturate(140%)',
+                WebkitBackdropFilter: 'blur(var(--glass-blur-s)) saturate(140%)',
                 border: '1px solid var(--color-border)',
                 borderRadius: 'var(--radius)',
                 padding: '10px 16px',
-                boxShadow: 'var(--shadow-s)',
+                boxShadow: 'var(--shadow-s), var(--glass-sheen)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',

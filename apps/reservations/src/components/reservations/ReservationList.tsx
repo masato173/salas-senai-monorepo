@@ -49,6 +49,39 @@ function formatDataBR(iso: string): string {
   return `${d}/${m}/${y}`;
 }
 
+export interface ReservationGroup {
+  turno: Turno;
+  label: string;
+  color: { bg: string; color: string };
+  items: CreatedReservationRow[];
+}
+
+// Pura e exportada — testável sem montar o componente (mesmo padrão de
+// sortSalas/getViewState em OccupancyUnified.tsx). Lista mostra pendentes +
+// aprovadas (professor precisa ver a própria reserva mesmo antes da
+// aprovação); rejeitadas/canceladas ficam de fora (seriam ruído).
+export function groupReservations(
+  reservations: CreatedReservationRow[] | undefined,
+  userId?: string,
+): ReservationGroup[] {
+  const items = (reservations ?? [])
+    .filter(r => r.status === 'PENDING' || r.status === 'APPROVED')
+    .filter(r => !userId || r.createdBy === userId)
+    .sort((a, b) => a.data.localeCompare(b.data) || a.inicio.localeCompare(b.inicio));
+
+  const map: Record<Turno, CreatedReservationRow[]> = { M: [], V: [], N: [] };
+  for (const r of items) {
+    const turno = inferirTurno(r.inicio);
+    map[turno].push(r);
+  }
+  return TURNO_ORDER.filter(t => map[t].length > 0).map(t => ({
+    turno: t,
+    label: TURNO_LABEL[t],
+    color: TURNO_COLOR[t],
+    items: map[t],
+  }));
+}
+
 export function ReservationList({
   reservations,
   showApproval = false,
@@ -57,24 +90,7 @@ export function ReservationList({
   // showApproval mantido na interface para backward compat — aprovação via /aprovacoes
   void showApproval;
 
-  const grouped = useMemo(() => {
-    const items = (reservations ?? [])
-      .filter(r => r.status === 'APPROVED')
-      .filter(r => !userId || r.createdBy === userId)
-      .sort((a, b) => a.data.localeCompare(b.data) || a.inicio.localeCompare(b.inicio));
-
-    const map: Record<string, CreatedReservationRow[]> = { M: [], V: [], N: [] };
-    for (const r of items) {
-      const turno = inferirTurno(r.inicio);
-      map[turno].push(r);
-    }
-    return TURNO_ORDER.filter(t => map[t].length > 0).map(t => ({
-      turno: t,
-      label: TURNO_LABEL[t],
-      color: TURNO_COLOR[t],
-      items: map[t],
-    }));
-  }, [reservations, userId]);
+  const grouped = useMemo(() => groupReservations(reservations, userId), [reservations, userId]);
 
   if (grouped.length === 0) {
     return (

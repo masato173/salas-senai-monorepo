@@ -3,6 +3,9 @@ import { Clock, AlertCircle } from 'lucide-react';
 import { validateTimeInput } from '../../validators/conflict';
 import { validateReservation } from '../../validators/reservation';
 import { ConflictAlert } from '../ui/ConflictAlert';
+import { DatePicker } from '../ui/DatePicker';
+import { TimePicker } from '../ui/TimePicker';
+import { todayYmd } from '../dashboard/scheduleDateUtils';
 import { useReservationStore } from '../../store/reservationStore';
 import { useCreateReservation } from '../../hooks/useCreateReservation';
 import { useCreateReservationRange } from '../../hooks/useCreateReservationRange';
@@ -638,15 +641,15 @@ export function ReservationForm({
       {/* Data — modo único (create OU edit-single) */}
       {!isEditGroup && period === 'single' && (
         <Field label="Data *" htmlFor="res-date">
-          <input
+          <DatePicker
             id="res-date"
-            type="date"
             required
             value={form.date}
-            min={new Date().toISOString().slice(0, 10)}
-            onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-            onBlur={() => setTouched(t => ({ ...t, date: true }))}
-            style={inputStyle}
+            min={todayYmd()}
+            onChange={v => {
+              setForm(f => ({ ...f, date: v }));
+              setTouched(t => ({ ...t, date: true }));
+            }}
           />
         </Field>
       )}
@@ -656,25 +659,21 @@ export function ReservationForm({
         <>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <Field label="Data início *" htmlFor="res-date-start">
-              <input
+              <DatePicker
                 id="res-date-start"
-                type="date"
                 required
                 value={dateStart}
-                min={new Date().toISOString().slice(0, 10)}
-                onChange={e => setDateStart(e.target.value)}
-                style={inputStyle}
+                min={todayYmd()}
+                onChange={setDateStart}
               />
             </Field>
             <Field label="Data fim *" htmlFor="res-date-end">
-              <input
+              <DatePicker
                 id="res-date-end"
-                type="date"
                 required
                 value={dateEnd}
-                min={dateStart || new Date().toISOString().slice(0, 10)}
-                onChange={e => setDateEnd(e.target.value)}
-                style={inputStyle}
+                min={dateStart || todayYmd()}
+                onChange={setDateEnd}
               />
             </Field>
           </div>
@@ -692,53 +691,27 @@ export function ReservationForm({
       {/* Horários — lado a lado */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
         <Field label="Início *" htmlFor="res-start" hint="HH:MM">
-          <div style={{ position: 'relative' }}>
-            <Clock
-              size={13}
-              style={{
-                position: 'absolute',
-                left: '10px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: 'var(--color-muted)',
-                pointerEvents: 'none',
-              }}
-            />
-            <input
-              id="res-start"
-              type="time"
-              required
-              value={form.start}
-              onChange={e => setForm(f => ({ ...f, start: e.target.value }))}
-              onBlur={() => setTouched(t => ({ ...t, start: true }))}
-              style={{ ...inputStyle, paddingLeft: '30px' }}
-            />
-          </div>
+          <TimePicker
+            id="res-start"
+            required
+            value={form.start}
+            onChange={v => {
+              setForm(f => ({ ...f, start: v }));
+              setTouched(t => ({ ...t, start: true }));
+            }}
+          />
         </Field>
 
         <Field label="Fim *" htmlFor="res-end" hint="HH:MM">
-          <div style={{ position: 'relative' }}>
-            <Clock
-              size={13}
-              style={{
-                position: 'absolute',
-                left: '10px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: 'var(--color-muted)',
-                pointerEvents: 'none',
-              }}
-            />
-            <input
-              id="res-end"
-              type="time"
-              required
-              value={form.end}
-              onChange={e => setForm(f => ({ ...f, end: e.target.value }))}
-              onBlur={() => setTouched(t => ({ ...t, end: true }))}
-              style={{ ...inputStyle, paddingLeft: '30px' }}
-            />
-          </div>
+          <TimePicker
+            id="res-end"
+            required
+            value={form.end}
+            onChange={v => {
+              setForm(f => ({ ...f, end: v }));
+              setTouched(t => ({ ...t, end: true }));
+            }}
+          />
         </Field>
       </div>
 

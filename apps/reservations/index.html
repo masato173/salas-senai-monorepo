@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-BR" data-theme="light">
+<html lang="pt-BR" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -8,8 +8,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    body { margin: 0; background: #f4f5f7; font-family: 'DM Sans', system-ui, sans-serif; }
-    [data-theme="dark"] body { background: #0d1117; }
+    /* Dark-first (Fase 1): valores batem com o novo :root de global.css
+       (#07111f bg, spinner em --color-accent pra ter contraste no
+       escuro — --color-brand/navy sumiria contra esse fundo). Override
+       [data-theme="light"] restaura as cores originais claras. */
+    body { margin: 0; background: #07111f; font-family: 'DM Sans', system-ui, sans-serif; }
+    [data-theme="light"] body { background: #f4f5f7; }
     #root-loader {
       position: fixed; inset: 0; display: flex;
       flex-direction: column; align-items: center; justify-content: center;
@@ -17,19 +21,24 @@
     }
     .loader-ring {
       width: 36px; height: 36px; border-radius: 50%;
-      border: 3px solid #e4e6ea; border-top-color: #1e3a5f;
+      border: 3px solid rgba(255, 255, 255, 0.12); border-top-color: #e07c2b;
       animation: spin .7s linear infinite;
     }
-    .loader-text { font-size: 13px; color: #6b7280; }
+    [data-theme="light"] .loader-ring {
+      border: 3px solid #e4e6ea; border-top-color: #1e3a5f;
+    }
+    .loader-text { font-size: 13px; color: #8b949e; }
+    [data-theme="light"] .loader-text { color: #6b7280; }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
   <script>
     (function() {
+      // Dark-first: escolha salva sempre vence; sem escolha salva,
+      // mantém o default dark já presente no <html> acima (não
+      // consulta mais prefers-color-scheme).
       try {
         var t = localStorage.getItem('theme');
-        if (t) document.documentElement.dataset.theme = t;
-        else if (window.matchMedia('(prefers-color-scheme: dark)').matches)
-          document.documentElement.dataset.theme = 'dark';
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
       } catch(e) {}
     })();
   </script>

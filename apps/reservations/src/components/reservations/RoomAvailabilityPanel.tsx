@@ -108,9 +108,11 @@ function EmptyState(): JSX.Element {
 
 const panelStyle: CSSProperties = {
   background: 'var(--color-surface)',
+  backdropFilter: 'blur(var(--glass-blur-s)) saturate(140%)',
+  WebkitBackdropFilter: 'blur(var(--glass-blur-s)) saturate(140%)',
   border: '1px solid var(--color-border)',
   borderRadius: 'var(--radius)',
-  boxShadow: 'var(--shadow-s)',
+  boxShadow: 'var(--shadow-s), var(--glass-sheen)',
   padding: '20px',
 };
 
@@ -142,8 +144,13 @@ const listStyle: CSSProperties = {
   paddingRight: '4px',
 };
 
+// --color-surface-2 (não --color-bg): item aninhado dentro de um painel
+// já translúcido — mesmo padrão de .slot-item dentro de .avail-card no
+// DESIGN.md. --color-bg é opaco e é a cor de fundo da página inteira;
+// usá-lo aqui faria o item parecer um buraco em vez de uma superfície
+// elevada dentro do painel.
 const itemBaseStyle: CSSProperties = {
-  background: 'var(--color-bg)',
+  background: 'var(--color-surface-2)',
   border: '1px solid var(--color-border)',
   borderRadius: 'var(--radius-s)',
   padding: '10px 12px',
@@ -197,7 +204,7 @@ const moreChipStyle: CSSProperties = {
   fontSize: '10px',
   padding: '4px 10px',
   borderRadius: 20,
-  background: 'var(--color-bg)',
+  background: 'var(--color-surface-2)',
   border: '1px dashed var(--color-border)',
   color: 'var(--color-muted)',
   marginTop: '4px',

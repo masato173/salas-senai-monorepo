@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import { FileText, Clock, CheckCircle2, XCircle, Plus } from 'lucide-react';
-import { useReservationStore } from '../../store/reservationStore';
 import { ReservationList } from '../../components/reservations/ReservationList';
 import { ReservationForm } from '../../components/reservations/ReservationForm';
 import { ReservationCalendar } from '../../components/reservations/ReservationCalendar';
@@ -19,13 +18,13 @@ import {
 } from '../../components/reservations/reservationToEvent';
 import { getEventosDaSala } from '../../services/availability';
 import { RoomAvailabilityPanel } from '../../components/reservations/RoomAvailabilityPanel';
+import { DatePicker } from '../../components/ui/DatePicker';
 import { SALAS } from '../../config';
 import { useAuthStore, selectUser } from '../../store/authStore';
 import type { RegistroLegado, SalaEvento } from '../../types';
 
 export default function ReservasPage() {
   const loggedUser = useAuthStore(selectUser);
-  const { reservations } = useReservationStore();
   const [showForm, setShowForm] = useState(false);
   const [sala, setSala] = useState<string>(SALAS[6]); // "603 Sala"
   const [turma, setTurma] = useState('');
@@ -136,11 +135,11 @@ export default function ReservasPage() {
     // Erro: cancelMutation.error/status já preenchidos pelo hook; modal observa via props.
   };
 
-  const pending = reservations.filter(r => r.status === 'PENDING').length;
-  const approved = reservations.filter(r => r.status === 'APPROVED').length;
-  const rejected = reservations.filter(
-    r => r.status === 'REJECTED' || r.status === 'CANCELLED',
-  ).length;
+  // Fonte real dos cards de stats — antes lia do store Zustand (nunca
+  // populado pelo backend, sempre 0); `reservas` já é list.data?.reservations.
+  const pending = reservas.filter(r => r.status === 'PENDING').length;
+  const approved = reservas.filter(r => r.status === 'APPROVED').length;
+  const rejected = reservas.filter(r => r.status === 'REJECTED' || r.status === 'CANCELLED').length;
 
   return (
     <div>
@@ -186,9 +185,11 @@ export default function ReservasPage() {
           <div
             style={{
               background: 'var(--color-surface)',
+              backdropFilter: 'blur(var(--glass-blur-s)) saturate(140%)',
+              WebkitBackdropFilter: 'blur(var(--glass-blur-s)) saturate(140%)',
               border: '1px solid var(--color-border)',
               borderRadius: 'var(--radius)',
-              boxShadow: 'var(--shadow-s)',
+              boxShadow: 'var(--shadow-s), var(--glass-sheen)',
               padding: '20px',
               flex: '0 0 auto',
               width: '100%',
@@ -202,13 +203,11 @@ export default function ReservasPage() {
               <label htmlFor="sel-data" style={labelStyle}>
                 Data *
               </label>
-              <input
+              <DatePicker
                 id="sel-data"
-                type="date"
                 value={selectedDate}
-                onChange={e => setSelectedDate(e.target.value)}
+                onChange={setSelectedDate}
                 min={todayYmd()}
-                style={inputStyle}
               />
             </div>
 
@@ -311,7 +310,7 @@ export default function ReservasPage() {
         {[
           {
             label: 'Total',
-            value: reservations.length,
+            value: reservas.length,
             color: 'var(--color-blue)',
             bg: 'var(--color-blue-l)',
             Icon: FileText,
@@ -342,10 +341,12 @@ export default function ReservasPage() {
             key={label}
             style={{
               background: 'var(--color-surface)',
+              backdropFilter: 'blur(var(--glass-blur-s)) saturate(140%)',
+              WebkitBackdropFilter: 'blur(var(--glass-blur-s)) saturate(140%)',
               border: '1px solid var(--color-border)',
               borderRadius: 'var(--radius)',
               padding: '14px 16px',
-              boxShadow: 'var(--shadow-s)',
+              boxShadow: 'var(--shadow-s), var(--glass-sheen)',
               display: 'flex',
               alignItems: 'center',
               gap: '12px',
@@ -379,9 +380,11 @@ export default function ReservasPage() {
       <div
         style={{
           background: 'var(--color-surface)',
+          backdropFilter: 'blur(var(--glass-blur-s)) saturate(140%)',
+          WebkitBackdropFilter: 'blur(var(--glass-blur-s)) saturate(140%)',
           border: '1px solid var(--color-border)',
           borderRadius: 'var(--radius)',
-          boxShadow: 'var(--shadow-s)',
+          boxShadow: 'var(--shadow-s), var(--glass-sheen)',
           overflow: 'hidden',
         }}
       >
@@ -405,7 +408,7 @@ export default function ReservasPage() {
               color: 'var(--color-blue)',
             }}
           >
-            {reservations.length} registros
+            {reservas.length} registros
           </span>
         </div>
         <ReservationList reservations={list.data?.reservations ?? []} showApproval />

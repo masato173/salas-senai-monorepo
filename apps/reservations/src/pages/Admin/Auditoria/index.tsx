@@ -6,6 +6,7 @@ import { DataTable } from '../../../components/DataTable';
 import type { Column } from '../../../components/DataTable';
 import { JsonTree } from '../../../components/JsonTree';
 import { Pagination } from '../../../components/Pagination';
+import { DatePicker } from '../../../components/ui/DatePicker';
 import type { AuditLog, AuditQuery } from '../../../types';
 
 // ─────────────────────────────────────────────────────────────
@@ -394,20 +395,18 @@ export default function AdminAuditoriaPage(): JSX.Element {
           ))}
         </select>
 
-        <input
-          type="date"
+        <DatePicker
           value={filters.from}
-          onChange={e => handleFilterChange('from', e.target.value)}
-          style={inputStyle}
+          onChange={v => handleFilterChange('from', v)}
           aria-label="Data de início"
+          placeholder="Data de início"
         />
 
-        <input
-          type="date"
+        <DatePicker
           value={filters.to}
-          onChange={e => handleFilterChange('to', e.target.value)}
-          style={inputStyle}
+          onChange={v => handleFilterChange('to', v)}
           aria-label="Data de fim"
+          placeholder="Data de fim"
         />
 
         {hasFilters && (

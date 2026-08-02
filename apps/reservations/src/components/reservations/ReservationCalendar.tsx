@@ -31,9 +31,11 @@ export function ReservationCalendar({
     <div
       style={{
         background: 'var(--color-surface)',
+        backdropFilter: 'blur(var(--glass-blur-s)) saturate(140%)',
+        WebkitBackdropFilter: 'blur(var(--glass-blur-s)) saturate(140%)',
         border: '1px solid var(--color-border)',
         borderRadius: 'var(--radius)',
-        boxShadow: 'var(--shadow-s)',
+        boxShadow: 'var(--shadow-s), var(--glass-sheen)',
         padding: '16px',
         marginTop: '24px',
       }}

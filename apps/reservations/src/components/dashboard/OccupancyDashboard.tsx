@@ -4,6 +4,7 @@ import { AlertCircle, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
 import type { RegistroLegado, Turno } from '../../types';
 import type { ScheduleFilterState } from './applyScheduleFilters';
 import { formatDataBR, weekdayShort } from './scheduleDateUtils';
+import { DatePicker } from '../ui/DatePicker';
 
 // Sprint A3.2 — Dashboard nativo de ocupação. Substitui o iframe legado.
 // Sprint A3.5 — REFATORADO pra apresentação CONTROLADA: o pai
@@ -117,12 +118,11 @@ export function OccupancyDashboard({
         </Field>
 
         <Field label="Data" htmlFor="occ-data">
-          <input
+          <DatePicker
             id="occ-data"
-            type="date"
             value={filtros.data}
-            onChange={e => onFiltroChange('data', e.target.value)}
-            style={inputStyle}
+            onChange={v => onFiltroChange('data', v)}
+            placeholder="Todas"
           />
         </Field>
 

@@ -2,15 +2,21 @@
 
 # Cérebro persistente do projeto — leia ANTES de qualquer tarefa
 
-# Atualizado: 2026-07-29 | Fase atual: F9.9 + pós-F9 + leva de pré-produção
+# Atualizado: 2026-07-31 | Fase atual: F9.9 + pós-F9 + leva de pré-produção
 
-# (Fase A: fix conflito falso; Fase B: RBAC coordenador no admin; Fase C1: schema
+# (Fase A/B/C1/C2/C3, ver abaixo) + Railway configurado + redesign do Login
 
-# createdByUserId+Notification; Fase C2: notificações persistentes; Fase C3: cron
+# COMMITADO (`844e138`) + leva de features de frontend NÃO COMMITADA nesta
 
-# de lembrete + fix CORS) — Railway configurado e primeiro deploy disparado.
+# sessão: polimento visual do Dashboard + dot de pendentes na sidebar,
 
-# Redesign da tela de Login em andamento (NÃO COMMITADO — ver seção LOGIN abaixo).
+# redesign dark-first Fase 1 (tokens invertidos, topbar pill), Calendário/
+
+# Reservas integrado ao design system, componentes DatePicker/TimePicker
+
+# novos substituindo inputs nativos em 6 arquivos. Ver seções FRONTEND —
+
+# NOVAS FEATURES (NÃO COMMITADAS) e DESIGN SYSTEM abaixo.
 
 ---
 
@@ -189,10 +195,19 @@ abaixo, todos já no histórico de `master`):
 (2026-07-29, commits `f7799a5`/`667797e`/`08bf89e`/`0000368`). Três bugs
 reais de infra corrigidos nesse processo — ver Bugs históricos #13/#14/#15.
 
-🔶 REDESIGN DA TELA DE LOGIN — em andamento, **NÃO COMMITADO** (working
-tree, `apps/reservations/src/pages/Login/index.tsx` modificado +
-`apps/reservations/src/assets/` novo, não rastreado). Ver seção LOGIN
-(REDESIGN, NÃO COMMITADO) mais abaixo pra detalhe completo.
+✅ REDESIGN DA TELA DE LOGIN — **COMMITADO** (`844e138`, 2026-07-31,
+fora desta sessão de memory-sync). Layout split ≥768px (painel visual
+54% com foto de laboratório + overlay navy, formulário 46% card de
+vidro), mobile volta a single-column. Ver seção DESIGN SYSTEM → LOGIN
+abaixo pra detalhe completo — a versão anterior deste arquivo dizia
+"NÃO COMMITADO", estava desatualizada.
+
+🔶 LEVA DE FEATURES DE FRONTEND — **NÃO COMMITADA**, working tree desta
+sessão (2026-07-31): polimento visual do Dashboard + dot de pendentes
+na sidebar, redesign dark-first Fase 1, Calendário/Reservas integrado
+ao design system, componentes `DatePicker`/`TimePicker` novos. Ver
+seção **FRONTEND — NOVAS FEATURES (NÃO COMMITADAS)** abaixo pra
+detalhe completo de cada uma.
 
 ⏳ PENDENTE PRÉ-DEPLOY REAL:
 
@@ -200,8 +215,8 @@ tree, `apps/reservations/src/pages/Login/index.tsx` modificado +
   com sucesso no Railway — não validado nesta sessão, checar dashboard
 - Trocar senhas das contas de produção (role@senai2026 são de teste)
 - Autenticação institucional (SSO/LDAP) — pendência desde ADR-003, não iniciada
-- Commitar (ou descartar deliberadamente) o redesign do Login antes que
-  vire trabalho perdido — ver seção LOGIN abaixo
+- Commitar (ou descartar deliberadamente) a leva de frontend desta sessão
+  antes que vire trabalho perdido — ver seção FRONTEND — NOVAS FEATURES abaixo
 
 ---
 
@@ -330,6 +345,26 @@ nenhuma (ex: aula de manhã + reserva à noite virava "conflito" indevido)
 → Fix: usa `overlaps()` (já existia no arquivo, não usada nesse cálculo)
 pra só marcar conflito quando os intervalos realmente se sobrepõem —
 precedência final: conflito-real > aula > reserva > livre
+
+#18 Item aninhado dentro de painel glass usando --color-bg (opaco)
+`RoomAvailabilityPanel.tsx` usava `var(--color-bg)` (fundo opaco da
+página inteira) nos itens internos — quando o painel em volta virou
+glass (translúcido), o item parecia um buraco em vez de superfície
+elevada
+→ Fix: `--color-surface-2`, o token documentado pra item aninhado
+dentro de outro glass (mesmo padrão de `.slot-item` dentro de
+`.avail-card`) — não `--color-bg`, que é a cor de fundo da PÁGINA, não
+de um elemento aninhado
+
+#19 Dropdown customizado perto da borda direita da tela vaza do viewport
+Painel flutuante (`DatePicker`) ancorado só com `left: 0` — quando o
+gatilho fica perto da borda direita (ex: `ScheduleHeader` na topbar do
+Dashboard), o painel (mais largo que o gatilho) ultrapassa o viewport
+→ Fix: prop `align?: 'left'|'right'` — `right: 0` nesses casos, mesmo
+padrão que `NotificationBell.tsx` já usa pro mesmo problema
+→ Lição: qualquer dropdown/painel flutuante posicionado perto da borda
+direita da tela precisa considerar ancoragem pela direita — não assumir
+`left: 0` sempre funciona
 
 ---
 
@@ -566,7 +601,8 @@ MinhaAgenda/index.tsx ← rota /minha-agenda, useMyReservations; badge
 "via {nome}" (proxyBadgeLabel(), função pura exportada) quando a reserva
 veio de proxy (createdByUserId !== userId), Fase C1
 Perfil/index.tsx ← ganhou botão "Ver Minha Agenda" (Fase C1)
-Login/index.tsx ← ver seção LOGIN (REDESIGN, NÃO COMMITADO) abaixo
+Login/index.tsx ← ver seção DESIGN SYSTEM → LOGIN abaixo (redesign
+COMMITADO em `844e138`)
 Aprovacoes/index.tsx
 Admin/Sync/index.tsx ← tabela histórica de Schedule (useSchedule +
 applyScheduleFilters + OccupancyDashboard) + botão de sync
@@ -599,6 +635,10 @@ usado em ReservationForm.tsx
 NotificationBell.tsx ← Fase C2 — sino na topbar (badge --color-accent,
 dropdown glass, receita de 3 partes igual ao popover FullCalendar);
 exporta formatRelativeTime() (usa getUTCDate/getUTCMonth — Bug #8)
+DatePicker.tsx / TimePicker.tsx ← NOVOS, NÃO COMMITADOS (2026-07-31) —
+dropdown customizado substituindo input nativo type=date/time em 6
+arquivos; exportam buildMonthGrid()/buildTimeSlots() puras. Ver seção
+FRONTEND — NOVAS FEATURES (item 4) pra detalhe completo
 reservations/
 ReservationCalendar.tsx ← wrapper do FullCalendar; dayMaxEvents ligado +
 popover "+N mais" restilizado com tokens glass (global.css)
@@ -654,6 +694,17 @@ Rule (laranja nunca preenche área grande), The Status-Only Color Rule,
 The Tabular Numbers Rule, The One Voice Rule, The Sheen-Always Rule,
 The Two-Blur Rule.
 
+### ⚠️ DIVERGÊNCIA ATUAL working tree vs. commitado (2026-07-31)
+
+O bloco de tokens abaixo (`:root` light-first + `[data-theme='dark']`
+override) reflete o **último estado commitado** de `global.css`. O
+working tree desta sessão **inverteu isso** (dark-first — `:root` virou
+dark, `[data-theme='light']` é o override novo) mas ainda não foi
+commitado. Ver seção **FRONTEND — NOVAS FEATURES → item 2** pra valores
+reais atuais do working tree. Não confiar no bloco abaixo pra saber
+"qual tema é o padrão hoje" sem antes checar `git status` +
+`global.css` real.
+
 ### CORREÇÃO — a versão anterior desta seção estava errada
 
 `--glass-strong` e `--glass-soft-bg` (gradientes) **não existem** em
@@ -708,15 +759,14 @@ box-shadow: var(--shadow-s), var(--glass-sheen); /* --shadow-m em overlay flutua
 - `:focus-visible` global (pós-F9.9): outline 2px var(--color-blue) !important
   (precisa !important pra vencer outline:'none' inline nos inputStyle/buttonStyle)
 
-### LOGIN (redesign, NÃO COMMITADO — working tree)
+### LOGIN (redesign — COMMITADO em `844e138`, 2026-07-31)
 
-`apps/reservations/src/pages/Login/index.tsx` está modificado no working
-tree (não em nenhum commit) e `apps/reservations/src/assets/` é diretório
-novo, não rastreado pelo git. Ninguém commitou isso ainda — próxima sessão
-precisa decidir: commitar ou descartar deliberadamente (não é lixo, é
-trabalho reto de duas iterações desta sessão).
+`apps/reservations/src/pages/Login/index.tsx` e
+`apps/reservations/src/assets/images/login-lab.jpg` — commitados, não é
+mais working tree pendente (correção: versão anterior deste arquivo
+dizia "NÃO COMMITADO").
 
-Duas iterações no mesmo arquivo, nesta ordem:
+Duas iterações no mesmo arquivo, nesta ordem (ambas já no commit final):
 
 1. **Liquid glass single-column** — trocou fundo chapado (`var(--color-bg)`)
    por herdar o mesh gradient do body, card ganhou a receita de vidro de
@@ -750,6 +800,154 @@ comercial livre, sem atribuição obrigatória) — baixada de
 localmente com Pillow pra 1600×1200 JPEG progressivo (~158KB, era 3.1MB
 no original). Importada via ES module (`import loginBg from
 '../../assets/images/login-lab.jpg'`), não via `public/`.
+
+---
+
+## FRONTEND — NOVAS FEATURES (NÃO COMMITADAS, working tree 2026-07-31)
+
+Tudo abaixo existe no working tree desta sessão (confirmado por `git
+status` — nenhum commit ainda cobre isso). 100% frontend/CSS/componente
+React, zero mudança em backend/schema/API. Ordem cronológica da sessão.
+
+### 1. Polimento visual do Dashboard + dot de pendentes na sidebar
+
+- `DashboardStats.tsx`: cards de estatística ganharam a receita de vidro
+  de 3 partes (`backdrop-filter: blur(--glass-blur-s) saturate(140%)` +
+  `--glass-sheen`), raio `--radius-s`→`--radius`, padding 14→16px.
+  `Dashboard/index.tsx`: painéis de busca (turma/sala) e barra de turno
+  ganharam o mesmo tratamento — consistência entre os blocos da página.
+- `AppLayout.tsx`: dot **persistente** (não confundir com o efêmero
+  `notifyPath` já existente) no ícone "Aprovações" da sidebar, visível
+  enquanto existir ≥1 reserva `PENDING` no sistema. Reusa
+  `usePendingReservations` (mesmo wiring de `Aprovacoes/index.tsx`,
+  `createNestjsApiService()` + `{status:'PENDING'}`), `autoFetch:
+canApprove` (só busca pra COORDENADOR/ADMIN — PROFESSOR nem vê a rota
+  na sidebar). Refetch via um segundo `useRealtimeSocket` (não filtrado
+  por tipo de evento, mesmo padrão do `disp.refetch()` do Dashboard).
+  CSS **reaproveitado**, zero novo: `.sidebar-notify-dot` +
+  `@keyframes notifyPulse` já existiam (usados pelo dot efêmero).
+- Achado do detector `impeccable`: `TurnoCard`'s `borderLeft: 3px solid`
+  em `DashboardStats.tsx:159` foi flagado como antipattern `side-tab`
+  (padrão comum de UI genérica) — **usuário confirmou intencional**
+  (cor semântica real de turno, não decorativa) e a exceção foi
+  persistida em `.impeccable/config.json` (`detector.ignoreValues`,
+  escopada a esse arquivo+regra, com `reason`).
+
+### 2. Redesign dark-first — Fase 1 (fundação)
+
+Decisão de produto: dark vira o tema padrão ao abrir o app (sem preferência
+salva); light sobrevive como opção via o botão sol/lua já existente. Sem
+neumorphism (rejeitado). **Nota**: quando essa missão começou, o MEMORY.md
+não tinha essa decisão registrada apesar de o brief afirmar que tinha —
+divergência real, sinalizada na hora, não inventada aqui.
+
+- `global.css`: **inversão mecânica de `:root`/`[data-theme]`** — `:root`
+  agora é a base DARK (era light); `[data-theme='light']` é o novo
+  override (contém os valores que antes eram o `:root`). Não existe mais
+  bloco `[data-theme='dark']` (dark já é o padrão). Os tokens `-l`
+  (`--color-green-l` etc.) **não foram duplicados** — o valor dark
+  translúcido que já existia no antigo `[data-theme='dark']` foi
+  realocado pro `:root` novo; o pastel sólido original foi realocado pro
+  `[data-theme='light']` novo. `--color-bg: #07111f` (novo, era
+  `#0d1117`). `--shadow-s`/`-m` ganharam valores dark reais pela primeira
+  vez (achado: o `[data-theme='dark']` antigo nunca tinha sombra própria,
+  usava a sombra clara quase invisível no escuro). `--glass-sheen` dark
+  já estava certo (`rgba(255,255,255,.08)`), só realocado.
+- `body`: gradiente mesh dark perdeu as 2 elipses laranja (viraram navy)
+  — zero laranja no fundo, mesmas 4 posições/opacidades só recoloridas.
+  Light preserva o mesh original (navy+laranja) sem nenhuma mudança.
+- `.topbar` virou **pill flutuante**: `position: fixed` (não mais sticky
+  em fluxo), `border-radius: 28px` (= metade de `--header-h`, cápsula de
+  verdade), margem lateral 24px + topo 16px, `.main-wrap.collapsed
+.topbar` ajusta o `left` (acompanha o collapse da sidebar).
+  `.page-content` ganhou `padding-top: calc(var(--header-h) + 36px)` pra
+  compensar a pill ter saído do fluxo. Mobile (`@media max-width:768px`):
+  volta a `position: sticky` full-width com `border-bottom`, `!important`
+  em `left`/`margin` (mesmo padrão defensivo já usado por `.main-wrap`)
+  pra um `collapsed` persistido do desktop não vazar pro mobile.
+- `AppLayout.tsx`: default de tema mudou de `matchMedia('prefers-color-
+scheme: dark')` pra `'dark'` fixo quando não há escolha salva em
+  localStorage. Persistência da escolha do usuário intocada.
+- `index.html` — **fora da lista de leitura obrigatória da missão, mas
+  necessário** (senão dava flash light→dark no F5): `<html
+data-theme="light">` hardcoded virou `"dark"`; o script inline parava
+  de consultar `matchMedia` (só respeita `localStorage.theme` agora);
+  cores do loader pré-React (spinner/texto) recalibradas pro fundo
+  escuro, com override `[data-theme="light"]` restaurando o original.
+
+### 3. Calendário/Reservas integrado ao design system
+
+- Glass (receita de 3 partes) aplicado em: os 4 cards de estatística de
+  `Reservas/index.tsx` (Total/Pendentes/Aprovadas/Rejeitadas), o painel
+  do formulário "Nova reserva", o painel "Todas as reservas",
+  `RoomAvailabilityPanel.tsx`, e o wrapper de `ReservationCalendar.tsx`.
+- **Bug real corrigido**: `RoomAvailabilityPanel.tsx` usava
+  `var(--color-bg)` (fundo opaco da página inteira) nos itens internos
+  — dentro de um painel que virou glass, isso parecia um buraco em vez
+  de superfície elevada. Trocado pro token certo pra item aninhado
+  dentro de glass: `--color-surface-2` (mesmo padrão de `.slot-item`
+  dentro de `.avail-card`, já documentado no DESIGN.md). Ver Bug
+  histórico #18.
+- **FullCalendar ganhou tema pela primeira vez** — antes só existia
+  override pro popover "+N mais" (pós-F9.9); toolbar/grade/eventos
+  usavam CSS padrão do FullCalendar (visual genérico, sem relação com o
+  design system). Agora em `global.css`: toolbar (botões glass/brand-
+  ativo), cabeçalho de coluna (label style), número do dia (tabular-
+  nums), hoje destacado (`--color-accent-l`, único ember na grade),
+  eventos = pills verdes (`--color-green`/`-l` — nesta tela todo evento
+  já é uma reserva `APPROVED`, cor semântica real, não decoração).
+- **Bug real corrigido**: `text-transform: capitalize` no título do
+  toolbar quebrava "agosto de 2026" (locale pt-br, tudo minúsculo) em
+  "Agosto **De** 2026" (capitalizava a preposição também). Fix:
+  `::first-letter` em vez de `text-transform`, capitaliza só o "A"
+  inicial.
+- Achado do detector: mesmo antipattern `side-tab` em
+  `RoomAvailabilityPanel.tsx`'s `EventoItem` (`borderLeft: 3px solid`,
+  cor por tipo aula/reserva) — **sinalizado ao usuário, ainda NÃO
+  confirmado/suprimido** (diferente do achado #1 acima, que já foi
+  confirmado). Perguntar antes de mexer ou suprimir.
+
+### 4. `DatePicker`/`TimePicker` — componentes novos
+
+Dois componentes novos em `apps/reservations/src/components/ui/`
+(`DatePicker.tsx`, `TimePicker.tsx`) — dropdown customizado glass,
+substituindo `<input type="date">`/`<input type="time">` nativo em
+**6 arquivos, 12 inputs**: `Reservas/index.tsx` (1 data), `ScheduleHeader.tsx`
+(1 data), `ReservationForm.tsx` (3 data + 2 hora), `EditSelectedView.tsx`
+(2 hora), `OccupancyDashboard.tsx` (1 data), `Admin/Auditoria/index.tsx`
+(2 data).
+
+- `value`/`onChange` mantêm o **mesmo contrato** dos inputs nativos que
+  substituíram (`YYYY-MM-DD` / `HH:MM`, sempre string) — zero mudança em
+  lógica de formulário, validação ou conflito.
+- Matemática de grade do `DatePicker` usa `Date.UTC(...,12)`+`getUTC*`
+  (UTC noon trick) — **reaproveita** `ymdToUtcDate`/`todayYmd`/
+  `formatDataBR`/`weekdayShort` de `scheduleDateUtils.ts`, não duplica.
+  `buildMonthGrid()` e `buildTimeSlots()` são funções puras exportadas
+  (testáveis sem montar o componente — ainda sem teste automatizado
+  escrito, ver pendência).
+- `TimePicker` default `min='06:00' max='23:00' step={30}` — não é regra
+  de negócio nova, é o horário de reserva já documentado no projeto; o
+  backend continua sendo a validação autoritativa, isso só afeta o que
+  o dropdown lista.
+- Prop nova `align?: 'left'|'right'` nos dois componentes — **bug real
+  encontrado e corrigido**: o `DatePicker` do `ScheduleHeader` (perto da
+  borda direita da topbar do Dashboard) vazava pra fora do viewport.
+  Corrigido seguindo o mesmo padrão que `NotificationBell.tsx` já usa
+  pra esse exato problema (`right: 0` em vez de `left: 0`). Ver Bug
+  histórico #19.
+- **Bug histórico #8 corrigido de passagem**: `ReservationForm.tsx`
+  tinha 3 ocorrências de `new Date().toISOString().slice(0,10)` pra
+  calcular "hoje" (exatamente o padrão do Bug #8) — como essas linhas já
+  estavam sendo reescritas pra virar `min` do `DatePicker`, trocadas pra
+  `todayYmd()`.
+- Campos que tinham `onBlur` pra marcar "touched" (validação) tiveram
+  essa marcação movida pro `onChange` — dropdown não tem blur natural
+  equivalente ao de um input de texto.
+- Validado interativamente via Playwright (abrir, navegar mês,
+  selecionar, fechar, valor correto no campo) em dark/light/mobile —
+  sem testes automatizados (Vitest) escritos ainda pras funções puras
+  `buildMonthGrid`/`buildTimeSlots`. **Pendência real.**
 
 ---
 
