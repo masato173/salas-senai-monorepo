@@ -4,6 +4,7 @@ import { ReservationList } from '../../components/reservations/ReservationList';
 import { ReservationForm } from '../../components/reservations/ReservationForm';
 import { ReservationCalendar } from '../../components/reservations/ReservationCalendar';
 import { ReservationDetailsModal } from '../../components/reservations/ReservationDetailsModal';
+import { DayReservationsPanel } from '../../components/reservations/DayReservationsPanel';
 import { createNestjsApiService } from '../../services/nestjsApiService';
 import { useListReservations } from '../../hooks/useListReservations';
 import { useRealtimeSocket } from '../../hooks/useRealtimeSocket';
@@ -30,6 +31,8 @@ export default function ReservasPage() {
   const [turma, setTurma] = useState('');
   const [selectedDate, setSelectedDate] = useState<string>(todayYmd);
   const [selectedReservation, setSelectedReservation] = useState<ReservationDetails | null>(null);
+  // Painel de reservas do dia (clique numa data do calendário).
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   // F9.7 — NestJS é fonte única de verdade; fallback Apps Script removido.
   const service = useMemo(() => createNestjsApiService(), []);
@@ -134,6 +137,31 @@ export default function ReservasPage() {
     }
     // Erro: cancelMutation.error/status já preenchidos pelo hook; modal observa via props.
   };
+
+  // Painel de reservas do dia → clique num item chama isto com só o id
+  // (DayReservationItem tem shape reduzido, sem professor pra PROFESSOR —
+  // não dá pra montar ReservationDetails completo a partir dele). Busca a
+  // reserva em list.data (GET /reservations): pra COORDENADOR/ADMIN essa
+  // lista já é irrestrita (acha qualquer id); pra PROFESSOR é restrita à
+  // própria (restrictToOwn) — clique numa reserva de colega não encontra
+  // nada e o modal de detalhes completo não abre (mesma fronteira de
+  // privacidade do endpoint /day: PROFESSOR nunca vê nome de colega).
+  function handleDayReservationClick(id: string): void {
+    const found = list.data?.reservations.find(r => r.id === id);
+    if (!found) return;
+    setSelectedReservation({
+      id: found.id,
+      sala: found.sala,
+      data: found.data,
+      inicio: found.inicio,
+      fim: found.fim,
+      professor: found.professor,
+      turma: found.turma,
+      observacao: found.observacao,
+      createdBy: found.createdBy,
+      groupId: found.groupId ?? '',
+    });
+  }
 
   // Fonte real dos cards de stats — antes lia do store Zustand (nunca
   // populado pelo backend, sempre 0); `reservas` já é list.data?.reservations.
@@ -421,7 +449,19 @@ export default function ReservasPage() {
         error={list.error?.message ?? null}
         onRefresh={() => list.refetch()}
         onEventClick={r => setSelectedReservation(r)}
+        onDateClick={setSelectedDay}
       />
+
+      {/* Painel de reservas do dia — GET /reservations/day (sem restrictToOwn). */}
+      {selectedDay !== null && (
+        <DayReservationsPanel
+          date={selectedDay}
+          service={service}
+          userRole={loggedUser?.role ?? ''}
+          onClose={() => setSelectedDay(null)}
+          onReservationClick={handleDayReservationClick}
+        />
+      )}
 
       {/* Modal de detalhes (4.2b — cancel 2 cliques + owner-check). Sprint 4 D3 — wiring de edit. */}
       <ReservationDetailsModal

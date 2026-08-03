@@ -14,6 +14,8 @@ import type {
   CreateReservationRequest,
   CreateReservationResponse,
   CreatedReservationRow,
+  DayReservationItem,
+  DayReservationsResponse,
   ListReservationsOptions,
   ListReservationsResponse,
   ScheduleResult,
@@ -224,6 +226,14 @@ function toAdminRow(r: NestReservation): CreatedReservationRow {
   return { ...toRow(r), status: r.status };
 }
 
+// ─── Painel de reservas do dia ─────────────────────────────────
+// GET /reservations/day já devolve o shape final (DayReservationItem) —
+// diferente de NestReservation, não precisa de mapper (backend já resolve
+// room.name → sala e aplica o shape reduzido por role).
+export interface ReservationDayApi {
+  getDayReservations(date: string): Promise<DayReservationsResponse>;
+}
+
 // ─── Room cache ───────────────────────────────────────────────
 // GET /rooms é @Public — não requer auth. Cache por sessão.
 let roomCache: Map<string, string> | null = null;
@@ -242,8 +252,20 @@ export function clearRoomCache(): void {
 }
 
 // ─── Factory ──────────────────────────────────────────────────
-export function createNestjsApiService(): AppsScriptService & ReservationAdminApi {
+export function createNestjsApiService(): AppsScriptService &
+  ReservationAdminApi &
+  ReservationDayApi {
   return {
+    // ── Painel de reservas do dia: GET /reservations/day ─────
+    async getDayReservations(date: string): Promise<DayReservationsResponse> {
+      try {
+        const params = new URLSearchParams({ date });
+        const data = await apiFetch<DayReservationItem[]>(`/reservations/day?${params.toString()}`);
+        return { ok: true, data, error: null };
+      } catch (e) {
+        return { ok: false, data: null, error: toBackendError(e) };
+      }
+    },
     // ── Migrado: GET /schedules ──────────────────────────────
     // Apps Script não é mais chamado para aulas após F5.7.
     async fetchSchedule(): Promise<ScheduleResult> {

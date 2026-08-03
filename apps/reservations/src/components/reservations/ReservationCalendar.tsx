@@ -18,6 +18,9 @@ interface ReservationCalendarProps {
   error?: string | null;
   onRefresh?: () => void;
   onEventClick?: (reservation: ReservationDetails) => void;
+  // Painel de reservas do dia — clique numa CÉLULA de data (não num evento).
+  // interactionPlugin já vem instalado (usado pelo dayClick/eventClick).
+  onDateClick?: (dateStr: string) => void;
 }
 
 export function ReservationCalendar({
@@ -26,6 +29,7 @@ export function ReservationCalendar({
   error = null,
   onRefresh,
   onEventClick,
+  onDateClick,
 }: ReservationCalendarProps) {
   return (
     <div
@@ -122,6 +126,9 @@ export function ReservationCalendar({
         height={600}
         dayMaxEvents
         events={events}
+        // dateStr já vem resolvido no timeZone configurado acima
+        // (America/Manaus) — mesmo raciocínio do comentário de reservationToEvent.
+        dateClick={info => onDateClick?.(info.dateStr)}
         eventClick={info => {
           // Cast seguro: o mapper (reservationToEvent) é a única fonte que popula
           // extendedProps. Testes do mapper (6, 7, 8) garantem o shape exato.

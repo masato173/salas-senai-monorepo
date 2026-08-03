@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Post,
@@ -12,7 +13,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { ReservationStatus, Role } from '@prisma/client';
-import { ReservationsService } from './reservations.service';
+import { ReservationsService, type DayReservationItem } from './reservations.service';
 import { UpdateReservationDto } from './dtos/update-reservation.dto';
 import { UpdateStatusDto } from './dtos/update-status.dto';
 import { UpdateReservationGroupDto } from './dtos/update-reservation-group.dto';
@@ -63,6 +64,19 @@ export class ReservationsController {
       pageSize: resolvedPageSize,
       currentUser,
     });
+  }
+
+  // day ANTES de :id (mesmo padrão de POST /reservations/range) — senão
+  // ':id' captura "day" como se fosse um id de reserva.
+  @Get('day')
+  findByDay(
+    @Query('date') date: string,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<DayReservationItem[]> {
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      throw new BadRequestException('date deve estar no formato YYYY-MM-DD.');
+    }
+    return this.reservationsService.findByDay(date, req.user);
   }
 
   @Get(':id')

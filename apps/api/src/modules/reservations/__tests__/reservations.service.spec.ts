@@ -441,6 +441,88 @@ describe('ReservationsService', () => {
     });
   });
 
+  // ── findByDay (painel de reservas do dia) ───────────────────────────────────
+  describe('findByDay()', () => {
+    const dayRow = {
+      id: 'res-1',
+      inicio: '08:00',
+      fim: '10:00',
+      status: ReservationStatus.APPROVED,
+      turma: 'APB.ADM.148',
+      createdByUserId: 'prof-1',
+      room: { name: '603 Sala' },
+      user: { name: 'Prof. Silva' },
+    };
+
+    beforeEach(() => {
+      mockPrisma.reservation.findMany.mockResolvedValue([dayRow]);
+    });
+
+    it('PROFESSOR recebe shape reduzido — sem professor nem createdByUserId', async () => {
+      const result = await makeService().findByDay('2026-08-10', profUser);
+      expect(result).toEqual([
+        {
+          id: 'res-1',
+          sala: '603 Sala',
+          inicio: '08:00',
+          fim: '10:00',
+          status: ReservationStatus.APPROVED,
+          turma: 'APB.ADM.148',
+        },
+      ]);
+    });
+
+    it('COORDENADOR recebe shape completo — com professor e createdByUserId', async () => {
+      const result = await makeService().findByDay('2026-08-10', coordUser);
+      expect(result).toEqual([
+        {
+          id: 'res-1',
+          sala: '603 Sala',
+          inicio: '08:00',
+          fim: '10:00',
+          status: ReservationStatus.APPROVED,
+          turma: 'APB.ADM.148',
+          professor: 'Prof. Silva',
+          createdByUserId: 'prof-1',
+        },
+      ]);
+    });
+
+    it('ADMIN também recebe shape completo', async () => {
+      const result = await makeService().findByDay('2026-08-10', adminUser);
+      expect(result[0]).toHaveProperty('professor', 'Prof. Silva');
+      expect(result[0]).toHaveProperty('createdByUserId', 'prof-1');
+    });
+
+    it('createdByUserId null vira campo omitido (exactOptionalPropertyTypes), não null', async () => {
+      mockPrisma.reservation.findMany.mockResolvedValue([{ ...dayRow, createdByUserId: null }]);
+      const result = await makeService().findByDay('2026-08-10', coordUser);
+      expect(result[0]).not.toHaveProperty('createdByUserId');
+    });
+
+    it('query filtra status PENDING/APPROVED, date exata e deletedAt: null', async () => {
+      await makeService().findByDay('2026-08-10', profUser);
+      const calledWith = mockPrisma.reservation.findMany.mock.calls[0][0] as {
+        where: { date?: string; deletedAt?: null; status?: { in: string[] } };
+      };
+      expect(calledWith.where.date).toBe('2026-08-10');
+      expect(calledWith.where.deletedAt).toBeNull();
+      expect(calledWith.where.status?.in).toEqual([
+        ReservationStatus.PENDING,
+        ReservationStatus.APPROVED,
+      ]);
+    });
+
+    it('query usa select explícito sem notes e sem user.email', async () => {
+      await makeService().findByDay('2026-08-10', coordUser);
+      const calledWith = mockPrisma.reservation.findMany.mock.calls[0][0] as {
+        select: Record<string, unknown>;
+      };
+      expect(calledWith.select).not.toHaveProperty('notes');
+      expect(calledWith.select.user).toEqual({ select: { name: true } });
+    });
+  });
+
   // ── createRange ───────────────────────────────────────────────────────────
   describe('createRange()', () => {
     const rangeDto = {

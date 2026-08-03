@@ -193,3 +193,21 @@ export type UpdateReservationSelectedResponse = BackendEnvelope<{
   count: number;
   reservations: CreatedReservationRow[];
 }>;
+
+// ── Painel de reservas do dia (GET /reservations/day) ──
+// Espelha DayReservationItem do backend (reservations.service.ts). Shape
+// reduzido por privacidade: PROFESSOR recebe sem professor/createdByUserId;
+// COORDENADOR/ADMIN recebem os dois (os campos opcionais documentam que o
+// shape reduzido é subconjunto do completo).
+export interface DayReservationItem {
+  id: string;
+  sala: string;
+  inicio: string; // HH:MM
+  fim: string; // HH:MM
+  status: string; // 'PENDING' | 'APPROVED'
+  turma: string | null;
+  professor?: string; // só COORDENADOR/ADMIN
+  createdByUserId?: string; // só COORDENADOR/ADMIN
+}
+
+export type DayReservationsResponse = BackendEnvelope<DayReservationItem[]>;

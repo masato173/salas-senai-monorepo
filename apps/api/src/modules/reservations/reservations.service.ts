@@ -38,6 +38,21 @@ interface FindAllParams {
   currentUser: RequestUser;
 }
 
+// Painel de reservas do dia — endpoint sem restrictToOwn (todos veem todas
+// as reservas da data), shape reduzido por privacidade. `professor` e
+// `createdByUserId` opcionais documentam que o shape PROFESSOR (sem os
+// dois) é um subconjunto do shape COORDENADOR/ADMIN (com os dois).
+export interface DayReservationItem {
+  id: string;
+  sala: string;
+  inicio: string;
+  fim: string;
+  status: ReservationStatus;
+  turma: string | null;
+  professor?: string;
+  createdByUserId?: string;
+}
+
 @Injectable()
 export class ReservationsService {
   // Datas puladas por conflito em createRange não fazem parte do contrato de
@@ -83,6 +98,54 @@ export class ReservationsService {
       },
       orderBy: [{ date: 'asc' }, { inicio: 'asc' }],
       ...(paginate ? { skip: (page - 1) * pageSize, take: pageSize } : {}),
+    });
+  }
+
+  // Painel de reservas do dia (calendário → clique numa data). Diferente de
+  // findAll(): SEM restrictToOwn — todo usuário autenticado vê todas as
+  // reservas PENDING/APPROVED da data, não só as próprias. select explícito
+  // (não include) garante que `notes` e `user.email` nunca saem daqui, nem
+  // no nível da query — não é só uma questão de shaping da resposta.
+  async findByDay(date: string, requester: RequestUser): Promise<DayReservationItem[]> {
+    const reservations = await this.prisma.reservation.findMany({
+      where: {
+        date,
+        deletedAt: null,
+        status: { in: [ReservationStatus.PENDING, ReservationStatus.APPROVED] },
+      },
+      select: {
+        id: true,
+        inicio: true,
+        fim: true,
+        status: true,
+        turma: true,
+        createdByUserId: true,
+        room: { select: { name: true } },
+        user: { select: { name: true } },
+      },
+      orderBy: { inicio: 'asc' },
+    });
+
+    // COORDENADOR/ADMIN veem quem reservou; PROFESSOR só vê sala/horário/
+    // status/turma — nome do colega não é dado dele (privacidade).
+    const isPrivileged = requester.role === 'COORDENADOR' || requester.role === 'ADMIN';
+
+    return reservations.map(r => {
+      const base: DayReservationItem = {
+        id: r.id,
+        sala: r.room.name,
+        inicio: r.inicio,
+        fim: r.fim,
+        status: r.status,
+        turma: r.turma,
+      };
+      if (!isPrivileged) return base;
+      return {
+        ...base,
+        professor: r.user.name,
+        // exactOptionalPropertyTypes: spread condicional evita { createdByUserId: undefined }
+        ...(r.createdByUserId !== null ? { createdByUserId: r.createdByUserId } : {}),
+      };
     });
   }
 
