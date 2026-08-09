@@ -25,5 +25,9 @@ apps/reservations/coverage/
 # Variáveis de ambiente de teste (credenciais E2E)
 .env.test
 
+# Servidor local Docker (infra/docker) — arquivo real com secrets; o
+# template infra/docker/.env.local.example É commitado normalmente
+infra/docker/.env.local
+
 # Claude Code hooks — logs locais, não versionar
 .claude/hooks/*-log.txt

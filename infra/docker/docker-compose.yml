@@ -1,0 +1,78 @@
+# infra/docker/docker-compose.yml
+#
+# Stack completa pro servidor local do SENAI: Postgres + backend NestJS +
+# frontend React servido por nginx. Substitui Railway (backend) + Supabase
+# (banco) + GitHub Pages (frontend) — tudo na rede interna, sem depender de
+# nenhum serviço externo.
+#
+# Uso (a partir de infra/docker/, depois de preencher .env.local — ver
+# .env.local.example e README.md deste diretório):
+#   docker compose --env-file .env.local build
+#   docker compose --env-file .env.local up -d
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Sem `ports:` — só a rede interna do compose acessa o Postgres.
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - salas-senai
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - '3000:3000'
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      # Docker local: mesmo Postgres pra pool e direct — sem pgbouncer
+      # gerenciado como o Supabase em nuvem, então os dois valores são
+      # idênticos aqui (diferente de produção Railway/Supabase).
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      DIRECT_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      APPS_SCRIPT_URL: ${APPS_SCRIPT_URL}
+      APPS_SCRIPT_TOKEN: ${APPS_SCRIPT_TOKEN}
+      THROTTLE_SKIP: ${THROTTLE_SKIP}
+    networks:
+      - salas-senai
+
+  frontend:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - '80:80'
+    networks:
+      - salas-senai
+
+volumes:
+  pgdata:
+
+networks:
+  salas-senai:
+    driver: bridge
