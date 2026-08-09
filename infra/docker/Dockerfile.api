@@ -4,8 +4,9 @@
 # Multi-stage: builder compila com o monorepo pnpm inteiro (pacotes internos
 # @salas-senai/* — só @salas-senai/shared, via `import type`, elidido do JS
 # final — precisam do workspace completo pra resolver em build-time); runner
-# só copia o necessário pra rodar `node apps/api/dist/main.js` — mesmo
-# comando que já roda em produção hoje via railway.json (deploy.startCommand).
+# só copia o necessário pra rodar via entrypoint.sh (migrate deploy + seed
+# condicional + `exec node apps/api/dist/main.js` — mesmo comando que já
+# roda em produção hoje via railway.json, deploy.startCommand).
 #
 # Contexto de build esperado: raiz do monorepo (não infra/docker/), porque o
 # build depende do workspace inteiro — mesmo raciocínio do buildCommand real
@@ -75,9 +76,12 @@ COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
 COPY --from=builder /app/apps/api/package.json ./apps/api/package.json
 
+# entrypoint.sh: prisma migrate deploy (idempotente, todo boot) + seed
+# condicional (SEED_FORCE=true) + exec do servidor — ver o arquivo pros
+# comentários de cada passo.
+COPY infra/docker/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 EXPOSE 3000
 
-# Placeholder desta missão — só sobe o servidor, sem migrate/seed.
-# TODO Missão 2: trocar por entrypoint.sh (prisma migrate deploy + seed
-# condicional via SEED_FORCE) antes de subir o servidor.
-CMD ["node", "apps/api/dist/main.js"]
+ENTRYPOINT ["sh", "/app/entrypoint.sh"]

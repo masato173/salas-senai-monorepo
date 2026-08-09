@@ -43,18 +43,26 @@ já está no `.gitignore` da raiz do repo. Só o `.env.local.example`
    ```
    `postgres` sobe primeiro; `api` só inicia depois que o healthcheck
    (`pg_isready`) do Postgres passa.
-3. **Banco vazio na primeira subida** — nesta versão (Missão 1 da
-   migração), o `api` sobe mas ainda **não** roda `prisma migrate
-deploy` nem o seed sozinho (isso é a Missão 2, via `entrypoint.sh`).
-   Até lá, rodar manualmente uma vez:
-   ```powershell
-   docker compose exec api node_modules/.bin/prisma migrate deploy --schema apps/api/prisma/schema.prisma
-   docker compose exec api node apps/api/prisma/seed.js
-   ```
-   (`node_modules/.bin/prisma` funciona porque a imagem copia o
-   `node_modules` inteiro do builder, incluindo devDependencies — ver
-   nota no `Dockerfile.api` sobre isso ser deliberado nesta missão.)
-4. **Acessar**: `http://<IP-do-servidor>` pro frontend. A API responde
+3. **Migrations rodam sozinhas** — o container `api` roda
+   `infra/docker/entrypoint.sh` antes de subir o servidor:
+   `prisma migrate deploy` (idempotente — seguro em todo boot, aplica só
+   o que ainda falta) sempre, e o seed só se `SEED_FORCE=true`. Nada
+   manual aqui, diferente de uma primeira versão desta migração.
+4. **Popular o banco no PRIMEIRO boot** (salas + usuários de teste —
+   `admin@senai.edu`/`professor@senai.edu`/`coordenador@senai.edu`,
+   senha `<role>@senai2026`):
+   - No `.env.local`, deixe `SEED_FORCE=true` antes de subir pela
+     primeira vez.
+   - Depois que subir e você confirmar nos logs (`docker compose logs
+api`) que o seed rodou (`[entrypoint] Seed concluído.`), **volte
+     `SEED_FORCE` pra `false`** no `.env.local` — o seed é idempotente
+     (não duplica dado rodando de novo), mas não tem motivo pra tentar
+     rodar em todo restart do container.
+   - Se você já subiu com `SEED_FORCE=false`/vazio e quer popular
+     depois: edite o `.env.local`, rode `docker compose --env-file
+.env.local up -d --force-recreate api`, confirme no log, volte pra
+     `false` de novo.
+5. **Acessar**: `http://<IP-do-servidor>` pro frontend. A API responde
    em `http://<IP-do-servidor>:3000/health`.
 
 ## Comandos do dia a dia
@@ -94,12 +102,28 @@ Restaurar (banco vazio):
 Get-Content backup-20260810.sql | docker compose exec -T postgres psql -U postgres salas_senai
 ```
 
-## O que falta (Missão 2)
+## Entrypoint do backend
 
-O `entrypoint.sh` do backend ainda não existe — hoje o container `api`
-só sobe `node apps/api/dist/main.js` direto (placeholder, ver
-`Dockerfile.api`). A Missão 2 troca isso por um entrypoint que roda
-`prisma migrate deploy` e o seed (condicional a `SEED_FORCE`)
-automaticamente antes de subir o servidor, pra não depender dos
-comandos manuais do passo 3 acima toda vez que o banco for recriado do
-zero.
+`infra/docker/entrypoint.sh` roda em todo boot do container `api`, nesta
+ordem: `prisma migrate deploy` (sempre) → seed (só se
+`SEED_FORCE=true`) → `exec node apps/api/dist/main.js`. Comentários
+completos de cada passo estão no próprio script.
+
+## O que ainda não foi testado de verdade
+
+Estes arquivos foram criados/ajustados sem um ambiente Docker disponível
+pra rodar `docker build`/`docker compose up` de fato — a primeira subida
+real no servidor é quando isso é validado pela primeira vez. Prestar
+atenção especial a:
+
+- Se `pnpm install` completa no builder do `Dockerfile.api` (bcrypt
+  precisa compilar o binding nativo — `python3 make g++` já estão
+  instalados, mas nunca foi exercitado de verdade).
+- Se `node_modules/.bin/prisma` realmente existe e funciona na imagem
+  runner (copiada do builder — depende da estrutura de symlinks do pnpm
+  se comportar como esperado dentro do container).
+- Se o `prisma migrate deploy` do entrypoint encontra o Postgres a
+  tempo (o healthcheck do `postgres` já cobre isso, mas vale confirmar
+  no primeiro boot real).
+- Se o seed roda limpo com `SEED_FORCE=true` e povoa as 34 salas + 3
+  usuários de teste esperados.

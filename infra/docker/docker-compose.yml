@@ -53,6 +53,9 @@ services:
       APPS_SCRIPT_URL: ${APPS_SCRIPT_URL}
       APPS_SCRIPT_TOKEN: ${APPS_SCRIPT_TOKEN}
       THROTTLE_SKIP: ${THROTTLE_SKIP}
+      # Lido por infra/docker/entrypoint.sh — 'true' só no primeiro boot,
+      # depois volta pra 'false' (ver README.md).
+      SEED_FORCE: ${SEED_FORCE}
     networks:
       - salas-senai
 
