@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback, useEffect, useRef, useState } from 'react';
+import { useMemo, useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollText, RefreshCw, AlertCircle } from 'lucide-react';
 import { createNestjsApiService } from '../../../services/nestjsApiService';
 import { useAuditLogs } from '../../../hooks/useAuditLogs';
@@ -7,6 +7,7 @@ import type { Column } from '../../../components/DataTable';
 import { JsonTree } from '../../../components/JsonTree';
 import { Pagination } from '../../../components/Pagination';
 import { DatePicker } from '../../../components/ui/DatePicker';
+import { Select } from '../../../components/ui/Select';
 import type { AuditLog, AuditQuery } from '../../../types';
 
 // ─────────────────────────────────────────────────────────────
@@ -38,6 +39,16 @@ const ACTION_OPTIONS = [
 ];
 
 const ENTITY_OPTIONS = ['', 'Reservation', 'User', 'Room', 'Schedule'];
+
+const ACTION_SELECT_OPTIONS = [
+  { value: '', label: 'Todas as ações' },
+  ...ACTION_OPTIONS.filter(o => o !== '').map(o => ({ value: o, label: o.replace(/_/g, ' ') })),
+];
+
+const ENTITY_SELECT_OPTIONS = [
+  { value: '', label: 'Todas as entidades' },
+  ...ENTITY_OPTIONS.filter(o => o !== '').map(o => ({ value: o, label: o })),
+];
 
 function formatTimestamp(iso: string): string {
   try {
@@ -289,17 +300,6 @@ export default function AdminAuditoriaPage(): JSX.Element {
   const rows = data?.data ?? [];
   const totalPages = data ? Math.ceil(data.total / data.limit) : 0;
 
-  const inputStyle: React.CSSProperties = {
-    padding: '6px 10px',
-    border: '1px solid var(--color-border)',
-    borderRadius: 6,
-    background: 'var(--color-surface)',
-    color: 'var(--color-text)',
-    fontSize: 13,
-    outline: 'none',
-    minWidth: 0,
-  };
-
   return (
     <div style={{ padding: '28px 24px', maxWidth: 1200 }}>
       {/* Cabeçalho */}
@@ -367,33 +367,19 @@ export default function AdminAuditoriaPage(): JSX.Element {
           alignItems: 'end',
         }}
       >
-        <select
+        <Select
           value={filters.action}
-          onChange={e => handleFilterChange('action', e.target.value)}
-          style={inputStyle}
+          onChange={v => handleFilterChange('action', v)}
+          options={ACTION_SELECT_OPTIONS}
           aria-label="Filtrar por ação"
-        >
-          <option value="">Todas as ações</option>
-          {ACTION_OPTIONS.filter(o => o !== '').map(o => (
-            <option key={o} value={o}>
-              {o.replace(/_/g, ' ')}
-            </option>
-          ))}
-        </select>
+        />
 
-        <select
+        <Select
           value={filters.entityType}
-          onChange={e => handleFilterChange('entityType', e.target.value)}
-          style={inputStyle}
+          onChange={v => handleFilterChange('entityType', v)}
+          options={ENTITY_SELECT_OPTIONS}
           aria-label="Filtrar por entidade"
-        >
-          <option value="">Todas as entidades</option>
-          {ENTITY_OPTIONS.filter(o => o !== '').map(o => (
-            <option key={o} value={o}>
-              {o}
-            </option>
-          ))}
-        </select>
+        />
 
         <DatePicker
           value={filters.from}

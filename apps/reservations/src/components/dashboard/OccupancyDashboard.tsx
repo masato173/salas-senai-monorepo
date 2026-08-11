@@ -5,6 +5,7 @@ import type { RegistroLegado, Turno } from '../../types';
 import type { ScheduleFilterState } from './applyScheduleFilters';
 import { formatDataBR, weekdayShort } from './scheduleDateUtils';
 import { DatePicker } from '../ui/DatePicker';
+import { Select } from '../ui/Select';
 
 // Sprint A3.2 — Dashboard nativo de ocupação. Substitui o iframe legado.
 // Sprint A3.5 — REFATORADO pra apresentação CONTROLADA: o pai
@@ -127,35 +128,27 @@ export function OccupancyDashboard({
         </Field>
 
         <Field label="Sala" htmlFor="occ-sala">
-          <select
+          <Select
             id="occ-sala"
             value={filtros.sala}
-            onChange={e => onFiltroChange('sala', e.target.value)}
-            style={inputStyle}
-          >
-            <option value="">Todas</option>
-            {salasUnicas.map(s => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
+            onChange={v => onFiltroChange('sala', v)}
+            options={[
+              { value: '', label: 'Todas' },
+              ...salasUnicas.map(s => ({ value: s, label: s })),
+            ]}
+          />
         </Field>
 
         <Field label="Mês" htmlFor="occ-mes">
-          <select
+          <Select
             id="occ-mes"
             value={filtros.mes}
-            onChange={e => onFiltroChange('mes', e.target.value)}
-            style={inputStyle}
-          >
-            <option value="">Todos</option>
-            {mesesUnicos.map(m => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
+            onChange={v => onFiltroChange('mes', v)}
+            options={[
+              { value: '', label: 'Todos' },
+              ...mesesUnicos.map(m => ({ value: m, label: m })),
+            ]}
+          />
         </Field>
       </div>
 

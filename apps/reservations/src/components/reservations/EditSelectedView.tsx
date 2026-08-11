@@ -6,6 +6,7 @@ import { validateTimeInput } from '../../validators/conflict';
 import { useUpdateReservationSelected } from '../../hooks/useUpdateReservationSelected';
 import { MiniCalendar } from './MiniCalendar';
 import { TimePicker } from '../ui/TimePicker';
+import { Select } from '../ui/Select';
 import type { ReservationFormService } from './ReservationForm';
 import type {
   UpdateReservationSelectedRequest,
@@ -88,6 +89,7 @@ export function EditSelectedView({
     if (salaAtual && !all.includes(salaAtual)) all.unshift(salaAtual);
     return all;
   }, [salaAtual]);
+  const salaOptions = useMemo(() => salasList.map(s => ({ value: s, label: s })), [salasList]);
 
   const toggleData = useCallback((date: string): void => {
     setSelectedDates(prev =>
@@ -221,19 +223,13 @@ export function EditSelectedView({
       )}
 
       <Field label="Sala *" htmlFor="esel-sala">
-        <select
+        <Select
           id="esel-sala"
           value={sala}
-          onChange={e => setSala(e.target.value)}
+          onChange={setSala}
+          options={salaOptions}
           disabled={isLoading}
-          style={inputStyle}
-        >
-          {salasList.map(s => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+        />
       </Field>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>

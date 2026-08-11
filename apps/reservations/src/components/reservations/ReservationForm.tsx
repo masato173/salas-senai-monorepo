@@ -5,6 +5,7 @@ import { validateReservation } from '../../validators/reservation';
 import { ConflictAlert } from '../ui/ConflictAlert';
 import { DatePicker } from '../ui/DatePicker';
 import { TimePicker } from '../ui/TimePicker';
+import { Select } from '../ui/Select';
 import { todayYmd } from '../dashboard/scheduleDateUtils';
 import { useReservationStore } from '../../store/reservationStore';
 import { useCreateReservation } from '../../hooks/useCreateReservation';
@@ -118,6 +119,13 @@ export function ReservationForm({
   const isProxyAllowed = role === 'COORDENADOR' || role === 'ADMIN';
   const professors = useListProfessors(isProxyAllowed);
   const [selectedProfessorId, setSelectedProfessorId] = useState<string>('');
+  const professorOptions = useMemo(
+    () => [
+      { value: '', label: `Eu mesmo (${professor})` },
+      ...professors.data.map(p => ({ value: p.id, label: p.name })),
+    ],
+    [professors.data, professor],
+  );
 
   // Estado interno renomeado de 'mode' → 'period' na Fase D2 pra nao colidir
   // com a prop publica 'mode'. No edit, `period` eh forcado 'single' via computacao
@@ -597,20 +605,13 @@ export function ReservationForm({
           ownerUserId no payload, então não faz sentido mostrar no edit). */}
       {!isEditing && isProxyAllowed && (
         <Field label="Professor (reservar em nome de)" htmlFor="sel-professor">
-          <select
+          <Select
             id="sel-professor"
             value={selectedProfessorId}
-            onChange={e => setSelectedProfessorId(e.target.value)}
+            onChange={setSelectedProfessorId}
+            options={professorOptions}
             disabled={professors.loading}
-            style={inputStyle}
-          >
-            <option value="">Eu mesmo ({professor})</option>
-            {professors.data.map(p => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+          />
         </Field>
       )}
 

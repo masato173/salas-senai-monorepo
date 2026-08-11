@@ -3,7 +3,21 @@ import { Users, Search, RefreshCw, AlertCircle, ChevronLeft, ChevronRight } from
 import { createNestjsApiService } from '../../../services/nestjsApiService';
 import { useListUsers } from '../../../hooks/useListUsers';
 import { useUpdateUser } from '../../../hooks/useUpdateUser';
+import { Select } from '../../../components/ui/Select';
 import type { AdminUser, UserListParams } from '../../../types';
+
+const ROLE_FILTER_OPTIONS = [
+  { value: '', label: 'Todos os papéis' },
+  { value: 'PROFESSOR', label: 'Professor' },
+  { value: 'COORDENADOR', label: 'Coordenador' },
+  { value: 'ADMIN', label: 'Admin' },
+];
+
+const ACTIVE_FILTER_OPTIONS = [
+  { value: 'all', label: 'Todos os status' },
+  { value: 'active', label: 'Ativos' },
+  { value: 'inactive', label: 'Inativos' },
+];
 
 // ─────────────────────────────────────────────────────────────
 // AdminUsuariosPage — F6.7
@@ -419,17 +433,6 @@ export default function AdminUsuariosPage(): JSX.Element {
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / LIMIT));
 
-  const selectStyle = {
-    padding: '6px 10px',
-    border: '1px solid var(--color-border)',
-    borderRadius: 6,
-    background: 'var(--color-surface)',
-    color: 'var(--color-text)',
-    fontSize: 13,
-    outline: 'none',
-    cursor: 'pointer',
-  } as const;
-
   return (
     <>
       <style>{`@keyframes dtPulse{0%,100%{opacity:1}50%{opacity:.5}}`}</style>
@@ -541,26 +544,23 @@ export default function AdminUsuariosPage(): JSX.Element {
             />
           </div>
           {/* Role filter */}
-          <select
-            value={roleFilter}
-            onChange={e => handleRoleFilter(e.target.value as AdminUser['role'] | '')}
-            style={{ ...selectStyle, flex: '0 0 auto' }}
-          >
-            <option value="">Todos os papéis</option>
-            <option value="PROFESSOR">Professor</option>
-            <option value="COORDENADOR">Coordenador</option>
-            <option value="ADMIN">Admin</option>
-          </select>
+          <div style={{ width: '170px', flexShrink: 0 }}>
+            <Select
+              value={roleFilter}
+              onChange={v => handleRoleFilter(v as AdminUser['role'] | '')}
+              options={ROLE_FILTER_OPTIONS}
+              aria-label="Filtrar por papel"
+            />
+          </div>
           {/* Active filter */}
-          <select
-            value={activeFilter}
-            onChange={e => handleActiveFilter(e.target.value as 'all' | 'active' | 'inactive')}
-            style={{ ...selectStyle, flex: '0 0 auto' }}
-          >
-            <option value="all">Todos os status</option>
-            <option value="active">Ativos</option>
-            <option value="inactive">Inativos</option>
-          </select>
+          <div style={{ width: '150px', flexShrink: 0 }}>
+            <Select
+              value={activeFilter}
+              onChange={v => handleActiveFilter(v as 'all' | 'active' | 'inactive')}
+              options={ACTIVE_FILTER_OPTIONS}
+              aria-label="Filtrar por status"
+            />
+          </div>
         </div>
 
         {/* ─ Error banners ─ */}

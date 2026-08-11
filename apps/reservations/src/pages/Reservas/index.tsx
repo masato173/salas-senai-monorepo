@@ -20,6 +20,7 @@ import {
 import { getEventosDaSala } from '../../services/availability';
 import { RoomAvailabilityPanel } from '../../components/reservations/RoomAvailabilityPanel';
 import { DatePicker } from '../../components/ui/DatePicker';
+import { Select } from '../../components/ui/Select';
 import { SALAS } from '../../config';
 import { useAuthStore, selectUser } from '../../store/authStore';
 import type { RegistroLegado, SalaEvento } from '../../types';
@@ -91,6 +92,20 @@ export default function ReservasPage() {
   function statusDaSala(nomeSala: string): 'livre' | 'aula' | 'reserva' | 'conflito' {
     return disp.salas.find(s => s.sala === nomeSala)?.status ?? 'livre';
   }
+
+  // Options do Select de sala — label com status informativo (não desabilita
+  // a opção, conflito de horário é validado pelo backend). Depende de `disp`
+  // (mesma fonte que statusDaSala lê).
+  const salaOptions = useMemo(
+    () =>
+      SALAS.map(s => {
+        const st = statusDaSala(s);
+        const ocupada = st !== 'livre';
+        return { value: s, label: `${s}${ocupada ? ` (${st})` : ''}` };
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- statusDaSala é derivada de disp
+    [disp],
+  );
 
   // F-fix: auto-troca de sala removida — bloqueava salas com aula parcial
   // (ex: aula M e N marcava sala como indisponível mesmo com tarde livre).
@@ -252,28 +267,15 @@ export default function ReservasPage() {
                 <label htmlFor="sel-sala" style={labelStyle}>
                   Sala *
                 </label>
-                <select
+                <Select
                   id="sel-sala"
                   value={sala}
-                  onChange={e => {
-                    setSala(e.target.value);
+                  onChange={v => {
+                    setSala(v);
                     setTurma(''); // reset turma ao trocar de sala
                   }}
-                  style={inputStyle}
-                >
-                  {SALAS.map(s => {
-                    const st = statusDaSala(s);
-                    const ocupada = st !== 'livre';
-                    return (
-                      // Sala não é desabilitada — status é informativo.
-                      // Conflito de horário é validado pelo backend.
-                      <option key={s} value={s}>
-                        {s}
-                        {ocupada ? ` (${st})` : ''}
-                      </option>
-                    );
-                  })}
-                </select>
+                  options={salaOptions}
+                />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <label htmlFor="sel-turma" style={labelStyle}>
