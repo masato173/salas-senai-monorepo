@@ -130,7 +130,11 @@ export function Select({
                 aria-selected={isSelected}
                 ref={isSelected ? selectedRef : undefined}
                 onClick={() => {
-                  onChange(o.value);
+                  // Paridade com <select> nativo: só dispara onChange quando o
+                  // valor muda. Reclicar a opção já selecionada é no-op — sem
+                  // isso, callers que cascateiam efeito colateral no onChange
+                  // (ex.: resetar turma/página) disparam mesmo sem mudança real.
+                  if (o.value !== value) onChange(o.value);
                   setOpen(false);
                 }}
                 style={{
