@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Building2, Loader2 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import type { AuthUser, AuthStep } from '../../store/authStore';
@@ -187,6 +187,10 @@ export default function LoginPage(): JSX.Element {
             'Entrar'
           )}
         </button>
+
+        <p className="lp-footer-link">
+          Não tem conta? <Link to="/registro">Criar conta</Link>
+        </p>
       </form>
     );
   }
@@ -465,6 +469,20 @@ export default function LoginPage(): JSX.Element {
         .lp-spinner {
           animation: lp-spin 0.7s linear infinite;
           flex-shrink: 0;
+        }
+        .lp-footer-link {
+          margin: 0;
+          text-align: center;
+          font-size: 13px;
+          color: var(--color-muted);
+        }
+        .lp-footer-link a {
+          color: var(--color-blue);
+          font-weight: 600;
+          text-decoration: none;
+        }
+        .lp-footer-link a:hover {
+          text-decoration: underline;
         }
         .lp-footer {
           font-size: 11px;

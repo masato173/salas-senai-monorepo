@@ -5,6 +5,7 @@ import { AdminLayout } from '../layouts/AdminLayout';
 import { RouteLoader } from './RouteLoader';
 import { ProtectedRoute } from './ProtectedRoute';
 const LoginPage = lazy(() => import('../pages/Login'));
+const RegisterPage = lazy(() => import('../pages/Register'));
 
 // ─────────────────────────────────────────────────────────────
 // Lazy loading — cada página carrega só quando visitada
@@ -38,6 +39,16 @@ export const router = createBrowserRouter(
       element: (
         <Suspense fallback={<RouteLoader />}>
           <LoginPage />
+        </Suspense>
+      ),
+    },
+    {
+      // Registro público de professor — mesmo padrão do /login (fora do
+      // AppLayout, sem ProtectedRoute)
+      path: '/registro',
+      element: (
+        <Suspense fallback={<RouteLoader />}>
+          <RegisterPage />
         </Suspense>
       ),
     },

@@ -1,4 +1,4 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -45,6 +45,22 @@ export class AuthService {
       ...tokens,
       user: { id: user.id, name: user.name, email: user.email, role: user.role },
     };
+  }
+
+  // Registro público de professor — sem auto-login de propósito (decisão de
+  // produto): só cria a conta, o professor entra manualmente depois pelo
+  // /login. UsersService.create() já garante role=PROFESSOR (sem parâmetro
+  // pra outro valor) e hash bcrypt da senha.
+  async register(name: string, email: string, password: string): Promise<void> {
+    try {
+      await this.usersService.create({ name, email, password });
+    } catch (err) {
+      if (err instanceof ConflictException) {
+        this.logger.warn(`registro falhou (email já cadastrado) email=${email}`);
+      }
+      throw err;
+    }
+    this.logger.log(`registro ok email=${email}`);
   }
 
   async refresh(rawRefreshToken: string): Promise<TokenPair> {
