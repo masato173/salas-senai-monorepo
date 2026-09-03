@@ -1,6 +1,6 @@
 ---
 name: controle-salas-senai
-description: "Use SEMPRE que o trabalho envolver o projeto Controle de Salas SENAI — sistema institucional do SENAI Manaus de reserva de salas, com frontend React/TypeScript/Vitest, backend Google Apps Script + Google Sheets, e migração planejada pra NestJS/PostgreSQL. Aplica quando o usuário menciona controle de salas, salas SENAI, reservas, agendamento, useCreateReservation, useCreateReservationRange, useListReservations, useCancelReservation, useConflict, Apps Script, codigo.gs, planilha Reservas, sprint do projeto, ou qualquer trabalho tocando hooks, services, endpoints, validação de conflito, política de retry ou fases de migração. Aplica também quando o contexto sugere o projeto sem nomeá-lo — caminhos apps/reservations, PT-BR informal, suite Vitest do projeto, validação PowerShell do Apps Script, envelope ok/data/error. Codifica anti-invention, bugs históricos (Sheets 1899, clear vs window.clear, UTC noon, .bak fora do tree, .env não protege frontend estático), padrão de hooks, backend e comunicação."
+description: 'Use SEMPRE que o trabalho envolver o projeto Controle de Salas SENAI — sistema institucional do SENAI Manaus de reserva de salas, com frontend React/TypeScript/Vitest, backend Google Apps Script + Google Sheets, e migração planejada pra NestJS/PostgreSQL. Aplica quando o usuário menciona controle de salas, salas SENAI, reservas, agendamento, useCreateReservation, useCreateReservationRange, useListReservations, useCancelReservation, useConflict, Apps Script, codigo.gs, planilha Reservas, sprint do projeto, ou qualquer trabalho tocando hooks, services, endpoints, validação de conflito, política de retry ou fases de migração. Aplica também quando o contexto sugere o projeto sem nomeá-lo — caminhos apps/reservations, PT-BR informal, suite Vitest do projeto, validação PowerShell do Apps Script, envelope ok/data/error. Codifica anti-invention, bugs históricos (Sheets 1899, clear vs window.clear, UTC noon, .bak fora do tree, .env não protege frontend estático), padrão de hooks, backend e comunicação.'
 ---
 
 # Controle de Salas SENAI
@@ -21,6 +21,7 @@ NÃO é protótipo. NÃO é exemplo. NÃO recriar do zero.
 ## Regra suprema — anti-invention
 
 NUNCA inferir nem fabricar:
+
 - Nomes de campos (`startTime` vs `inicio` — sempre verificar no `appsScript.ts`)
 - Comportamento de backend não confirmado por teste rodado ou doc explícita
 - Tipos exportados, contratos, ordem de colunas
@@ -52,6 +53,7 @@ Antes de começar qualquer tarefa de código, classifique e declare o nível na 
 - CRÍTICA — contrato de API, schema/dados, autenticação, lógica de conflito/concorrência, ou algo que afete produção ou várias camadas. → Rigor máximo E PARA para confirmação antes de implementar.
 
 Exemplos neste projeto:
+
 - TRIVIAL: renomear variável local, corrigir typo, ajustar mensagem.
 - PADRÃO: novo hook seguindo o padrão, novo teste, ajuste de UI isolado.
 - CRÍTICA: tocar checkConflicts, createReservation, schema da aba Reservas, qualquer endpoint Apps Script em produção, política de retry, owner validation.
@@ -67,6 +69,7 @@ Se pular uma etapa, é pela Regra Zero — diga qual e por quê.
 - **Sem teoria solta**: toda resposta deve ter código, arquivo, comando ou caminho concreto
 
 ### Formato pra resposta de mudança significativa
+
 1. Objetivo
 2. Impacto no legado
 3. Riscos
@@ -102,6 +105,7 @@ Todos os hooks que falam com o backend seguem o mesmo formato. Detalhes completo
 **Envelope**: `{ ok: boolean, data: T | null, error: BackendError | null }`
 
 **Política de retry** (idêntica em todos os hooks de mutation/query):
+
 - Retenta APENAS: falha de rede + envelope `ok=false` com `error.code === 'INTERNAL'`
 - Nunca retenta: `NOT_FOUND`, `FORBIDDEN`, `VALIDATION`, `LOCK_TIMEOUT`, `DUPLICATE`, `CONFLICT`
 - `maxRetries` default = 2
@@ -133,7 +137,7 @@ POST → doPost → LockService.tryLock → validate (Zod-like) →
 - **Fórmula de conflito**: `newStart < existingEnd && newEnd > existingStart` (cobre overlap parcial, total, containment)
 - **Owner validation**: coluna `createdBy` no índice 9 da aba Reservas. Sempre comparar com `userEmail` do request.
 - **Idempotência por estado**: cancel de reserva já `CANCELLED` retorna `ok=true` com a reserva. Validado pelos 11/11 PowerShell tests.
-- **Token**: `senai@2026` (todos os endpoints exigem)
+- **Token**: configurado via Script Properties no Apps Script Editor (não hardcoded — ver comentário no topo de `codigo.gs`). Não documentar o valor aqui.
 - **Deploy URL**: `https://script.google.com/macros/s/AKfycbyAxnzsvR4ogYUtHsa-lWLC8DE_8FsQedC6fPgBtn--BZGSVgTsGcfDE96RFwCGrpI8Ww/exec`
 
 ### Horários
@@ -145,6 +149,7 @@ POST → doPost → LockService.tryLock → validate (Zod-like) →
 ## Bugs históricos (hard-won — não repetir)
 
 ### Sheets convertendo C/D/E pra 1899
+
 Toda escrita nas colunas C (data), D (início), E (fim) **deve** chamar `setNumberFormat('@')` logo após `appendRow`. Sem isso, o Sheets transforma strings de hora em objetos Date com base 1899. Custou debug pesado — está documentado e nunca mais.
 
 ```javascript
@@ -153,24 +158,31 @@ sheet.getRange(row, 3, 1, 3).setNumberFormat('@'); // C, D, E
 ```
 
 ### `clear()` colide com `window.clear()`
+
 Não criar função global ou método chamado `clear()`. No legado isso quebrou silenciosamente. Usar `resetFilters()`, `clearForm()`, nomes específicos.
 
 ### UTC noon obrigatório em datas
+
 Construção de Date no frontend pra paridade exata com backend:
+
 ```typescript
 const date = new Date(Date.UTC(year, month, day, 12, 0, 0)); // meio-dia UTC
 ```
+
 Evita off-by-one por timezone do Manaus (BRT, UTC-4 ou -3 dependendo do horário de verão).
 
 ### Arquivos `.bak` / backup
+
 Ficar **fora** do tree do projeto. Vitest e tsc escaneiam o monorepo inteiro e quebram em `.bak` com sintaxe parcial. Diretório sugerido: `C:\Users\Fernando Masato\OneDrive\Desktop\projetos\backups\`.
 
 ### `.env` no frontend estático = não protege nada
+
 Vite faz inline das vars `VITE_*` no bundle. Tudo que aparece no browser é público. Token atual no legado é aceito porque a planilha não tem dado sensível — não generalizar essa decisão pra dados pessoais futuros.
 
 ## Migração
 
 ### Fases (do CLAUDE.md original)
+
 - **Fase 0**: Legado funcional (em produção)
 - **Fase 1**: Modularização do frontend legado (sem mudar stack)
 - **Fase 2**: Backend proxy Node/Express (tira token do browser)
@@ -179,11 +191,13 @@ Vite faz inline das vars `VITE_*` no bundle. Tudo que aparece no browser é púb
 - **Fase 5**: SaaS completo
 
 ### Gatilho pra migrar Sheets → Postgres
+
 - Aba `Reservas` passa de ~2000 linhas, **ou**
 - Latência de leitura/escrita inaceitável
 - Decisão tomada: Postgres é fonte única, sem sync bidirecional
 
 ### Forbidden em qualquer fase
+
 - Recriar projeto do zero
 - Remover funcionalidade existente
 - Quebrar Apps Script ou Sheets em uso
@@ -197,6 +211,7 @@ Vite faz inline das vars `VITE_*` no bundle. Tudo que aparece no browser é púb
 Quando o usuário pedir status do projeto, o agente deve verificar o que mudou desde a última sessão **lendo arquivos do projeto**, não inferindo. Memória do Claude pode estar desatualizada — o repo é fonte da verdade.
 
 Última snapshot conhecida (sujeita a obsolescência):
+
 - Sprint 2 e 2.5 concluídos
 - Sprint 3 em andamento: backend cancel validado (11/11 PowerShell), hooks `useListReservations` + `useCancelReservation` em implementação
 - Vitest: ~116 testes passando, alvo ~134 com hooks completos
@@ -214,6 +229,7 @@ Pra trabalho de código no projeto:
 5. **Próximo passo** — o que fazer depois ou o que esperar
 
 Pra code review:
+
 - Veredito direto (aplica? não aplica?)
 - Bugs encontrados com linha e correção
 - Observações secundárias (não bloqueiam)
@@ -222,6 +238,7 @@ Pra code review:
 ## Quando entrar em dúvida
 
 Se o usuário pedir algo que pode ferir uma das regras acima:
+
 - **PARAR** e explicar o trade-off
 - Apresentar 2 caminhos: o pedido + a alternativa segura
 - Esperar a decisão dele — nunca executar silenciosamente

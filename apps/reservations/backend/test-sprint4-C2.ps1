@@ -10,8 +10,11 @@
 # Salvar este arquivo como UTF-8 sem BOM eh seguro pra ASCII puro.
 # ============================================================
 
-$URL   = 'https://script.google.com/macros/s/AKfycbyAxnzsvR4ogYUtHsa-lWLC8DE_8FsQedC6fPgBtn--BZGSVgTsGcfDE96RFwCGrpI8Ww/exec'
-$TOKEN = 'senai@2026'
+# Antes de rodar, defina (nunca hardcode aqui):
+#   $env:APPS_SCRIPT_URL   = "https://script.google.com/macros/s/XXXX/exec"
+#   $env:APPS_SCRIPT_TOKEN = "valor-aqui"
+$URL   = $env:APPS_SCRIPT_URL
+$TOKEN = $env:APPS_SCRIPT_TOKEN
 
 
 # -- Datas unicas por execucao --------------------------------

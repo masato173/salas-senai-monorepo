@@ -13,12 +13,18 @@
 //   [4] TURNOS_VALIDOS whitelist mantida
 //   [5] getTurnoMap com .find().trim() mantido
 //
+// SECRET_TOKEN e SPREADSHEET_ID vêm de Script Properties, NUNCA hardcoded
+// aqui. Configurar em: Apps Script Editor → Configurações do projeto (⚙️)
+// → Script Properties → adicionar SECRET_TOKEN e SPREADSHEET_ID. Sem essas
+// properties configuradas, SECRET_TOKEN fica null e o token nunca bate
+// (fail-closed) — não é um bug, é o comportamento seguro por padrão.
+//
 // Após salvar: Implantar → Gerenciar implantações → lápis
 //              → Nova versão → Implantar
 // ============================================================
 
-var SPREADSHEET_ID = '1Y4DP1Q4nxx4BMwEoYFd7R673G8asaubM9-XzSrGUPLE';
-var SECRET_TOKEN   = 'senai@2026';
+var SPREADSHEET_ID = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
+var SECRET_TOKEN   = PropertiesService.getScriptProperties().getProperty('SECRET_TOKEN');
 var TURNOS_VALIDOS = ['M', 'V', 'N'];
 var MESES = [
   'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
@@ -154,6 +160,24 @@ function doPost(e) {
   try {
     var body = JSON.parse(e.postData.contents);
     var action = body.action || '';
+
+    // Sync de Schedule (SyncModule/NestJS) — token no corpo, não na URL,
+    // pra não vazar em logs de proxy/servidor nem no header Referer.
+    if (action === 'listSchedules') {
+      var reqToken = body.token || '';
+      if (reqToken !== SECRET_TOKEN) {
+        return jsonResponse({ error: 'Acesso negado.' });
+      }
+      try {
+        var ss       = SpreadsheetApp.openById(SPREADSHEET_ID);
+        var dados    = parsePlanilha(ss);
+        var turnoMap = getTurnoMap(ss);
+        return jsonResponse({ ok: true, total: dados.length, dados: dados, turnoMap: turnoMap });
+      } catch (err) {
+        Logger.log('ERRO em doPost/listSchedules: ' + err.stack);
+        return jsonResponse({ error: 'Erro interno ao processar dados.' });
+      }
+    }
 
     if (action === 'createReservation')         return createReservation(body);
     if (action === 'createReservationRange')    return createReservationRange(body);

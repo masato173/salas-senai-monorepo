@@ -7,8 +7,11 @@
 #   2) codigo.gs.sprint4 colado no editor + Nova versão implantada.
 # ============================================================
 
-$URL   = 'https://script.google.com/macros/s/AKfycbyAxnzsvR4ogYUtHsa-lWLC8DE_8FsQedC6fPgBtn--BZGSVgTsGcfDE96RFwCGrpI8Ww/exec'
-$TOKEN = 'senai@2026'
+# Antes de rodar, defina (nunca hardcode aqui):
+#   $env:APPS_SCRIPT_URL   = "https://script.google.com/macros/s/XXXX/exec"
+#   $env:APPS_SCRIPT_TOKEN = "valor-aqui"
+$URL   = $env:APPS_SCRIPT_URL
+$TOKEN = $env:APPS_SCRIPT_TOKEN
 
 
 # ── Datas únicas por execução ────────────────────────────────

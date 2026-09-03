@@ -30,13 +30,13 @@ doPost(e)
 
 ## Endpoints atuais
 
-| Endpoint | Método | Status | Testes |
-|----------|--------|--------|--------|
-| `createReservation` | POST | produção | Vitest + PowerShell |
-| `createReservationRange` | POST | produção | Vitest + PowerShell |
-| `listReservations` | GET | produção | PowerShell |
-| `cancelReservation` | POST | produção | 11/11 PowerShell |
-| `checkConflict` | GET | produção | Vitest |
+| Endpoint                 | Método | Status   | Testes              |
+| ------------------------ | ------ | -------- | ------------------- |
+| `createReservation`      | POST   | produção | Vitest + PowerShell |
+| `createReservationRange` | POST   | produção | Vitest + PowerShell |
+| `listReservations`       | GET    | produção | PowerShell          |
+| `cancelReservation`      | POST   | produção | 11/11 PowerShell    |
+| `checkConflict`          | GET    | produção | Vitest              |
 
 ## LockService
 
@@ -49,7 +49,7 @@ if (!acquired) {
   return jsonResponse({
     ok: false,
     data: null,
-    error: { code: 'LOCK_TIMEOUT', message: 'Sistema ocupado, tente novamente.' }
+    error: { code: 'LOCK_TIMEOUT', message: 'Sistema ocupado, tente novamente.' },
   });
 }
 
@@ -66,20 +66,20 @@ Lock é por script (não por linha). Contention real esperada em horário de pic
 
 Índices (1-based, como Apps Script usa):
 
-| Col | Índice | Tipo | Observação |
-|-----|--------|------|------------|
-| A | 1 | id | ULID/UUID gerado no backend |
-| B | 2 | sala | string |
-| C | 3 | data | **text format obrigatório** |
-| D | 4 | inicio | **text format obrigatório** |
-| E | 5 | fim | **text format obrigatório** |
-| F | 6 | professor | string |
-| G | 7 | turma | string |
-| H | 8 | observacao | string opcional |
-| I | 9 | status | `ACTIVE` \| `CANCELLED` |
-| J | 10 | createdBy | email do criador — **owner validation** |
-| K | 11 | createdAt | ISO timestamp |
-| L | 12 | updatedAt | ISO timestamp |
+| Col | Índice | Tipo       | Observação                              |
+| --- | ------ | ---------- | --------------------------------------- |
+| A   | 1      | id         | ULID/UUID gerado no backend             |
+| B   | 2      | sala       | string                                  |
+| C   | 3      | data       | **text format obrigatório**             |
+| D   | 4      | inicio     | **text format obrigatório**             |
+| E   | 5      | fim        | **text format obrigatório**             |
+| F   | 6      | professor  | string                                  |
+| G   | 7      | turma      | string                                  |
+| H   | 8      | observacao | string opcional                         |
+| I   | 9      | status     | `ACTIVE` \| `CANCELLED`                 |
+| J   | 10     | createdBy  | email do criador — **owner validation** |
+| K   | 11     | createdAt  | ISO timestamp                           |
+| L   | 12     | updatedAt  | ISO timestamp                           |
 
 ⚠️ **Memória do projeto diz "createdBy at column index 9".** Se a contagem do projeto for **0-based** (J seria índice 9), o mapping é diferente. **Verificar no `codigo.gs` antes de assumir.** Anti-invention rule.
 
@@ -111,6 +111,7 @@ campo `createdBy` na linha = `userEmail` do request?
 ```
 
 Exceções (quando aplicável, **verificar antes de assumir**):
+
 - Admins/coordenadores podem cancelar reservas de terceiros
 - Cancel de reserva já `CANCELLED` pode pular owner-check (depende da implementação — verificar `codigo.gs`)
 
@@ -119,12 +120,11 @@ Exceções (quando aplicável, **verificar antes de assumir**):
 Fórmula canônica:
 
 ```javascript
-const hasConflict =
-  newStart < existingEnd &&
-  newEnd > existingStart;
+const hasConflict = newStart < existingEnd && newEnd > existingStart;
 ```
 
 Cobre:
+
 - Overlap parcial (qualquer direção)
 - Overlap total
 - Containment (nova dentro de existente ou vice-versa)
@@ -136,7 +136,7 @@ Query no Sheets: ler aba Reservas, filtrar onde `data === newData && sala === ne
 
 ## Token e deploy
 
-- **Token atual**: `senai@2026` (passado em todas as requests)
+- **Token**: configurado via Script Properties no Apps Script Editor (não hardcoded — ver comentário no topo de `codigo.gs`). Não documentar o valor aqui.
 - **Deploy URL atual** (sujeita a mudança em redeploy): `https://script.google.com/macros/s/AKfycbyAxnzsvR4ogYUtHsa-lWLC8DE_8FsQedC6fPgBtn--BZGSVgTsGcfDE96RFwCGrpI8Ww/exec`
 - **DEV spreadsheet**: `1Y4DP1Q4nxx4BMwEoYFd7R673G8asaubM9-XzSrGUPLE` — safe pra testes
 - **PROD spreadsheet**: `1m97CzLNYJlqTq3qECYtpGgeS_skIL0B3eoWNIx7edXk` — **NUNCA tocar em sessão de dev**
@@ -149,7 +149,7 @@ Padrão do projeto: scripts PowerShell que batem direto no deploy URL pra valida
 
 ```powershell
 $body = @{
-  token = 'senai@2026'
+  token = $env:APPS_SCRIPT_TOKEN
   action = 'cancelReservation'
   payload = @{ id = 'r-test-1' }
   userEmail = 'professor@senai.edu'

@@ -5,7 +5,9 @@
 # e confirme visualmente que não houve duplicação.
 # ============================================================
 
-$URL = 'https://script.google.com/macros/s/AKfycbyAxnzsvR4ogYUtHsa-lWLC8DE_8FsQedC6fPgBtn--BZGSVgTsGcfDE96RFwCGrpI8Ww/exec'
+# Antes de rodar, defina (nunca hardcode aqui):
+#   $env:APPS_SCRIPT_URL = "https://script.google.com/macros/s/XXXX/exec"
+$URL = $env:APPS_SCRIPT_URL
 
 
 # ── Helper: monta o body JSON ─────────────────────────────────
