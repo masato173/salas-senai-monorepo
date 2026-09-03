@@ -34,7 +34,7 @@ var MESES = [
 // ── Ponto de entrada HTTP GET ──────────────────────────────────
 function doGet(e) {
   var token = (e.parameter && e.parameter.token) || '';
-  if (token !== SECRET_TOKEN) {
+  if (!SECRET_TOKEN || token !== SECRET_TOKEN) {
     return jsonResponse({ error: 'Acesso negado.' });
   }
 
@@ -48,13 +48,18 @@ function doGet(e) {
     return listReservations(e.parameter);
   }
 
+  return listSchedules('doGet');
+}
+
+// ── Lista aulas da planilha (chamado por doGet e por doPost/listSchedules) ──
+function listSchedules(logTag) {
   try {
     var ss       = SpreadsheetApp.openById(SPREADSHEET_ID);
     var dados    = parsePlanilha(ss);
     var turnoMap = getTurnoMap(ss);
     return jsonResponse({ ok: true, total: dados.length, dados: dados, turnoMap: turnoMap });
   } catch (err) {
-    Logger.log('ERRO em doGet: ' + err.stack);
+    Logger.log('ERRO em ' + logTag + ': ' + err.stack);
     return jsonResponse({ error: 'Erro interno ao processar dados.' });
   }
 }
@@ -165,18 +170,10 @@ function doPost(e) {
     // pra não vazar em logs de proxy/servidor nem no header Referer.
     if (action === 'listSchedules') {
       var reqToken = body.token || '';
-      if (reqToken !== SECRET_TOKEN) {
+      if (!SECRET_TOKEN || reqToken !== SECRET_TOKEN) {
         return jsonResponse({ error: 'Acesso negado.' });
       }
-      try {
-        var ss       = SpreadsheetApp.openById(SPREADSHEET_ID);
-        var dados    = parsePlanilha(ss);
-        var turnoMap = getTurnoMap(ss);
-        return jsonResponse({ ok: true, total: dados.length, dados: dados, turnoMap: turnoMap });
-      } catch (err) {
-        Logger.log('ERRO em doPost/listSchedules: ' + err.stack);
-        return jsonResponse({ error: 'Erro interno ao processar dados.' });
-      }
+      return listSchedules('doPost/listSchedules');
     }
 
     if (action === 'createReservation')         return createReservation(body);

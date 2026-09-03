@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import * as https from 'node:https';
 import type { SyncResult } from '@salas-senai/shared';
 
 interface AppsScriptDadoItem {
@@ -39,6 +40,65 @@ export class SyncService {
     private readonly config: ConfigService,
   ) {}
 
+  private postJsonOnce(
+    targetUrl: string,
+    payload: string,
+  ): Promise<{ status: number; location: string | null; body: string }> {
+    return new Promise((resolve, reject) => {
+      const req = https.request(
+        new URL(targetUrl),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(payload),
+          },
+        },
+        res => {
+          let body = '';
+          res.setEncoding('utf8');
+          res.on('data', chunk => {
+            body += chunk;
+          });
+          res.on('end', () => {
+            resolve({
+              status: res.statusCode ?? 0,
+              location: res.headers.location ?? null,
+              body,
+            });
+          });
+        },
+      );
+      req.on('error', reject);
+      req.write(payload);
+      req.end();
+    });
+  }
+
+  // Apps Script Web Apps sempre respondem /exec com 302 pra
+  // script.googleusercontent.com (é lá que o script de fato executa).
+  // fetch nativo demove POST pra GET e descarta o body ao seguir esse
+  // redirect automaticamente (WHATWG fetch spec); redirect:'manual' no
+  // fetch do Node não resolve, porque undici retorna um "opaque redirect"
+  // (status 0, headers ilegíveis) nesse modo — igual um browser. Por isso
+  // usamos https.request direto e reenviamos o mesmo POST pra URL do
+  // Location manualmente.
+  private async postToAppsScript(url: string, payload: string): Promise<string> {
+    let currentUrl = url;
+    for (let hop = 0; hop < 5; hop++) {
+      const { status, location, body } = await this.postJsonOnce(currentUrl, payload);
+      if (status >= 300 && status < 400) {
+        if (!location) {
+          throw new Error(`Apps Script redirecionou (status ${status}) sem header Location.`);
+        }
+        currentUrl = new URL(location, currentUrl).toString();
+        continue;
+      }
+      return body;
+    }
+    throw new Error('Apps Script excedeu o limite de redirecionamentos ao sincronizar.');
+  }
+
   async syncSchedules(userId: string): Promise<SyncResult> {
     if (SyncService.isRunning) {
       throw new ConflictException(
@@ -60,12 +120,15 @@ export class SyncService {
         );
       }
 
-      // Fetch do Apps Script (mesmo formato consumido pelo frontend)
-      const fetchUrl = `${url}?token=${encodeURIComponent(token)}`;
+      // Fetch do Apps Script — token vai no corpo da requisição, nunca na URL
+      // (query string vaza em logs de proxy/servidor e no header Referer).
       let raw: AppsScriptResponse;
       try {
-        const res = await fetch(fetchUrl);
-        raw = (await res.json()) as AppsScriptResponse;
+        const body = await this.postToAppsScript(
+          url,
+          JSON.stringify({ action: 'listSchedules', token }),
+        );
+        raw = JSON.parse(body) as AppsScriptResponse;
       } catch (e) {
         throw new InternalServerErrorException(
           `Falha ao buscar dados do Apps Script: ${e instanceof Error ? e.message : String(e)}`,
