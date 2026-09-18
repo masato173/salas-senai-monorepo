@@ -19,7 +19,7 @@ const mockTx = {
 
 const mockPrisma = {
   room: { findUnique: vi.fn() },
-  reservation: { findMany: vi.fn(), findUnique: vi.fn() },
+  reservation: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
   user: { findUnique: vi.fn(), findMany: vi.fn() },
   $transaction: vi
     .fn()
@@ -27,7 +27,7 @@ const mockPrisma = {
 };
 
 const mockConflictService = { hasConflict: vi.fn() };
-const mockOwnershipService = { assertCanModify: vi.fn() };
+const mockOwnershipService = { assertCanModify: vi.fn(), assertOwnerOrPrivileged: vi.fn() };
 const mockAuditService = { log: vi.fn() };
 const mockRealtimeService = {
   reservationCreated: vi.fn(),
@@ -274,6 +274,17 @@ describe('ReservationsService', () => {
       );
     });
 
+    // ── COORDENADOR também pode modificar reserva de terceiro (Issue 3, C4) ──
+    // baseReservation.userId === 'prof-1' !== coordUser.userId — não é o dono.
+    it('COORDENADOR consegue atualizar reserva de outro usuário (não dono)', async () => {
+      const result = await makeService().update('res-1', { fim: '11:00' }, coordUser);
+      expect(result.fim).toBe('11:00');
+      expect(mockAuditService.log).toHaveBeenCalledWith(
+        mockTx,
+        expect.objectContaining({ action: 'UPDATE_RESERVATION' }),
+      );
+    });
+
     it('lança ConflictException quando novo horário conflita', async () => {
       mockConflictService.hasConflict.mockResolvedValue(true);
       await expect(makeService().update('res-1', { inicio: '09:00' }, adminUser)).rejects.toThrow(
@@ -335,6 +346,17 @@ describe('ReservationsService', () => {
       );
     });
 
+    // ── COORDENADOR também pode modificar reserva de terceiro (Issue 3, C4) ──
+    // baseReservation.userId === 'prof-1' !== coordUser.userId — não é o dono.
+    it('COORDENADOR consegue cancelar reserva de outro usuário (não dono)', async () => {
+      const result = await makeService().cancel('res-1', coordUser);
+      expect(result.status).toBe(ReservationStatus.CANCELLED);
+      expect(mockAuditService.log).toHaveBeenCalledWith(
+        mockTx,
+        expect.objectContaining({ action: 'DELETE_RESERVATION' }),
+      );
+    });
+
     it('retorna reserva já cancelada sem erro (idempotência)', async () => {
       const cancelled = { ...baseReservation, status: ReservationStatus.CANCELLED };
       mockOwnershipService.assertCanModify.mockResolvedValue(cancelled);
@@ -350,6 +372,24 @@ describe('ReservationsService', () => {
         new ForbiddenException('Sem permissão.'),
       );
       await expect(makeService().cancel('res-1', profUser)).rejects.toThrow(ForbiddenException);
+    });
+
+    // ── Ownership no atalho de idempotência (Issue 3, C2) ───────────────
+    it('lança ForbiddenException ao cancelar reserva JÁ CANCELADA de outro usuário', async () => {
+      const cancelledDeOutroUser = {
+        ...baseReservation,
+        userId: 'prof-2',
+        status: ReservationStatus.CANCELLED,
+      };
+      // quickLookup (findUnique direto) roda ANTES de assertCanModify no cancel()
+      mockPrisma.reservation.findUnique.mockResolvedValue(cancelledDeOutroUser);
+      mockOwnershipService.assertOwnerOrPrivileged.mockImplementation(() => {
+        throw new ForbiddenException('Você não tem permissão para modificar esta reserva.');
+      });
+
+      await expect(makeService().cancel('res-1', profUser)).rejects.toThrow(ForbiddenException);
+      // Nenhum efeito colateral — não abre transação, não vaza o objeto
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
     });
 
     // ── Notificação — evento 4 (Fase C2) ────────────────────────────────
@@ -407,6 +447,50 @@ describe('ReservationsService', () => {
           type: NotificationType.RESERVATION_REJECTED,
         }),
       );
+    });
+  });
+
+  // ── updateGroup — ownership por item (Issue 3, C3) ─────────────────────────
+  describe('updateGroup()', () => {
+    const reservaDonoA = { ...baseReservation, id: 'res-a', userId: 'prof-1', groupId: 'grp-1' };
+    const reservaDonoB = { ...baseReservation, id: 'res-b', userId: 'prof-2', groupId: 'grp-1' };
+
+    beforeEach(() => {
+      mockPrisma.reservation.findMany.mockResolvedValue([reservaDonoA, reservaDonoB]);
+      mockConflictService.hasConflict.mockResolvedValue(false);
+      // updateGroup atualiza via this.prisma.reservation.update, não tx.
+      mockPrisma.reservation.update.mockImplementation(({ where }: { where: { id: string } }) => ({
+        ...baseReservation,
+        id: where.id,
+      }));
+    });
+
+    it('grupo com reservas de donos diferentes — usuário só dono da primeira não consegue atualizar as outras', async () => {
+      mockOwnershipService.assertOwnerOrPrivileged
+        .mockImplementationOnce(() => undefined) // reservaDonoA — profUser é o dono
+        .mockImplementationOnce(() => {
+          throw new ForbiddenException('Você não tem permissão para modificar esta reserva.');
+        }); // reservaDonoB — não é o dono
+
+      await expect(
+        makeService().updateGroup({ groupId: 'grp-1', fim: '11:00' }, profUser),
+      ).rejects.toThrow(ForbiddenException);
+
+      // A reserva do dono (A) já tinha sido atualizada antes da falha em B —
+      // sem transação agrupando o lote, sem rollback (mesmo padrão de updateSelected).
+      expect(mockPrisma.reservation.update).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.reservation.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'res-a' } }),
+      );
+    });
+
+    it('COORDENADOR consegue atualizar grupo com reservas de donos diferentes', async () => {
+      mockOwnershipService.assertOwnerOrPrivileged.mockImplementation(() => undefined);
+
+      const result = await makeService().updateGroup({ groupId: 'grp-1', fim: '11:00' }, coordUser);
+
+      expect(result.count).toBe(2);
+      expect(mockPrisma.reservation.update).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -683,7 +767,9 @@ describe('ReservationsService', () => {
   describe('findOne()', () => {
     it('lança NotFoundException quando reserva não existe', async () => {
       mockPrisma.reservation.findUnique.mockResolvedValue(null);
-      await expect(makeService().findOne('nao-existe')).rejects.toThrow(NotFoundException);
+      await expect(makeService().findOne('nao-existe', adminUser)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('lança NotFoundException quando reserva está soft-deleted', async () => {
@@ -691,7 +777,32 @@ describe('ReservationsService', () => {
         ...baseReservation,
         deletedAt: new Date(),
       });
-      await expect(makeService().findOne('res-1')).rejects.toThrow(NotFoundException);
+      await expect(makeService().findOne('res-1', adminUser)).rejects.toThrow(NotFoundException);
+    });
+
+    // ── Ownership (Issue 3, C1) ────────────────────────────────────────
+    it('PROFESSOR lê a própria reserva com sucesso', async () => {
+      mockPrisma.reservation.findUnique.mockResolvedValue(baseReservation); // userId: 'prof-1'
+      const result = await makeService().findOne('res-1', profUser);
+      expect(result.id).toBe('res-1');
+    });
+
+    it('PROFESSOR tentando ler reserva de outro usuário recebe NotFoundException', async () => {
+      mockPrisma.reservation.findUnique.mockResolvedValue(baseReservation); // userId: 'prof-1'
+      const outroProf = { userId: 'prof-2', email: 'prof2@senai.edu', role: 'PROFESSOR' };
+      await expect(makeService().findOne('res-1', outroProf)).rejects.toThrow(NotFoundException);
+    });
+
+    it('COORDENADOR consegue ler reserva de qualquer usuário', async () => {
+      mockPrisma.reservation.findUnique.mockResolvedValue(baseReservation); // userId: 'prof-1'
+      const result = await makeService().findOne('res-1', coordUser);
+      expect(result.id).toBe('res-1');
+    });
+
+    it('ADMIN consegue ler reserva de qualquer usuário', async () => {
+      mockPrisma.reservation.findUnique.mockResolvedValue(baseReservation); // userId: 'prof-1'
+      const result = await makeService().findOne('res-1', adminUser);
+      expect(result.id).toBe('res-1');
     });
   });
 });

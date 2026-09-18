@@ -80,8 +80,8 @@ export class ReservationsController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string): Promise<Reservation> {
-    return this.reservationsService.findOne(id);
+  findOne(@Param('id') id: string, @Request() req: AuthenticatedRequest): Promise<Reservation> {
+    return this.reservationsService.findOne(id, req.user);
   }
 
   @Roles(Role.PROFESSOR, Role.COORDENADOR, Role.ADMIN)

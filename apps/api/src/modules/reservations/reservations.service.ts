@@ -149,7 +149,7 @@ export class ReservationsService {
     });
   }
 
-  async findOne(id: string): Promise<Reservation> {
+  async findOne(id: string, currentUser: RequestUser): Promise<Reservation> {
     const reservation = await this.prisma.reservation.findUnique({
       where: { id },
       include: {
@@ -159,6 +159,13 @@ export class ReservationsService {
     });
 
     if (!reservation || reservation.deletedAt !== null) {
+      throw new NotFoundException(`Reserva "${id}" não encontrada.`);
+    }
+
+    // PROFESSOR só vê a própria (mesmo escopo do restrictToOwn em findAll);
+    // NotFoundException — não confirma a um estranho que o ID existe.
+    const canViewAny = currentUser.role === 'COORDENADOR' || currentUser.role === 'ADMIN';
+    if (!canViewAny && reservation.userId !== currentUser.userId) {
       throw new NotFoundException(`Reserva "${id}" não encontrada.`);
     }
 
@@ -319,7 +326,14 @@ export class ReservationsService {
   async cancel(id: string, currentUser: RequestUser): Promise<Reservation> {
     // Buscar incluindo soft-deleted para suportar idempotência de cancel
     const quickLookup = await this.prisma.reservation.findUnique({ where: { id } });
-    if (quickLookup?.status === ReservationStatus.CANCELLED) return quickLookup;
+    if (quickLookup?.status === ReservationStatus.CANCELLED) {
+      // Posse verificada mesmo no atalho — sem isso, qualquer usuário
+      // autenticado recebia o objeto inteiro de uma reserva alheia já
+      // cancelada. assertCanModify não serve aqui: ele trata soft-deleted
+      // (que uma reserva CANCELLED sempre é) como "não encontrada".
+      this.ownershipService.assertOwnerOrPrivileged(quickLookup, currentUser);
+      return quickLookup;
+    }
 
     // Reserva ativa — assertCanModify verifica existência e ownership normalmente
     const existing = await this.ownershipService.assertCanModify(id, currentUser);
@@ -435,10 +449,12 @@ export class ReservationsService {
     if (reservations.length === 0) {
       throw new NotFoundException(`Nenhuma reserva encontrada para o grupo "${dto.groupId}".`);
     }
-    // Verifica permissão na primeira reserva do grupo
-    await this.ownershipService.assertCanModify(reservations[0].id, currentUser);
     const updated: Reservation[] = [];
     for (const r of reservations) {
+      // Verifica permissão por item (não só no primeiro) — reservations já
+      // veio de um findMany com deletedAt: null, então usamos a checagem em
+      // memória (sem I/O) em vez de reconsultar com assertCanModify.
+      this.ownershipService.assertOwnerOrPrivileged(r, currentUser);
       const resolvedRoomId = dto.roomId ?? r.roomId;
       const resolvedInicio = dto.inicio ?? r.inicio;
       const resolvedFim = dto.fim ?? r.fim;
