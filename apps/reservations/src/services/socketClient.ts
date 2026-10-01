@@ -68,6 +68,16 @@ export interface NotificationEventPayload {
 
 type NotificationEventCallback = (payload: NotificationEventPayload) => void;
 
+// Sinal de ocupação (Issue 5, A4) — vai pra TODOS os sockets, sem dado de
+// pessoa. Os eventos reservation.* completos agora só chegam ao dono e aos
+// coordenadores; telas de ocupação (Dashboard) escutam este aqui.
+export interface OccupancyChangedPayload {
+  roomId: string;
+  date: string; // YYYY-MM-DD
+}
+
+type OccupancyEventCallback = (payload: OccupancyChangedPayload) => void;
+
 // Singleton
 let instance: Socket | null = null;
 
@@ -81,6 +91,9 @@ const listeners = new Set<EventCallback>();
 // em produção — menor risco manter dois emitters paralelos e idênticos
 // em espírito do que arriscar o existente.
 const notificationListeners = new Set<NotificationEventCallback>();
+
+// Terceiro mini-emitter, mesmo padrão dos dois acima.
+const occupancyListeners = new Set<OccupancyEventCallback>();
 
 function registerSocketListeners(socket: Socket): void {
   // Registra socket.on 1× por evento — nunca acumula handlers
@@ -103,6 +116,16 @@ function registerSocketListeners(socket: Socket): void {
         cb(payload);
       } catch (err) {
         console.error('[Realtime] notification listener error:', err);
+      }
+    });
+  });
+
+  socket.on('occupancy.changed', (payload: OccupancyChangedPayload) => {
+    occupancyListeners.forEach(cb => {
+      try {
+        cb(payload);
+      } catch (err) {
+        console.error('[Realtime] occupancy listener error:', err);
       }
     });
   });
@@ -149,5 +172,13 @@ export function subscribeToNotificationEvents(cb: NotificationEventCallback): ()
   notificationListeners.add(cb);
   return () => {
     notificationListeners.delete(cb);
+  };
+}
+
+// Mesmo padrão — mini-emitter separado pra occupancy.changed (Issue 5, A4).
+export function subscribeToOccupancyEvents(cb: OccupancyEventCallback): () => void {
+  occupancyListeners.add(cb);
+  return () => {
+    occupancyListeners.delete(cb);
   };
 }

@@ -111,9 +111,11 @@ export function DashboardPage(): JSX.Element {
   const stats = useDashboardStats(date, { enabled: true });
 
   // F7.3b — realtime: reserva muda em qualquer sala → disponibilidade do
-  // dia e stats do backend são recarregadas.
+  // dia e stats do backend são recarregadas. Escuta o sinal de ocupação
+  // (chega a todo usuário, sem dado de pessoa) e não os eventos
+  // reservation.*, que desde a Issue 5 (A4) só vão pro dono + coordenadores.
   useRealtimeSocket({
-    onReservationEvent: (_event, _payload) => {
+    onOccupancyChange: () => {
       disp.refetch();
       stats.refetch();
     },

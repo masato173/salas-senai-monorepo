@@ -9,6 +9,11 @@ import type { Server, Socket } from 'socket.io';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { resolveCorsOrigins } from '../../common/cors-origins.util';
 
+// Room de quem aprova reservas (COORDENADOR + ADMIN). Recebe os eventos
+// completos de reserva de todo mundo — o painel de Aprovações e os dots da
+// sidebar dependem disso (Aprovacoes/index.tsx não tem polling).
+export const COORDINATORS_ROOM = 'coordenadores';
+
 // Namespace /rooms — auth JWT no handshake (F4.10b).
 // Cliente envia token em: io('/rooms', { auth: { token: accessToken } })
 // Conexões sem token válido são desconectadas antes de receber eventos.
@@ -60,7 +65,6 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
 
     try {
       const payload = this.jwtService.verify<JwtPayload>(token);
-      // Armazena dados do usuário no socket para uso futuro (rooms por role, F4.10c)
       client.data = {
         userId: payload.sub,
         email: payload.email,
@@ -72,6 +76,10 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       // (confirmado no .d.ts do socket.io instalado) — não precisamos
       // aguardar, só evitar floating promise.
       void client.join(payload.sub);
+      // Room por role: só quem aprova recebe os eventos de reserva alheia.
+      if (payload.role === 'COORDENADOR' || payload.role === 'ADMIN') {
+        void client.join(COORDINATORS_ROOM);
+      }
     } catch {
       // Token inválido ou expirado — desconecta sem vazar detalhes do erro
       client.disconnect();

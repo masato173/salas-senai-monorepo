@@ -16,8 +16,9 @@ function aula(inicio: string, fim: string, turma = 'APB.ADM.148'): SalaEvento {
   return { tipo: 'aula', sala: '', data: '2026-07-22', inicio, fim, turma, turno: 'M' };
 }
 
-function reserva(inicio: string, fim: string, professor = 'Prof. Silva'): SalaEvento {
-  return { tipo: 'reserva', sala: '', data: '2026-07-22', inicio, fim, professor };
+// Sem `professor`: /availability é público e não devolve nome de pessoa.
+function reserva(inicio: string, fim: string): SalaEvento {
+  return { tipo: 'reserva', sala: '', data: '2026-07-22', inicio, fim };
 }
 
 describe('sortSalas', () => {

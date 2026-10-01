@@ -15,7 +15,7 @@ interface SalaEvento {
   fim: string;
   turno?: Turno | null;
   turma?: string;
-  professor?: string;
+  // Sem `professor`: endpoint é @Public — nome de pessoa não sai daqui.
   id?: string;
 }
 
@@ -85,9 +85,6 @@ export class AvailabilityService {
         status: ReservationStatus.APPROVED,
         deletedAt: null,
       },
-      include: {
-        user: { select: { name: true } },
-      },
     });
 
     // Aulas do dia (Schedule) — filtradas por turno se especificado.
@@ -138,7 +135,6 @@ export class AvailabilityService {
           data: r.date,
           inicio: r.inicio,
           fim: r.fim,
-          professor: r.user.name,
           id: r.id,
           // turma é opcional em Reservation (String?) — guard !== null, não
           // !== undefined, porque o Prisma tipa campo nullable como T|null

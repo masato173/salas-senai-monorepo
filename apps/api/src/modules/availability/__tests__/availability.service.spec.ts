@@ -132,14 +132,24 @@ describe('AvailabilityService', () => {
       expect(sala.status).toBe('livre');
     });
 
-    it('inclui professor e id no evento de reserva', async () => {
+    it('inclui id no evento de reserva, mas NUNCA o nome do professor (endpoint público)', async () => {
       mockReservationDelegate.findMany.mockResolvedValue([makeReservation({ roomId: 'r1' })]);
 
       const result = await makeService().getAvailability({ date: '2026-07-10' });
       const evento = result.salas.find(s => s.sala === '01 Sala')!.eventos[0];
 
-      expect(evento.professor).toBe('Prof. Teste');
       expect(evento.id).toBe('res-1');
+      expect(evento).not.toHaveProperty('professor');
+      expect(JSON.stringify(result)).not.toContain('Prof. Teste');
+    });
+
+    it('não busca o usuário da reserva no banco (sem include de user)', async () => {
+      mockReservationDelegate.findMany.mockResolvedValue([]);
+
+      await makeService().getAvailability({ date: '2026-07-10' });
+
+      const args = mockReservationDelegate.findMany.mock.calls[0][0] as { include?: unknown };
+      expect(args.include).toBeUndefined();
     });
 
     it('reserva de outra sala não afeta status de sala diferente', async () => {
