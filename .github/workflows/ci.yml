@@ -60,9 +60,27 @@ jobs:
     runs-on: ubuntu-latest
     needs: validate
 
+    # Banco efêmero do próprio runner — o E2E não depende mais do Supabase.
+    # Os secrets DATABASE_URL/DIRECT_URL ficam exclusivos do cd.yml (produção).
+    # Credenciais descartáveis: o container nasce e morre com o job.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: salas_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      DIRECT_URL: ${{ secrets.DIRECT_URL }}
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/salas_e2e
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/salas_e2e
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
       APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
       APPS_SCRIPT_TOKEN: ${{ secrets.APPS_SCRIPT_TOKEN }}
@@ -96,19 +114,45 @@ jobs:
       - name: Build backend
         run: pnpm --filter @salas-senai/api build
 
+      # As migrations de RLS da ADR-001 fazem REVOKE ... FROM anon/authenticated
+      # sem checar se o role existe — esses roles só existem no Supabase. Num
+      # Postgres puro o migrate abortaria com 'role "anon" does not exist'.
+      # Cria os dois (NOLOGIN, idempotente); as migrations não são editadas.
+      - name: Create Supabase roles (anon, authenticated)
+        working-directory: apps/api
+        run: |
+          pnpm exec prisma db execute --url "$DIRECT_URL" --stdin <<'SQL'
+          DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+              CREATE ROLE anon NOLOGIN;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+              CREATE ROLE authenticated NOLOGIN;
+            END IF;
+          END $$;
+          SQL
+
       - name: Run Prisma migrations
         run: pnpm --filter @salas-senai/api exec prisma migrate deploy
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+          DIRECT_URL: ${{ env.DIRECT_URL }}
+
+      # Banco novo não tem usuários — o seed cria admin/professor/coordenador
+      # @senai.edu com as mesmas senhas dos E2E_*. O guard de seed.ts só bloqueia
+      # com NODE_ENV=production, que este job não define.
+      - name: Seed test users
+        run: pnpm --filter @salas-senai/api exec prisma db seed
+        env:
+          DIRECT_URL: ${{ env.DIRECT_URL }}
 
       - name: Start backend
         working-directory: apps/api
         run: node dist/main.js &
         env:
           PORT: 3000
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+          DIRECT_URL: ${{ env.DIRECT_URL }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
           APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
