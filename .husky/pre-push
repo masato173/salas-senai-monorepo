@@ -1,5 +1,5 @@
 #!/bin/sh
 # Garante que typecheck, testes e build do app reservations passam antes de qualquer push.
-# Escopo: só @salas-senai/reservations (apps/web e packages/* têm erros pré-existentes
+# Escopo: só @salas-senai/reservations (packages/* tem erros pré-existentes
 # não relacionados ao trabalho ativo — checados separadamente quando necessário).
 pnpm --filter @salas-senai/reservations run typecheck && pnpm --filter @salas-senai/reservations run test && pnpm --filter @salas-senai/reservations run build

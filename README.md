@@ -80,8 +80,7 @@ pnpm --filter @salas-senai/reservations test
 # E2E (Playwright) — requer backend e frontend no ar
 pnpm test:e2e
 
-# Typecheck e lint (apps/api e apps/reservations — apps/web e apps/legacy
-# são código legado descontinuado, fora do escopo de manutenção deste repo)
+# Typecheck e lint (apps/api e apps/reservations)
 pnpm --filter @salas-senai/api build
 pnpm --filter @salas-senai/api lint
 pnpm --filter @salas-senai/reservations typecheck
