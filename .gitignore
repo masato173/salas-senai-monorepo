@@ -31,3 +31,11 @@ infra/docker/.env.local
 
 # Claude Code hooks — logs locais, não versionar
 .claude/hooks/*-log.txt
+
+# Variáveis de ambiente — qualquer .env em qualquer pasta; só templates entram.
+# `.env.*` também casa `.env.local.example`, por isso a negação `.env.*.example`.
+.env
+.env.*
+!.env.example
+!.env.*.example
+!*.env.example
