@@ -39,3 +39,8 @@ infra/docker/.env.local
 !.env.example
 !.env.*.example
 !*.env.example
+
+# saidas de ferramentas locais
+test-results/
+playwright-report/
+graphify-out/
