@@ -30,25 +30,27 @@ echo "[entrypoint] Aplicando migrations (prisma migrate deploy)..."
 node_modules/.bin/prisma migrate deploy --schema apps/api/prisma/schema.prisma
 echo "[entrypoint] Migrations aplicadas."
 
-# Seed só roda quando pedido explicitamente via SEED_FORCE=true. O seed é
-# idempotente (upsert em vez de create — rodar 2x não duplica sala/usuário),
-# mas mesmo assim não faz sentido tentar rodar em todo restart do
-# container — ver infra/docker/README.md: SEED_FORCE deve voltar pra
-# 'false' depois do primeiro boot.
+# Seed só roda quando pedido explicitamente via SEED_FORCE=true, e NUNCA em
+# produção (issue 2). O container roda com NODE_ENV=production o tempo todo
+# (Dockerfile.api + docker-compose.yml), então neste deploy SEED_FORCE=true
+# falha fechado: aborta o boot com exit 1 em vez de rodar o seed.
+#
+# Antes isto forçava o NODE_ENV de desenvolvimento só no comando do seed — na
+# prática CONTORNAVA o guard de produção de apps/api/prisma/seed.ts. O
+# guard continua intacto; aqui ele não é mais burlado. Dados iniciais de
+# produção vêm de dump/restore ou do procedimento manual do README.md.
+#
+# Fora de produção o seed roda normalmente e exige SEED_ADMIN_PASSWORD,
+# SEED_COORDENADOR_PASSWORD e SEED_PROFESSOR_PASSWORD no ambiente.
 if [ "$SEED_FORCE" = "true" ]; then
+  if [ "$NODE_ENV" = "production" ]; then
+    echo "[entrypoint] ERRO: SEED_FORCE=true com NODE_ENV=production — o seed nao roda em producao." >&2
+    echo "[entrypoint] Dados iniciais vem de dump/restore ou do procedimento manual (infra/docker/README.md)." >&2
+    echo "[entrypoint] Volte SEED_FORCE para false e suba de novo." >&2
+    exit 1
+  fi
   echo "[entrypoint] SEED_FORCE=true — rodando seed..."
-  # apps/api/prisma/seed.ts (compilado pra seed.js no estágio builder,
-  # Missão 1) tem um guard de segurança que ABORTA se NODE_ENV=production
-  # — proteção pra nunca rodar senhas de teste conhecidas (role@senai2026)
-  # contra um banco real por engano. O container roda com
-  # NODE_ENV=production o tempo todo (Dockerfile.api + docker-compose.yml).
-  #
-  # NÃO removemos nem contornamos esse guard — a forma certa de rodar o
-  # seed aqui é sobrescrever NODE_ENV só PRA ESTE COMANDO, prefixando a
-  # variável na mesma linha (sem `export`). Isso não muda o NODE_ENV do
-  # resto do script nem do processo final do node — só desse processo
-  # filho específico, que termina antes da linha seguinte rodar.
-  NODE_ENV=development node apps/api/prisma/seed.js
+  node apps/api/prisma/seed.js
   echo "[entrypoint] Seed concluído."
 else
   echo "[entrypoint] SEED_FORCE != true — pulando seed."

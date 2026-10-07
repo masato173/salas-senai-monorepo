@@ -1,7 +1,8 @@
 import { PrismaClient, RoomType } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { resolveSeedPasswords } from './seed-passwords';
 
-// F9.2 — o seed cria usuários com senhas de teste conhecidas (role@senai2026).
+// F9.2 — o seed cria usuários com senhas de teste (SEED_*_PASSWORD, issue 2).
 // Rodar contra o banco de produção seria uma falha de segurança grave: qualquer
 // pessoa com acesso a este repositório saberia as credenciais. Abortar sempre.
 if (process.env['NODE_ENV'] === 'production') {
@@ -10,6 +11,10 @@ if (process.env['NODE_ENV'] === 'production') {
       'teste conhecidas e nunca deve rodar contra o banco de produção.',
   );
 }
+
+// Issue 2 — senhas só por env, validadas ANTES de qualquer acesso ao banco
+// (o PrismaClient é criado logo abaixo). Ausente/curta: aborta sem ecoar valor.
+const seedPasswords = resolveSeedPasswords(process.env);
 
 const directUrl = process.env['DIRECT_URL'];
 if (!directUrl) throw new Error('DIRECT_URL nao configurada');
@@ -72,17 +77,17 @@ async function main(): Promise<void> {
 
   // Usuário admin para desenvolvimento — trocar senha em produção
   console.log('Seeding admin user...');
-  const passwordHash = await bcrypt.hash('admin@senai2026', 12);
+  const passwordHash = await bcrypt.hash(seedPasswords.admin, 12);
   await prisma.user.upsert({
     where: { email: 'admin@senai.edu' },
     update: {},
     create: { name: 'Admin SENAI', email: 'admin@senai.edu', passwordHash, role: 'ADMIN' },
   });
-  console.log('Admin: admin@senai.edu / admin@senai2026');
+  console.log('Admin: admin@senai.edu (senha vinda de SEED_ADMIN_PASSWORD)');
 
   // Professor para testes
   console.log('Seeding professor user...');
-  const professorHash = await bcrypt.hash('professor@senai2026', 12);
+  const professorHash = await bcrypt.hash(seedPasswords.professor, 12);
   await prisma.user.upsert({
     where: { email: 'professor@senai.edu' },
     update: {},
@@ -93,11 +98,11 @@ async function main(): Promise<void> {
       role: 'PROFESSOR',
     },
   });
-  console.log('Professor: professor@senai.edu / professor@senai2026');
+  console.log('Professor: professor@senai.edu (senha vinda de SEED_PROFESSOR_PASSWORD)');
 
   // Coordenador para testes
   console.log('Seeding coordenador user...');
-  const coordenadorHash = await bcrypt.hash('coordenador@senai2026', 12);
+  const coordenadorHash = await bcrypt.hash(seedPasswords.coordenador, 12);
   await prisma.user.upsert({
     where: { email: 'coordenador@senai.edu' },
     update: {},
@@ -108,7 +113,7 @@ async function main(): Promise<void> {
       role: 'COORDENADOR',
     },
   });
-  console.log('Coordenador: coordenador@senai.edu / coordenador@senai2026');
+  console.log('Coordenador: coordenador@senai.edu (senha vinda de SEED_COORDENADOR_PASSWORD)');
 }
 
 main()

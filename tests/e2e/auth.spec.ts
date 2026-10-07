@@ -2,9 +2,10 @@ import { test, expect } from './fixtures/test.fixture';
 import { LoginPage } from './pages/LoginPage';
 import { AppPage } from './pages/AppPage';
 import { setupAdminSession } from './helpers/auth';
+import { requireEnv } from './helpers/env';
 
 const ADMIN_EMAIL = process.env['E2E_ADMIN_EMAIL'] ?? '';
-const ADMIN_PASSWORD = process.env['E2E_ADMIN_PASSWORD'] ?? '';
+const ADMIN_PASSWORD = requireEnv('E2E_ADMIN_PASSWORD');
 
 test.describe('Autenticação', () => {
   test('login válido com admin redireciona para dashboard', async ({ page }) => {

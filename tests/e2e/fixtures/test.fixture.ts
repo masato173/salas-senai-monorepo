@@ -1,5 +1,6 @@
 import { test as base, expect, type Page } from '@playwright/test';
 import { loginViaApi, injectAuth } from './auth.fixture';
+import { requireEnv } from '../helpers/env';
 
 const API_URL = process.env['API_URL'] ?? 'http://localhost:3000';
 
@@ -13,7 +14,7 @@ export const test = base.extend<AuthFixtures>({
     const auth = await loginViaApi(
       API_URL,
       process.env['E2E_ADMIN_EMAIL'] ?? '',
-      process.env['E2E_ADMIN_PASSWORD'] ?? '',
+      requireEnv('E2E_ADMIN_PASSWORD'),
     );
     await injectAuth(page, auth);
     await use(page);
@@ -22,7 +23,7 @@ export const test = base.extend<AuthFixtures>({
     const auth = await loginViaApi(
       API_URL,
       process.env['E2E_PROFESSOR_EMAIL'] ?? '',
-      process.env['E2E_PROFESSOR_PASSWORD'] ?? '',
+      requireEnv('E2E_PROFESSOR_PASSWORD'),
     );
     await injectAuth(page, auth);
     await use(page);

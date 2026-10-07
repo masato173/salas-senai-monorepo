@@ -3,14 +3,15 @@ import { ReservationApi } from './fixtures/reservation.api';
 import { tomorrow } from './helpers/dates';
 import { loginViaApi } from './fixtures/auth.fixture';
 import type { LoginResponse } from './fixtures/auth.fixture';
+import { requireEnv } from './helpers/env';
 
 const API_URL = process.env['API_URL'] ?? 'http://localhost:3000';
 const ADMIN_EMAIL = process.env['E2E_ADMIN_EMAIL'] ?? '';
-const ADMIN_PASSWORD = process.env['E2E_ADMIN_PASSWORD'] ?? '';
+const ADMIN_PASSWORD = requireEnv('E2E_ADMIN_PASSWORD');
 const COORD_EMAIL = process.env['E2E_COORDENADOR_EMAIL'] ?? '';
-const COORD_PASSWORD = process.env['E2E_COORDENADOR_PASSWORD'] ?? '';
+const COORD_PASSWORD = requireEnv('E2E_COORDENADOR_PASSWORD');
 const PROF_EMAIL = process.env['E2E_PROFESSOR_EMAIL'] ?? '';
-const PROF_PASSWORD = process.env['E2E_PROFESSOR_PASSWORD'] ?? '';
+const PROF_PASSWORD = requireEnv('E2E_PROFESSOR_PASSWORD');
 
 // Sala real do sistema — mesma usada em reservations.spec.ts
 const TEST_ROOM_NAME = '603 Sala';
