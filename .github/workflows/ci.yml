@@ -87,11 +87,8 @@ jobs:
       API_URL: http://localhost:3000
       BASE_URL: http://localhost:5173
       E2E_ADMIN_EMAIL: admin@senai.edu
-      E2E_ADMIN_PASSWORD: admin@senai2026
       E2E_PROFESSOR_EMAIL: professor@senai.edu
-      E2E_PROFESSOR_PASSWORD: professor@senai2026
       E2E_COORDENADOR_EMAIL: coordenador@senai.edu
-      E2E_COORDENADOR_PASSWORD: coordenador@senai2026
 
     steps:
       - uses: actions/checkout@v4
@@ -138,9 +135,23 @@ jobs:
           DATABASE_URL: ${{ env.DATABASE_URL }}
           DIRECT_URL: ${{ env.DIRECT_URL }}
 
+      # Senhas efêmeras por execução (issue 2) — nenhuma senha literal no
+      # workflow. ::add-mask:: é registrado ANTES de gravar no GITHUB_ENV, então
+      # o valor sai como *** em qualquer log. O mesmo valor vai para SEED_* (o
+      # seed grava o hash) e E2E_* (o Playwright faz login com ele).
+      - name: Generate ephemeral E2E passwords
+        run: |
+          for role in ADMIN COORDENADOR PROFESSOR; do
+            pw="$(openssl rand -base64 24 | tr -d '\n')"
+            echo "::add-mask::$pw"
+            echo "SEED_${role}_PASSWORD=$pw" >> "$GITHUB_ENV"
+            echo "E2E_${role}_PASSWORD=$pw" >> "$GITHUB_ENV"
+          done
+
       # Banco novo não tem usuários — o seed cria admin/professor/coordenador
-      # @senai.edu com as mesmas senhas dos E2E_*. O guard de seed.ts só bloqueia
-      # com NODE_ENV=production, que este job não define.
+      # @senai.edu com as senhas SEED_*_PASSWORD geradas no step anterior
+      # (vêm do GITHUB_ENV; sem elas o seed aborta). O guard de seed.ts só
+      # bloqueia com NODE_ENV=production, que este job não define.
       - name: Seed test users
         run: pnpm --filter @salas-senai/api exec prisma db seed
         env:

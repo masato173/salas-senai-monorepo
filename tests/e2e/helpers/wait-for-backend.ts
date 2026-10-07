@@ -1,10 +1,12 @@
 // GlobalSetup — acorda Supabase antes de rodar specs (Bug #1).
 // POST /auth/login valida NestJS + PostgreSQL de uma vez.
 
+import { requireEnv } from './env';
+
 export default async function waitForBackend(): Promise<void> {
   const API_URL = process.env['API_URL'] ?? 'http://localhost:3000';
   const EMAIL = process.env['E2E_ADMIN_EMAIL'] ?? '';
-  const PASSWORD = process.env['E2E_ADMIN_PASSWORD'] ?? '';
+  const PASSWORD = requireEnv('E2E_ADMIN_PASSWORD');
 
   const MAX_RETRIES = 10;
   const RETRY_DELAY_MS = 3_000;
