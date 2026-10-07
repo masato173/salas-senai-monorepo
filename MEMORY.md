@@ -356,7 +356,7 @@ n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind='r';`
 - Confirmar que o primeiro deploy real (`f7799a5` em diante) completou
   com sucesso no Railway — ainda não validado em nenhuma sessão, checar
   dashboard
-- Trocar senhas das contas de produção (role@senai2026 são de teste)
+- Rotacionar as senhas das contas de produção (admin, coordenador, professor) antes de a API voltar ao ar — Issue 2, pendente no VPS
 - Autenticação institucional (SSO/LDAP) — pendência desde ADR-003, não iniciada
 - Reset de senha (professor esqueceu a senha) — próxima leva planejada
   depois do registro público (`2a4b9cb`): nível 1 ADMIN reseta
