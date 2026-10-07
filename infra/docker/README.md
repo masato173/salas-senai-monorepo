@@ -46,22 +46,32 @@ já está no `.gitignore` da raiz do repo. Só o `.env.local.example`
 3. **Migrations rodam sozinhas** — o container `api` roda
    `infra/docker/entrypoint.sh` antes de subir o servidor:
    `prisma migrate deploy` (idempotente — seguro em todo boot, aplica só
-   o que ainda falta) sempre, e o seed só se `SEED_FORCE=true`. Nada
+   o que ainda falta) sempre, e o seed só fora de produção (ver passo 4). Nada
    manual aqui, diferente de uma primeira versão desta migração.
-4. **Popular o banco no PRIMEIRO boot** (salas + usuários de teste —
-   `admin@senai.edu`/`professor@senai.edu`/`coordenador@senai.edu`,
-   senha `<role>@senai2026`):
-   - No `.env.local`, deixe `SEED_FORCE=true` antes de subir pela
-     primeira vez.
-   - Depois que subir e você confirmar nos logs (`docker compose logs
-api`) que o seed rodou (`[entrypoint] Seed concluído.`), **volte
-     `SEED_FORCE` pra `false`** no `.env.local` — o seed é idempotente
-     (não duplica dado rodando de novo), mas não tem motivo pra tentar
-     rodar em todo restart do container.
-   - Se você já subiu com `SEED_FORCE=false`/vazio e quer popular
-     depois: edite o `.env.local`, rode `docker compose --env-file
-.env.local up -d --force-recreate api`, confirme no log, volte pra
-     `false` de novo.
+4. **Dados iniciais (salas e contas)** — o seed **não roda em produção**.
+   Este compose sobe com `NODE_ENV=production`, e o entrypoint aborta o
+   boot (exit 1) se `SEED_FORCE=true` (issue 2). Deixe `SEED_FORCE=false`.
+   - **Migrando um banco que já existe**: restaure um dump (ver "Backup
+     manual do banco (pg_dump)" abaixo). É o caminho preferido.
+   - **Banco novo, sem dump** (procedimento manual, uma vez só, decisão
+     consciente do operador): defina no SEU shell três senhas fortes e
+     únicas (12+ caracteres, nunca reaproveitadas nem gravadas em arquivo do
+     repo) e rode o seed num container avulso:
+     ```powershell
+     $env:SEED_ADMIN_PASSWORD = Read-Host "Senha admin"
+     $env:SEED_COORDENADOR_PASSWORD = Read-Host "Senha coordenador"
+     $env:SEED_PROFESSOR_PASSWORD = Read-Host "Senha professor"
+     docker compose --env-file .env.local run --rm `
+       -e NODE_ENV=development `
+       -e SEED_ADMIN_PASSWORD -e SEED_COORDENADOR_PASSWORD -e SEED_PROFESSOR_PASSWORD `
+       --entrypoint node api apps/api/prisma/seed.js
+     Remove-Item Env:SEED_ADMIN_PASSWORD, Env:SEED_COORDENADOR_PASSWORD, Env:SEED_PROFESSOR_PASSWORD
+     ```
+     `-e VAR` sem valor repassa do seu shell — a senha não fica no comando
+     nem no histórico. O seed cria as 34 salas e as contas
+     `admin@senai.edu`/`coordenador@senai.edu`/`professor@senai.edu`, e
+     não imprime senha. Guarde as senhas num cofre e troque-as no primeiro
+     acesso.
 5. **Acessar**: `http://<IP-do-servidor>` pro frontend. A API responde
    em `http://<IP-do-servidor>:3000/health`.
 
@@ -105,8 +115,9 @@ Get-Content backup-20260810.sql | docker compose exec -T postgres psql -U postgr
 ## Entrypoint do backend
 
 `infra/docker/entrypoint.sh` roda em todo boot do container `api`, nesta
-ordem: `prisma migrate deploy` (sempre) → seed (só se
-`SEED_FORCE=true`) → `exec node apps/api/dist/main.js`. Comentários
+ordem: `prisma migrate deploy` (sempre) → seed (só se `SEED_FORCE=true` E
+`NODE_ENV` diferente de `production` — em produção ele aborta o boot) →
+`exec node apps/api/dist/main.js`. Comentários
 completos de cada passo estão no próprio script.
 
 ## O que ainda não foi testado de verdade
@@ -125,5 +136,5 @@ atenção especial a:
 - Se o `prisma migrate deploy` do entrypoint encontra o Postgres a
   tempo (o healthcheck do `postgres` já cobre isso, mas vale confirmar
   no primeiro boot real).
-- Se o seed roda limpo com `SEED_FORCE=true` e povoa as 34 salas + 3
-  usuários de teste esperados.
+- Se o procedimento manual do passo 4 (seed em container avulso) povoa as
+  34 salas e as 3 contas esperadas.
