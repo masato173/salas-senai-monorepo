@@ -1,4 +1,0 @@
-#!/bin/sh
-# Regenera CHANGELOG.md após cada commit (incremental, não commita automaticamente).
-# Para commitar o CHANGELOG: git add CHANGELOG.md && git commit -m "docs: changelog"
-pnpm changelog
