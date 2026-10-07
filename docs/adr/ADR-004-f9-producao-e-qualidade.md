@@ -86,8 +86,13 @@ throttling por IP funcione corretamente atrás do proxy do Railway.
 
 **Decisão:** `prisma/seed.ts` lança erro e aborta se
 `process.env.NODE_ENV === 'production'`, na primeira linha executável do
-script. As senhas de teste (`admin@senai2026`, `professor@senai2026`,
-`coordenador@senai2026`) permanecem como estão — não foram rotacionadas.
+script. As senhas de teste (fixas, no formato `<role>@senai****`)
+permaneceram como estavam — não foram rotacionadas.
+
+> **Superado pelo [ADR-005](ADR-005-senhas-de-seed-por-env.md)** (issue 2):
+> as senhas de seed deixaram de ser fixas e passaram a vir de
+> `SEED_*_PASSWORD`, sem default. A rotação das contas de produção é
+> operacional e está registrada lá como pendência.
 
 **Alternativas consideradas:**
 
