@@ -14,7 +14,7 @@ jobs:
   # ── Job 1: Typecheck + Lint + Unit Tests ─────────────────────
   validate:
     name: Typecheck + Lint + Unit Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -57,7 +57,7 @@ jobs:
   # ── Job 2: E2E (Playwright) ───────────────────────────────────
   e2e:
     name: E2E (Playwright)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: validate
 
     # Banco efêmero do próprio runner — o E2E não depende mais do Supabase.
