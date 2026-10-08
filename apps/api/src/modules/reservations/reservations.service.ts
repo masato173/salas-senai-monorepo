@@ -126,8 +126,12 @@ export class ReservationsService {
       orderBy: { inicio: 'asc' },
     });
 
-    // COORDENADOR/ADMIN veem quem reservou; PROFESSOR só vê sala/horário/
-    // status/turma — nome do colega não é dado dele (privacidade).
+    // Issue 5 (fase 2) — decisão de produto: QUALQUER usuário autenticado vê
+    // o nome do professor responsável (o DONO, relação `user`/userId — nunca
+    // quem criou em proxy). Substitui a regra anterior (4994fff), em que só
+    // COORDENADOR/ADMIN recebiam o nome. createdByUserId continua só pra
+    // COORDENADOR/ADMIN. Endpoint é autenticado; o público /availability
+    // segue sem nome.
     const isPrivileged = requester.role === 'COORDENADOR' || requester.role === 'ADMIN';
 
     return reservations.map(r => {
@@ -138,11 +142,11 @@ export class ReservationsService {
         fim: r.fim,
         status: r.status,
         turma: r.turma,
+        professor: r.user.name,
       };
       if (!isPrivileged) return base;
       return {
         ...base,
-        professor: r.user.name,
         // exactOptionalPropertyTypes: spread condicional evita { createdByUserId: undefined }
         ...(r.createdByUserId !== null ? { createdByUserId: r.createdByUserId } : {}),
       };

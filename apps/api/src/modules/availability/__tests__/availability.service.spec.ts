@@ -143,6 +143,32 @@ describe('AvailabilityService', () => {
       expect(JSON.stringify(result)).not.toContain('Prof. Teste');
     });
 
+    // Issue 5 (fase 2): a resposta de /availability é pública — nenhuma chave
+    // de pessoa em nenhum nível do JSON, mesmo com o nome restaurado no
+    // Dashboard (que vem de /reservations/day, autenticado).
+    it('varredura recursiva: nenhuma chave professor/name/email/user em nenhum nível', async () => {
+      mockReservationDelegate.findMany.mockResolvedValue([makeReservation({ roomId: 'r1' })]);
+      mockScheduleDelegate.findMany.mockResolvedValue([makeSchedule({})]);
+
+      const result = await makeService().getAvailability({ date: '2026-07-10' });
+
+      const proibidas = new Set(['professor', 'name', 'email', 'user', 'userId', 'notes']);
+      const encontradas: string[] = [];
+      const visitar = (valor: unknown, caminho: string): void => {
+        if (Array.isArray(valor)) {
+          valor.forEach((item, i) => visitar(item, `${caminho}[${i}]`));
+        } else if (valor !== null && typeof valor === 'object') {
+          for (const [chave, filho] of Object.entries(valor)) {
+            if (proibidas.has(chave)) encontradas.push(`${caminho}.${chave}`);
+            visitar(filho, `${caminho}.${chave}`);
+          }
+        }
+      };
+      visitar(result, 'resposta');
+
+      expect(encontradas).toEqual([]);
+    });
+
     it('não busca o usuário da reserva no banco (sem include de user)', async () => {
       mockReservationDelegate.findMany.mockResolvedValue([]);
 

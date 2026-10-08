@@ -1,5 +1,6 @@
 import { type CSSProperties } from 'react';
 import type { DisponibilidadeSala, RoomStatus, SalaEvento } from '../../types';
+import { professorLabel } from './professorNames';
 
 // Unificação Schedule+Reservation — visão do dia via GET /availability
 // (DisponibilidadeSala.eventos já mistura tipo:'aula' e tipo:'reserva').
@@ -9,6 +10,9 @@ import type { DisponibilidadeSala, RoomStatus, SalaEvento } from '../../types';
 interface OccupancyUnifiedProps {
   salas: DisponibilidadeSala[];
   isLoading: boolean;
+  // Issue 5 (fase 2) — usuário logado e nomes de GET /reservations/day ainda
+  // carregando: chip de reserva sem nome mostra um skeleton curto no lugar.
+  namesLoading?: boolean;
 }
 
 // Paleta de STATUS da sala — mesma convenção de STATUS_BADGE em
@@ -64,7 +68,30 @@ export function getViewState(salas: DisponibilidadeSala[], isLoading: boolean): 
   return 'data';
 }
 
-export function OccupancyUnified({ salas, isLoading }: OccupancyUnifiedProps): JSX.Element {
+// Nome do professor responsável (dono da reserva) — só chega aqui pra
+// usuário autenticado (ver professorNames.ts). Texto React (escapado), nome
+// longo truncado por CSS com o nome completo no `title`.
+export function ProfessorTag({ name }: { name: string }): JSX.Element {
+  const label = professorLabel(name);
+  return (
+    <span style={professorTagStyle} title={label}>
+      {label}
+    </span>
+  );
+}
+
+const SKELETON_KEYFRAMES = `
+  @keyframes skeletonPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .4; }
+  }
+`;
+
+export function OccupancyUnified({
+  salas,
+  isLoading,
+  namesLoading = false,
+}: OccupancyUnifiedProps): JSX.Element {
   const viewState = getViewState(salas, isLoading);
 
   return (
@@ -83,12 +110,7 @@ export function OccupancyUnified({ salas, isLoading }: OccupancyUnifiedProps): J
           {[1, 2, 3, 4, 5].map(i => (
             <SkeletonRow key={i} />
           ))}
-          <style>{`
-            @keyframes skeletonPulse {
-              0%, 100% { opacity: 1; }
-              50% { opacity: .4; }
-            }
-          `}</style>
+          <style>{SKELETON_KEYFRAMES}</style>
         </div>
       ) : viewState === 'empty' ? (
         <div style={emptyStyle}>
@@ -96,6 +118,7 @@ export function OccupancyUnified({ salas, isLoading }: OccupancyUnifiedProps): J
         </div>
       ) : (
         <div style={tableWrapperStyle}>
+          {namesLoading && <style>{SKELETON_KEYFRAMES}</style>}
           <table style={tableStyle}>
             <thead>
               <tr>
@@ -129,7 +152,9 @@ export function OccupancyUnified({ salas, isLoading }: OccupancyUnifiedProps): J
                         <div style={eventsListStyle}>
                           {sala.eventos.map((ev, idx) => {
                             // Aula: só turma. Reserva: "Reserva · Turma" (ou só
-                            // "Reserva") — sem nome de professor, /availability é público.
+                            // "Reserva"). O nome do professor não vem de
+                            // /availability (público): é anexado pelo Dashboard
+                            // só pra usuário logado (ev.professor).
                             const detalhe =
                               ev.tipo === 'aula'
                                 ? ev.turma
@@ -144,6 +169,12 @@ export function OccupancyUnified({ salas, isLoading }: OccupancyUnifiedProps): J
                                   </span>
                                   {detalhe && <span style={eventDetailStyle}>{detalhe}</span>}
                                 </div>
+                                {ev.tipo === 'reserva' &&
+                                  (ev.professor !== undefined ? (
+                                    <ProfessorTag name={ev.professor} />
+                                  ) : namesLoading ? (
+                                    <span style={professorSkeletonStyle} aria-hidden="true" />
+                                  ) : null)}
                                 <span style={tipoTagStyle}>{TIPO_LABEL[ev.tipo]}</span>
                               </div>
                             );
@@ -359,4 +390,23 @@ const eventDetailStyle: CSSProperties = {
   whiteSpace: 'nowrap',
   flex: 1,
   minWidth: 0,
+};
+
+const professorTagStyle: CSSProperties = {
+  display: 'block',
+  maxWidth: '100%',
+  fontSize: '12px',
+  color: 'var(--color-muted)',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+};
+
+const professorSkeletonStyle: CSSProperties = {
+  display: 'block',
+  height: 10,
+  width: '45%',
+  borderRadius: 4,
+  background: 'var(--color-border)',
+  animation: 'skeletonPulse 1.2s ease-in-out infinite',
 };

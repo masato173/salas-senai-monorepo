@@ -542,7 +542,9 @@ describe('ReservationsService', () => {
       mockPrisma.reservation.findMany.mockResolvedValue([dayRow]);
     });
 
-    it('PROFESSOR recebe shape reduzido — sem professor nem createdByUserId', async () => {
+    // Issue 5 (fase 2): qualquer usuário autenticado vê o nome do professor
+    // responsável (Dashboard); createdByUserId continua só pra COORD/ADMIN.
+    it('PROFESSOR recebe o nome do professor, mas não createdByUserId', async () => {
       const result = await makeService().findByDay('2026-08-10', profUser);
       expect(result).toEqual([
         {
@@ -552,8 +554,28 @@ describe('ReservationsService', () => {
           fim: '10:00',
           status: ReservationStatus.APPROVED,
           turma: 'APB.ADM.148',
+          professor: 'Prof. Silva',
         },
       ]);
+    });
+
+    it('reserva por proxy: o nome é do DONO (user), nunca de quem criou', async () => {
+      // Dono fictício 'Prof. Dono Ficticio'; criada por um coordenador (id diferente).
+      mockPrisma.reservation.findMany.mockResolvedValue([
+        { ...dayRow, createdByUserId: 'coord-9', user: { name: 'Prof. Dono Ficticio' } },
+      ]);
+      for (const user of [profUser, coordUser, adminUser]) {
+        const [item] = await makeService().findByDay('2026-08-10', user);
+        expect(item.professor).toBe('Prof. Dono Ficticio');
+      }
+    });
+
+    it('nenhum role recebe e-mail ou notes', async () => {
+      for (const user of [profUser, coordUser, adminUser]) {
+        const [item] = await makeService().findByDay('2026-08-10', user);
+        expect(item).not.toHaveProperty('email');
+        expect(item).not.toHaveProperty('notes');
+      }
     });
 
     it('COORDENADOR recebe shape completo — com professor e createdByUserId', async () => {

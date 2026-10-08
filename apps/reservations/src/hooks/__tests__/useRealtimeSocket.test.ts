@@ -101,6 +101,24 @@ describe('setupOccupancySubscription()', () => {
     expect(onChange).toHaveBeenCalledTimes(1);
   });
 
+  it('repassa o payload { roomId, date } ao callback (filtro de data no Dashboard)', () => {
+    const onChange = vi.fn();
+    let capturedCb: ((payload: { roomId: string; date: string }) => void) | null = null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockOccupancySubscribe.mockImplementation((cb: any) => {
+      capturedCb = cb as (payload: { roomId: string; date: string }) => void;
+      return mockOccupancyUnsubscribe;
+    });
+    setupOccupancySubscription(onChange);
+    if (capturedCb !== null) {
+      (capturedCb as (payload: { roomId: string; date: string }) => void)({
+        roomId: 'room-1',
+        date: '2026-07-13',
+      });
+    }
+    expect(onChange).toHaveBeenCalledWith({ roomId: 'room-1', date: '2026-07-13' });
+  });
+
   it('retorna o unsubscribe do emitter de ocupação', () => {
     mockOccupancySubscribe.mockImplementation(() => mockOccupancyUnsubscribe);
     const cleanup = setupOccupancySubscription(vi.fn());

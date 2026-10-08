@@ -1,3 +1,10 @@
+# Não lançado — mudanças de contrato (issue 5)
+
+- **GET /availability**: o campo `professor` não existe mais na resposta pública (sem login). Usuários autenticados (PROFESSOR, COORDENADOR, ADMIN) obtêm o nome do professor responsável (dono da reserva) via `GET /reservations/day?date=` (campo `professor`, unido pelo `id` da reserva). Migração: quem lia `professor` sem login deve autenticar e consultar `/reservations/day`.
+- **GET /reservations/day**: o campo `professor` passa a ser enviado a qualquer usuário autenticado, não só a COORDENADOR/ADMIN (mudança aditiva). `createdByUserId` continua restrito a COORDENADOR/ADMIN.
+- **GET /schedules**: paginação opcional — `page` e `pageSize` inteiros, válidos com `page >= 1` e `1 <= pageSize <= 200`; sem paginação válida a resposta é limitada a 5000 registros. Formato `{ registros, turnoMap }` inalterado. Migração: consumidores com mais de 5000 registros precisam paginar.
+- **WebSocket `/rooms`**: eventos `reservation.*` agora vão só para o dono da reserva e para a room de coordenadores (COORDENADOR/ADMIN), não mais em broadcast. Novo evento `occupancy.changed` com payload `{ roomId, date }`, sem dado pessoal, emitido a todos os sockets autenticados. Migração: telas de ocupação devem escutar `occupancy.changed` em vez de `reservation.*`.
+
 # 0.0.0 (2026-08-02)
 
 ### Bug Fixes
