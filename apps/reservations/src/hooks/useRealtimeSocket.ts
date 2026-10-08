@@ -1,6 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { subscribeToReservationEvents, subscribeToOccupancyEvents } from '../services/socketClient';
-import type { ReservationEvent, ReservationEventPayload } from '../services/socketClient';
+import type {
+  ReservationEvent,
+  ReservationEventPayload,
+  OccupancyChangedPayload,
+} from '../services/socketClient';
 
 // ─────────────────────────────────────────────────────────────
 // useRealtimeSocket — F7.3
@@ -18,7 +22,7 @@ import type { ReservationEvent, ReservationEventPayload } from '../services/sock
 //   });
 // ─────────────────────────────────────────────────────────────
 
-export type { ReservationEvent, ReservationEventPayload };
+export type { ReservationEvent, ReservationEventPayload, OccupancyChangedPayload };
 
 export interface UseRealtimeSocketOptions {
   // Eventos reservation.* completos — desde a Issue 5 (A4) só chegam ao dono
@@ -26,7 +30,8 @@ export interface UseRealtimeSocketOptions {
   onReservationEvent?: (event: ReservationEvent, payload: ReservationEventPayload) => void;
   // Sinal "a ocupação mudou" (sem dado de pessoa) — chega a TODO usuário.
   // Use em telas de ocupação que só precisam dar refetch (ex.: Dashboard).
-  onOccupancyChange?: () => void;
+  // Recebe { roomId, date } pra a tela ignorar mudanças de outra data.
+  onOccupancyChange?: (payload: OccupancyChangedPayload) => void;
 }
 
 // Função pura testável — separa lógica de subscrição do hook React
@@ -36,8 +41,10 @@ export function setupRealtimeSubscription(
   return subscribeToReservationEvents(onEvent);
 }
 
-export function setupOccupancySubscription(onChange: () => void): () => void {
-  return subscribeToOccupancyEvents(() => onChange());
+export function setupOccupancySubscription(
+  onChange: (payload: OccupancyChangedPayload) => void,
+): () => void {
+  return subscribeToOccupancyEvents(payload => onChange(payload));
 }
 
 export function useRealtimeSocket(options: UseRealtimeSocketOptions = {}): void {
@@ -50,8 +57,8 @@ export function useRealtimeSocket(options: UseRealtimeSocketOptions = {}): void 
     const unsubscribeReservations = setupRealtimeSubscription((event, payload) => {
       callbackRef.current?.(event, payload);
     });
-    const unsubscribeOccupancy = setupOccupancySubscription(() => {
-      occupancyRef.current?.();
+    const unsubscribeOccupancy = setupOccupancySubscription(payload => {
+      occupancyRef.current?.(payload);
     });
     return () => {
       unsubscribeReservations();

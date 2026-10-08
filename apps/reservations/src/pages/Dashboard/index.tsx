@@ -1,15 +1,20 @@
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { AlertCircle, Table, Clock } from 'lucide-react';
 
 import { useRealtimeSocket } from '../../hooks/useRealtimeSocket';
 import { useAvailabilityBackend } from '../../hooks/useAvailabilityBackend';
 import { useDashboardStats } from '../../hooks/useDashboardStats';
+import { useProfessorNames } from '../../hooks/useProfessorNames';
+import { useAuthStore, selectAccessToken } from '../../store/authStore';
+import { createNestjsApiService } from '../../services/nestjsApiService';
 import { DashboardStats } from '../../components/dashboard/DashboardStats';
 import { OccupancyUnified } from '../../components/dashboard/OccupancyUnified';
 import { ScheduleHeader } from '../../components/calendar/ScheduleHeader';
 import { DayView } from '../../components/calendar/DayView';
 import { mapToEntries } from '../../components/dashboard/mapToEntries';
 import { todayYmd } from '../../components/dashboard/scheduleDateUtils';
+import { withProfessorNames } from '../../components/dashboard/professorNames';
+import { createOccupancyRefresher } from '../../components/dashboard/occupancyRefresh';
 import type { DisponibilidadeSala } from '../../types';
 
 type DashboardViewMode = 'table' | 'timeline';
@@ -110,21 +115,46 @@ export function DashboardPage(): JSX.Element {
   const disp = useAvailabilityBackend(date, undefined, { enabled: true });
   const stats = useDashboardStats(date, { enabled: true });
 
+  // Issue 5 (fase 2) — nome do professor só pra usuário logado: vem de
+  // GET /reservations/day (JWT) e é unido aos eventos de reserva por id.
+  // Anônimo: nenhuma chamada, nenhum nome; /availability não muda.
+  const service = useMemo(() => createNestjsApiService(), []);
+  const accessToken = useAuthStore(selectAccessToken);
+  const names = useProfessorNames(service, date, accessToken);
+
   // F7.3b — realtime: reserva muda em qualquer sala → disponibilidade do
-  // dia e stats do backend são recarregadas. Escuta o sinal de ocupação
-  // (chega a todo usuário, sem dado de pessoa) e não os eventos
-  // reservation.*, que desde a Issue 5 (A4) só vão pro dono + coordenadores.
+  // dia, nomes e stats do backend são recarregados. Escuta o sinal de
+  // ocupação (sem dado de pessoa) e não os eventos reservation.*, que desde
+  // a Issue 5 (A4) só vão pro dono + coordenadores. Issue 5 (fase 2): o
+  // handler ignora eventos de outra data e junta rajadas numa única rodada
+  // (debounce de fim de rajada) — nunca um refetch por evento.
+  const latestRef = useRef({ date, disp, stats, names });
+  latestRef.current = { date, disp, stats, names };
+  const [refresher] = useState(() =>
+    createOccupancyRefresher(
+      () => latestRef.current.date,
+      () => {
+        const { disp: d, stats: s, names: n } = latestRef.current;
+        d.refetch();
+        s.refetch();
+        n.refetch();
+      },
+    ),
+  );
+  // Troca de data (e unmount): descarta a rodada pendente da data anterior —
+  // os hooks de dados já recarregam sozinhos pra data nova.
+  useEffect(() => () => refresher.cancel(), [date, refresher]);
+
   useRealtimeSocket({
-    onOccupancyChange: () => {
-      disp.refetch();
-      stats.refetch();
-    },
+    onOccupancyChange: payload => refresher.handle(payload),
   });
 
-  const filteredSalas = useMemo(
-    () => filterSalas(disp.data?.salas ?? [], search),
-    [disp.data, search],
+  const salasComNomes = useMemo(
+    () => withProfessorNames(disp.data?.salas ?? [], names.map),
+    [disp.data, names.map],
   );
+
+  const filteredSalas = useMemo(() => filterSalas(salasComNomes, search), [salasComNomes, search]);
 
   // Entradas pro modo "linha do tempo" (DayView) — mesma fonte já filtrada,
   // sem busca adicional (mesmo padrão de Agendamentos/index.tsx).
@@ -323,7 +353,11 @@ export function DashboardPage(): JSX.Element {
             </div>
 
             {viewMode === 'table' ? (
-              <OccupancyUnified salas={filteredSalas} isLoading={disp.loading} />
+              <OccupancyUnified
+                salas={filteredSalas}
+                isLoading={disp.loading}
+                namesLoading={names.loading}
+              />
             ) : (
               <DayView date={date} entries={entries} selected={null} />
             )}
