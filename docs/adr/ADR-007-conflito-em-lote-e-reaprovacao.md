@@ -120,9 +120,9 @@ status. `PENDING → APPROVED` e as rejeições seguem sem checagem extra
 
 - **Aulas (`Schedule`) não são checadas no backend.** O `ConflictService`
   consulta só `Reservation`; o `AvailabilityService` apenas **marca** o
-  status `conflito` para exibição. Sem issue aberta até a data deste ADR.
+  status `conflito` para exibição. Ver issue #28.
 - **TOCTOU do `update()`**: lê a reserva fora da transação e trava só a
-  chave de destino. Sem issue aberta até a data deste ADR.
+  chave de destino. Ver issue #29.
 - Edição em lote não emite realtime nem notificação (comportamento anterior
   mantido).
 - `PENDING → APPROVED` não checa conflito; sobreposições legadas (corrida
