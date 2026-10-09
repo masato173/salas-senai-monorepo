@@ -163,6 +163,18 @@ Guards registrados como `APP_GUARD` em `app.module.ts`, nesta ordem:
 o `JwtAuthGuard`; rotas sem `@Roles(...)` passam livres no `RolesGuard`
 contanto que autenticadas; `ADMIN` sempre passa em qualquer `@Roles(...)`.
 
+`RolesGuard` usa `getAllAndOverride([handler, classe])`: o `@Roles` do
+handler **substitui** o da classe. Por isso nenhum controller com handlers
+próprios deve ter `@Roles` de classe (ADR-006). O papel em `req.user.role`
+vem do **banco** (`JwtStrategy.validate`), não do token — rebaixar um
+usuário vale na próxima requisição HTTP.
+
+Regra do COORDENADOR (ADR-006): edita, cancela, aprova e rejeita **qualquer**
+reserva (bypass intencional no `OwnershipService`), com limite de **30
+ações/60 s por usuário** nessas rotas (`CoordinatorActionsThrottleGuard`,
+guard de rota — roda depois dos globais). Não pode promover a ADMIN nem
+alterar ADMIN ou outro COORDENADOR (gates de `UsersService`).
+
 ### Schema Prisma (modelos reais — `apps/api/prisma/schema.prisma`)
 
 ```
@@ -206,11 +218,13 @@ GET    /reservations              JWT — filtros roomId, date, status, mine;
 GET    /reservations/:id          JWT
 POST   /reservations              PROFESSOR | COORDENADOR | ADMIN
 POST   /reservations/range        PROFESSOR | COORDENADOR | ADMIN
-PATCH  /reservations/:id/status   COORDENADOR | ADMIN (APPROVED|REJECTED)
-PATCH  /reservations/group/:id    JWT (qualquer role autenticada)
-PATCH  /reservations/selected     JWT (qualquer role autenticada)
-PATCH  /reservations/:id          JWT (qualquer role autenticada)
-DELETE /reservations/:id          JWT — cancelamento (soft delete, idempotente)
+PATCH  /reservations/:id/status   COORDENADOR | ADMIN (APPROVED|REJECTED) ¹
+PATCH  /reservations/group/:id    JWT — dono, COORDENADOR ou ADMIN ¹
+PATCH  /reservations/selected     JWT — dono, COORDENADOR ou ADMIN ¹
+PATCH  /reservations/:id          JWT — dono, COORDENADOR ou ADMIN ¹
+DELETE /reservations/:id          JWT — dono, COORDENADOR ou ADMIN; cancelamento
+                                    (soft delete, idempotente) ¹
+  ¹ COORDENADOR limitado a 30 ações/60 s por usuário, balde único (ADR-006)
 
 GET    /availability              @Public — date obrigatório, turno opcional
 GET    /schedules                 @Public
@@ -218,12 +232,15 @@ GET    /dashboard                 @Public — date obrigatório
 
 POST   /sync/schedules            ADMIN — DELETE + INSERT batch 500, sem $transaction
 
-GET    /audit                     ADMIN — filtros entityType, entityId, userId,
+GET    /audit                     COORDENADOR | ADMIN — filtros entityType, entityId, userId,
                                     action, from, to, page, limit
 
-GET    /users                     ADMIN — filtros role, search, isActive, page, limit
-PATCH  /users/:id/role            ADMIN
-PATCH  /users/:id/active          ADMIN
+GET    /users                     COORDENADOR | ADMIN — filtros role, search, isActive, page, limit
+GET    /users/professors          COORDENADOR | ADMIN
+PATCH  /users/:id/role            COORDENADOR | ADMIN (COORDENADOR: nunca → ADMIN,
+                                    nunca alvo ADMIN/COORDENADOR)
+PATCH  /users/:id/active          COORDENADOR | ADMIN (COORDENADOR: nunca alvo
+                                    ADMIN/COORDENADOR)
 
 WS     /rooms                     JWT no handshake (auth.token)
        eventos: reservation.created/updated/approved/rejected/cancelled
@@ -498,3 +515,4 @@ pnpm --filter @salas-senai/api exec prisma migrate deploy   # produção/CI
 | 2026-07 | Fix crítico: `createRange` passou a usar `$transaction` individual por data + `pg_advisory_xact_lock` + `ConflictService`, com datas conflitantes puladas (não abortando o range)                                                                                            | Implementação original inserção direta, sem lock nem validação de conflito — violação da Regra mais importante do projeto                                                                          |
 | 2026-07 | `root: true` nos `.eslintrc.cjs` de `apps/api` e `apps/reservations`; `eslint` como devDependency explícita na raiz                                                                                                                                                          | ESLint subia até a raiz do monorepo e caía no `ignorePatterns` que bloqueia `apps/`, causando "No files matching the pattern src" ao lintar um pacote isoladamente                                 |
 | 2026-07 | `AuditService` generalizado (`entityType` opcional, default `'Reservation'`; `action` aberto para `ReservationAuditAction \| RoomAuditAction`), exportado do `ReservationsModule`, importado pelo `RoomsModule`; `RoomsService` agora audita `Room` dentro de `$transaction` | Fechava o gap de auditoria em ações administrativas de `Room`; opção de generalizar o service (em vez de duplicar) preservando as 5 chamadas existentes em `reservations.service.ts` sem alteração |
+| 2026-10 | Issue 6 (ADR-006): papel efetivo do banco (não do token); `@Roles` de classe morto removido de `UsersController`; COORDENADOR modifica qualquer reserva, com limite de 30 ações/60 s por usuário                                                                             | Revogar privilégio passa a ser imediato; contrato de autorização travado em teste; bypass do COORDENADOR com freio contra abuso                                                                    |
