@@ -23,7 +23,11 @@ interface AuthenticatedRequest {
   user: RequestUser;
 }
 
-@Roles(Role.ADMIN)
+// Sem @Roles de classe (issue 6): o RolesGuard usa getAllAndOverride, então o
+// @Roles de cada handler SUBSTITUI o da classe — um @Roles(ADMIN) aqui nunca
+// seria avaliado. Cada handler declara o seu; a contenção do COORDENADOR
+// (não promover a ADMIN, não alterar ADMIN nem outro COORDENADOR) está nos
+// gates de UsersService. Contrato travado em users.controller.contract.spec.ts.
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}

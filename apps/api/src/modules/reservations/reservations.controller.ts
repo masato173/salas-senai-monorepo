@@ -11,6 +11,7 @@ import {
   Request,
   HttpCode,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import { ReservationStatus, Role } from '@prisma/client';
 import { ReservationsService, type DayReservationItem } from './reservations.service';
@@ -19,6 +20,7 @@ import { UpdateStatusDto } from './dtos/update-status.dto';
 import { UpdateReservationGroupDto } from './dtos/update-reservation-group.dto';
 import { UpdateReservationSelectedDto } from './dtos/update-reservation-selected.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { CoordinatorActionsThrottleGuard } from '../../common/guards/coordinator-actions-throttle.guard';
 import type { RequestUser } from '../auth/strategies/jwt.strategy';
 import type { Reservation } from '@prisma/client';
 import { CreateReservationDto } from './dtos/create-reservation.dto';
@@ -106,6 +108,7 @@ export class ReservationsController {
 
   // CRÍTICO: :id/status declarado ANTES de :id para evitar captura pelo param
   @Roles(Role.COORDENADOR, Role.ADMIN)
+  @UseGuards(CoordinatorActionsThrottleGuard) // limite do COORDENADOR (issue 6, ADR-006)
   @Patch(':id/status')
   @HttpCode(HttpStatus.OK)
   updateStatus(
@@ -116,6 +119,7 @@ export class ReservationsController {
     return this.reservationsService.updateStatus(id, dto.status, req.user);
   }
 
+  @UseGuards(CoordinatorActionsThrottleGuard) // limite do COORDENADOR (issue 6, ADR-006)
   @Patch('group/:groupId')
   @HttpCode(HttpStatus.OK)
   updateGroup(
@@ -126,6 +130,7 @@ export class ReservationsController {
     return this.reservationsService.updateGroup({ ...dto, groupId }, req.user);
   }
 
+  @UseGuards(CoordinatorActionsThrottleGuard) // limite do COORDENADOR (issue 6, ADR-006)
   @Patch('selected')
   @HttpCode(HttpStatus.OK)
   updateSelected(
@@ -135,6 +140,7 @@ export class ReservationsController {
     return this.reservationsService.updateSelected(dto, req.user);
   }
 
+  @UseGuards(CoordinatorActionsThrottleGuard) // limite do COORDENADOR (issue 6, ADR-006)
   @Patch(':id')
   update(
     @Param('id') id: string,
@@ -144,6 +150,7 @@ export class ReservationsController {
     return this.reservationsService.update(id, dto, req.user);
   }
 
+  @UseGuards(CoordinatorActionsThrottleGuard) // limite do COORDENADOR (issue 6, ADR-006)
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   cancel(@Param('id') id: string, @Request() req: AuthenticatedRequest): Promise<Reservation> {

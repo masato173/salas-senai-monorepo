@@ -12,11 +12,16 @@ export class OwnershipService {
   // (ex.: reserva já soft-deleted, que assertCanModify trataria como "não
   // encontrada") e só precisa da regra de quem pode modificar.
   //
-  // ADMIN e COORDENADOR podem modificar qualquer reserva — mesmo nível de
-  // acesso que já têm para aprovar/rejeitar (PATCH /reservations/:id/status);
-  // a ação fica registrada em AuditLog.
-  // Owner (userId === currentUser.userId) pode modificar a sua.
-  // Qualquer outro: ForbiddenException.
+  // Regra (ADR-006, issue 6):
+  // - ADMIN e COORDENADOR podem modificar QUALQUER reserva (editar e
+  //   cancelar, inclusive em lote) — mesmo nível que já têm para aprovar/
+  //   rejeitar (PATCH /reservations/:id/status). O bypass do COORDENADOR é
+  //   intencional; as ações dele têm limite de requisições próprio
+  //   (CoordinatorActionsThrottleGuard).
+  // - Owner (userId === currentUser.userId) pode modificar a sua.
+  // - Qualquer outro: ForbiddenException.
+  // currentUser.role vem do banco (JwtStrategy), não do token.
+  // Matriz travada em ownership.service.spec.ts.
   assertOwnerOrPrivileged(reservation: Reservation, currentUser: RequestUser): void {
     if (currentUser.role === 'ADMIN' || currentUser.role === 'COORDENADOR') return;
 
