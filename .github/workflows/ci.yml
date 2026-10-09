@@ -65,7 +65,8 @@ jobs:
     # Credenciais descartáveis: o container nasce e morre com o job.
     services:
       postgres:
-        image: postgres:17
+        # Espelho oficial no ECR Public: o pull anônimo do Docker Hub estoura o limite nos runners do GitHub.
+        image: public.ecr.aws/docker/library/postgres:17
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
