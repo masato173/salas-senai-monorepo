@@ -168,5 +168,53 @@ describe('UsersService', () => {
 
       expect(result.active).toBe(false);
     });
+
+    // Issue 6 — a restrição é sobre QUEM é o alvo, não sobre a direção da
+    // mudança: reativar também é bloqueado.
+    it.each([Role.ADMIN, Role.COORDENADOR])(
+      'COORDENADOR tentando REATIVAR um %s inativo → ForbiddenException',
+      async role => {
+        mockRepo.findById.mockResolvedValue(makeUser({ role, active: false }));
+
+        await expect(makeService().setActive('u1', true, requesterCoord)).rejects.toThrow(
+          ForbiddenException,
+        );
+        expect(mockRepo.updateById).not.toHaveBeenCalled();
+        expect(mockPrisma.auditLog.create).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  describe('updateRole() — regressão issue 6', () => {
+    it('COORDENADOR tentando se rebaixar/alterar a si mesmo (alvo COORDENADOR) → ForbiddenException', async () => {
+      mockRepo.findById.mockResolvedValue({
+        ...makeUser({ role: Role.COORDENADOR }),
+        id: 'coord-1',
+      });
+
+      await expect(
+        makeService().updateRole('coord-1', Role.PROFESSOR, requesterCoord),
+      ).rejects.toThrow(ForbiddenException);
+      expect(mockRepo.updateById).not.toHaveBeenCalled();
+    });
+
+    it('ADMIN alterando outro ADMIN → sucesso (ADMIN não tem gate adicional)', async () => {
+      const existing = makeUser({ role: Role.ADMIN });
+      mockRepo.findById.mockResolvedValue(existing);
+      mockRepo.updateById.mockResolvedValue({ ...existing, role: Role.COORDENADOR });
+
+      const result = await makeService().updateRole('u1', Role.COORDENADOR, requesterAdmin);
+
+      expect(result.role).toBe(Role.COORDENADOR);
+    });
+
+    it('gate barrado não grava auditoria', async () => {
+      mockRepo.findById.mockResolvedValue(makeUser({ role: Role.PROFESSOR }));
+
+      await expect(makeService().updateRole('u1', Role.ADMIN, requesterCoord)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(mockPrisma.auditLog.create).not.toHaveBeenCalled();
+    });
   });
 });
