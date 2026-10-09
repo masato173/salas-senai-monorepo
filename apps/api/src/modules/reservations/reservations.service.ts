@@ -454,7 +454,49 @@ export class ReservationsService {
         ? ('APPROVE_RESERVATION' as const)
         : ('REJECT_RESERVATION' as const);
 
+    // #23 — REJECTED não ocupa horário (ConflictService só conta PENDING/
+    // APPROVED). Voltar a um status que bloqueia (hoje, só REJECTED →
+    // APPROVED é possível pela API) precisa da mesma checagem de create/
+    // update: dentro do lock (sala, data), excluindo a própria reserva.
+    // PENDING → APPROVED não checa — PENDING já bloqueia.
+    const reactivates = BLOCKING_STATUSES.has(status) && !BLOCKING_STATUSES.has(reservation.status);
+
     const statusRes = await this.prisma.$transaction(async tx => {
+      let before = reservation;
+      if (reactivates) {
+        await this.lockKeys(tx, [{ roomId: reservation.roomId, date: reservation.date }]);
+        // Releitura dentro do lock: a reserva pode ter sido cancelada ou
+        // movida entre a leitura acima e o lock.
+        const current = await tx.reservation.findUnique({ where: { id } });
+        if (!current || current.deletedAt !== null) {
+          throw new NotFoundException(`Reserva "${id}" não encontrada.`);
+        }
+        if (current.status === ReservationStatus.CANCELLED) {
+          throw new BadRequestException(
+            'Não é possível alterar o status de uma reserva cancelada.',
+          );
+        }
+        if (current.roomId !== reservation.roomId || current.date !== reservation.date) {
+          throw new NestConflictException(CHANGED_DURING_OPERATION_MESSAGE);
+        }
+        const conflict = await this.conflictService.hasConflict(
+          {
+            roomId: current.roomId,
+            date: current.date,
+            inicio: current.inicio,
+            fim: current.fim,
+            excludeId: id,
+          },
+          tx,
+        );
+        if (conflict) {
+          throw new NestConflictException(
+            'Não é possível aprovar: o horário já está ocupado por outra reserva.',
+          );
+        }
+        before = current;
+      }
+
       const updated = await tx.reservation.update({
         where: { id },
         data: { status },
@@ -464,7 +506,7 @@ export class ReservationsService {
         action,
         entityId: id,
         userId: currentUser.userId,
-        before: reservation,
+        before,
         after: updated,
       });
 
