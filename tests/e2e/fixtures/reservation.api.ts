@@ -81,6 +81,34 @@ export class ReservationApi {
     return res.json() as Promise<{ id: string; name: string; email: string }[]>;
   }
 
+  // PATCH /reservations/selected (#22) — devolve o status HTTP em vez de lançar,
+  // para os specs afirmarem 200/409. roomId aceita nome legível da sala.
+  async updateSelected(body: {
+    ids: string[];
+    roomId?: string;
+    inicio?: string;
+    fim?: string;
+  }): Promise<{ status: number }> {
+    const roomId = body.roomId !== undefined ? await this.resolveRoomId(body.roomId) : undefined;
+    const res = await fetch(`${this.apiUrl}/reservations/selected`, {
+      method: 'PATCH',
+      headers: this.headers(),
+      body: JSON.stringify({ ...body, ...(roomId !== undefined ? { roomId } : {}) }),
+    });
+    return { status: res.status };
+  }
+
+  // GET /reservations/:id com a sala — para conferir onde a reserva ficou.
+  async getRoomOf(id: string): Promise<string> {
+    const res = await fetch(`${this.apiUrl}/reservations/${id}`, { headers: this.headers() });
+    if (!res.ok) throw new Error(`[ReservationApi] getRoomOf failed: ${res.status}`);
+    return ((await res.json()) as { roomId: string }).roomId;
+  }
+
+  async roomIdOf(name: string): Promise<string> {
+    return this.resolveRoomId(name);
+  }
+
   async sweepE2E(): Promise<void> {
     const all = await this.listMine();
     const e2e = all.filter(r => r.notes?.startsWith('e2e-'));

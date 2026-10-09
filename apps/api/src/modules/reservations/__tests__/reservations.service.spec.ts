@@ -6,14 +6,20 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { ReservationStatus, NotificationType } from '@prisma/client';
-import { ReservationsService } from '../reservations.service';
+import { ReservationsService, sortedLockKeys } from '../reservations.service';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
 const mockTx = {
   $executeRaw: vi.fn().mockResolvedValue(undefined), // advisory lock
   room: { findUnique: vi.fn() },
-  reservation: { create: vi.fn(), update: vi.fn(), findUnique: vi.fn() },
+  reservation: {
+    create: vi.fn(),
+    update: vi.fn(),
+    findUnique: vi.fn(),
+    findMany: vi.fn(),
+    updateMany: vi.fn(),
+  },
   auditLog: { create: vi.fn() },
 };
 
@@ -450,47 +456,403 @@ describe('ReservationsService', () => {
     });
   });
 
-  // ── updateGroup — ownership por item (Issue 3, C3) ─────────────────────────
-  describe('updateGroup()', () => {
-    const reservaDonoA = { ...baseReservation, id: 'res-a', userId: 'prof-1', groupId: 'grp-1' };
-    const reservaDonoB = { ...baseReservation, id: 'res-b', userId: 'prof-2', groupId: 'grp-1' };
+  // ── Edição em lote (updateGroup / updateSelected) — #22 ───────────────────
+  // Lote inteiro numa $transaction: locks (sala, data) de TODAS as chaves em
+  // ordem crescente → releitura → validação por item → gravação → verificação
+  // de conflito dos itens que bloqueiam (PENDING/APPROVED) já na posição nova,
+  // excluindo a própria reserva → AuditLog por item. Tudo-ou-nada.
+  describe('sortedLockKeys()', () => {
+    it('ordena por sala e depois por data, sem duplicata', () => {
+      expect(
+        sortedLockKeys([
+          { roomId: 'room-3', date: '2026-07-17' },
+          { roomId: 'room-1', date: '2026-07-17' },
+          { roomId: 'room-3', date: '2026-07-10' },
+          { roomId: 'room-1', date: '2026-07-17' },
+          { roomId: 'room-1', date: '2026-07-10' },
+        ]),
+      ).toEqual([
+        { roomId: 'room-1', date: '2026-07-10' },
+        { roomId: 'room-1', date: '2026-07-17' },
+        { roomId: 'room-3', date: '2026-07-10' },
+        { roomId: 'room-3', date: '2026-07-17' },
+      ]);
+    });
+
+    it('lista vazia → vazia', () => {
+      expect(sortedLockKeys([])).toEqual([]);
+    });
+  });
+
+  describe('edição em lote (#22)', () => {
+    const D1 = '2026-07-10';
+    const D2 = '2026-07-17';
+    const itemA = {
+      ...baseReservation,
+      id: 'res-a',
+      userId: 'prof-1',
+      groupId: 'grp-1',
+      roomId: 'room-2',
+      date: D2,
+      status: ReservationStatus.APPROVED,
+      turma: null as string | null,
+    };
+    const itemB = {
+      ...baseReservation,
+      id: 'res-b',
+      userId: 'prof-2',
+      groupId: 'grp-1',
+      roomId: 'room-1',
+      date: D1,
+      status: ReservationStatus.APPROVED,
+      turma: null as string | null,
+    };
+
+    type Item = typeof itemA;
+
+    // findMany do lote: 1ª = pré-leitura, 2ª = releitura após os locks,
+    // 3ª = estado gravado (depois do updateMany).
+    function mockLot(items: Item[], fields: Partial<Item>, reread: Item[] = items): Item[] {
+      const after = reread.map(r => ({ ...r, ...fields }));
+      mockTx.reservation.findMany
+        .mockResolvedValueOnce(items)
+        .mockResolvedValueOnce(reread)
+        .mockResolvedValueOnce(after);
+      return after;
+    }
+
+    function lockCalls(): [string, string][] {
+      return (mockTx.$executeRaw.mock.calls as unknown[][]).map(
+        c => [c[1], c[2]] as [string, string],
+      );
+    }
+
+    function firstOrder(fn: { mock: { invocationCallOrder: number[] } }): number {
+      return Math.min(...fn.mock.invocationCallOrder);
+    }
 
     beforeEach(() => {
-      mockPrisma.reservation.findMany.mockResolvedValue([reservaDonoA, reservaDonoB]);
-      mockConflictService.hasConflict.mockResolvedValue(false);
-      // updateGroup atualiza via this.prisma.reservation.update, não tx.
-      mockPrisma.reservation.update.mockImplementation(({ where }: { where: { id: string } }) => ({
-        ...baseReservation,
-        id: where.id,
-      }));
+      mockTx.reservation.findMany.mockReset();
+      mockTx.reservation.updateMany.mockReset().mockResolvedValue({ count: 2 });
+      mockOwnershipService.assertOwnerOrPrivileged.mockReset();
+      mockConflictService.hasConflict.mockReset().mockResolvedValue(false);
     });
 
-    it('grupo com reservas de donos diferentes — usuário só dono da primeira não consegue atualizar as outras', async () => {
-      mockOwnershipService.assertOwnerOrPrivileged
-        .mockImplementationOnce(() => undefined) // reservaDonoA — profUser é o dono
-        .mockImplementationOnce(() => {
+    describe('updateGroup()', () => {
+      it('roda numa $transaction com timeout de lote (20 s) e maxWait (5 s)', async () => {
+        mockLot([itemA, itemB], { fim: '11:00' });
+        await makeService().updateGroup({ groupId: 'grp-1', fim: '11:00' }, coordUser);
+        expect(mockPrisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+          maxWait: 5_000,
+          timeout: 20_000,
+        });
+      });
+
+      it('locks de TODAS as chaves (salas antigas e novas), em ordem crescente, sem duplicata, antes de qualquer checagem', async () => {
+        mockLot([itemA, itemB], { roomId: 'room-3', fim: '11:00' });
+
+        await makeService().updateGroup(
+          { groupId: 'grp-1', roomId: 'room-3', fim: '11:00' },
+          coordUser,
+        );
+
+        expect(lockCalls()).toEqual([
+          ['room-1', D1],
+          ['room-2', D2],
+          ['room-3', D1],
+          ['room-3', D2],
+        ]);
+        const lastLock = Math.max(...mockTx.$executeRaw.mock.invocationCallOrder);
+        expect(lastLock).toBeLessThan(firstOrder(mockConflictService.hasConflict));
+        expect(lastLock).toBeLessThan(firstOrder(mockTx.reservation.updateMany));
+      });
+
+      it('verifica conflito DEPOIS de gravar, no client da transação, excluindo a própria reserva', async () => {
+        const after = mockLot([itemA, itemB], { fim: '11:00' });
+
+        await makeService().updateGroup({ groupId: 'grp-1', fim: '11:00' }, coordUser);
+
+        expect(firstOrder(mockTx.reservation.updateMany)).toBeLessThan(
+          firstOrder(mockConflictService.hasConflict),
+        );
+        for (const r of after) {
+          expect(mockConflictService.hasConflict).toHaveBeenCalledWith(
+            { roomId: r.roomId, date: r.date, inicio: r.inicio, fim: r.fim, excludeId: r.id },
+            mockTx,
+          );
+        }
+      });
+
+      it('grava o lote numa única updateMany com os campos informados (spread condicional)', async () => {
+        mockLot([itemA, itemB], { roomId: 'room-3', fim: '11:00' });
+
+        await makeService().updateGroup(
+          { groupId: 'grp-1', roomId: 'room-3', fim: '11:00' },
+          coordUser,
+        );
+
+        expect(mockTx.reservation.updateMany).toHaveBeenCalledWith({
+          where: { id: { in: ['res-a', 'res-b'] } },
+          data: { roomId: 'room-3', fim: '11:00' },
+        });
+      });
+
+      it('conflito com reserva fora do lote → 409 com as datas do lote, sem audit nem retorno parcial', async () => {
+        mockLot([itemA, itemB], { fim: '11:00' });
+        mockConflictService.hasConflict.mockImplementation((p: { excludeId: string }) =>
+          Promise.resolve(p.excludeId === 'res-b'),
+        );
+
+        const err = await makeService()
+          .updateGroup({ groupId: 'grp-1', fim: '11:00' }, coordUser)
+          .catch((e: unknown) => e);
+
+        expect(err).toBeInstanceOf(ConflictException);
+        const msg = (err as ConflictException).message;
+        expect(msg).toContain('10/07/2026');
+        expect(msg).not.toContain('17/07/2026');
+        expect(msg).toContain('Nenhuma alteração foi salva');
+        expect(mockAuditService.log).not.toHaveBeenCalled();
+      });
+
+      it('409 não expõe dados da reserva conflitante (id, dono, sala, e-mail)', async () => {
+        mockLot([itemA, itemB], { fim: '11:00' });
+        mockConflictService.hasConflict.mockResolvedValue(true);
+
+        const err = (await makeService()
+          .updateGroup({ groupId: 'grp-1', fim: '11:00' }, coordUser)
+          .catch((e: unknown) => e)) as ConflictException;
+
+        expect(err.message).not.toMatch(/res-|prof-|room-|@/);
+      });
+
+      it('dois itens do próprio lote que passam a se sobrepor → 409', async () => {
+        // Mesma data; o lote move os dois para a mesma sala/horário. Dentro
+        // da tx os dois já estão na posição nova: cada um enxerga o outro.
+        const a = { ...itemA, date: D1 };
+        mockLot([a, itemB], { roomId: 'room-3', inicio: '08:00', fim: '10:00' });
+        mockConflictService.hasConflict.mockResolvedValue(true);
+
+        await expect(
+          makeService().updateGroup(
+            { groupId: 'grp-1', roomId: 'room-3', inicio: '08:00', fim: '10:00' },
+            coordUser,
+          ),
+        ).rejects.toThrow(ConflictException);
+      });
+
+      it('item REJECTED (não bloqueia) movido para horário ocupado → sem 409 falso, não é verificado', async () => {
+        const rejeitada = { ...itemB, status: ReservationStatus.REJECTED };
+        mockLot([itemA, rejeitada], { roomId: 'room-3' });
+        mockConflictService.hasConflict.mockImplementation((p: { excludeId: string }) =>
+          Promise.resolve(p.excludeId === 'res-b'),
+        );
+
+        const result = await makeService().updateGroup(
+          { groupId: 'grp-1', roomId: 'room-3' },
+          coordUser,
+        );
+
+        expect(result.count).toBe(2);
+        expect(mockConflictService.hasConflict).toHaveBeenCalledTimes(1);
+        expect(mockConflictService.hasConflict).toHaveBeenCalledWith(
+          expect.objectContaining({ excludeId: 'res-a' }),
+          mockTx,
+        );
+      });
+
+      it('edição só de turma não gera falso conflito consigo mesma (excludeId próprio)', async () => {
+        mockLot([itemA, itemB], { turma: 'T2' });
+        // Sem excludeId a reserva colidiria consigo mesma.
+        mockConflictService.hasConflict.mockImplementation((p: { excludeId?: string }) =>
+          Promise.resolve(p.excludeId === undefined),
+        );
+
+        const result = await makeService().updateGroup(
+          { groupId: 'grp-1', turma: 'T2' },
+          coordUser,
+        );
+
+        expect(result.count).toBe(2);
+      });
+
+      it('audita cada item dentro da transação: UPDATE_RESERVATION, ator, antes e depois', async () => {
+        const [afterA, afterB] = mockLot([itemA, itemB], { fim: '11:00' });
+
+        await makeService().updateGroup({ groupId: 'grp-1', fim: '11:00' }, coordUser);
+
+        expect(mockAuditService.log).toHaveBeenCalledTimes(2);
+        expect(mockAuditService.log).toHaveBeenCalledWith(mockTx, {
+          action: 'UPDATE_RESERVATION',
+          entityId: 'res-a',
+          userId: coordUser.userId,
+          before: itemA,
+          after: afterA,
+        });
+        expect(mockAuditService.log).toHaveBeenCalledWith(mockTx, {
+          action: 'UPDATE_RESERVATION',
+          entityId: 'res-b',
+          userId: coordUser.userId,
+          before: itemB,
+          after: afterB,
+        });
+      });
+
+      // Issue 3 (C3), invertido no #22: antes o 1º item era gravado e o 2º
+      // falhava (sem transação, sem rollback). Agora a posse é checada em
+      // todos os itens antes de qualquer gravação.
+      it('grupo com donos diferentes — sem permissão no 2º item → 403 e NADA gravado', async () => {
+        mockLot([itemA, itemB], { fim: '11:00' });
+        mockOwnershipService.assertOwnerOrPrivileged
+          .mockImplementationOnce(() => undefined) // itemA — profUser é o dono
+          .mockImplementationOnce(() => {
+            throw new ForbiddenException('Você não tem permissão para modificar esta reserva.');
+          }); // itemB — não é o dono
+
+        await expect(
+          makeService().updateGroup({ groupId: 'grp-1', fim: '11:00' }, profUser),
+        ).rejects.toThrow(ForbiddenException);
+
+        expect(mockTx.reservation.updateMany).not.toHaveBeenCalled();
+        expect(mockPrisma.reservation.update).not.toHaveBeenCalled();
+        expect(mockAuditService.log).not.toHaveBeenCalled();
+      });
+
+      it('COORDENADOR consegue atualizar grupo com reservas de donos diferentes', async () => {
+        mockLot([itemA, itemB], { fim: '11:00' });
+
+        const result = await makeService().updateGroup(
+          { groupId: 'grp-1', fim: '11:00' },
+          coordUser,
+        );
+
+        expect(result.count).toBe(2);
+        expect(mockTx.reservation.updateMany).toHaveBeenCalledTimes(1);
+      });
+
+      it('item mudou de sala/data entre a pré-leitura e o lock → 409, nada gravado', async () => {
+        mockLot([itemA, itemB], { fim: '11:00' }, [itemA, { ...itemB, date: D2 }]);
+
+        await expect(
+          makeService().updateGroup({ groupId: 'grp-1', fim: '11:00' }, coordUser),
+        ).rejects.toThrow(ConflictException);
+        expect(mockTx.reservation.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('grupo vazio → 404 (comportamento mantido)', async () => {
+        mockTx.reservation.findMany.mockResolvedValue([]);
+
+        await expect(
+          makeService().updateGroup({ groupId: 'grp-x', fim: '11:00' }, coordUser),
+        ).rejects.toThrow(NotFoundException);
+        expect(mockTx.reservation.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('horário inválido → 400 antes de gravar', async () => {
+        mockLot([itemA, itemB], { fim: '07:00' });
+
+        await expect(
+          makeService().updateGroup({ groupId: 'grp-1', fim: '07:00' }, coordUser),
+        ).rejects.toThrow(BadRequestException);
+        expect(mockTx.reservation.updateMany).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('updateSelected()', () => {
+      it('grava o lote inteiro, com locks antes e verificação depois', async () => {
+        mockLot([itemA, itemB], { fim: '11:00' });
+
+        const result = await makeService().updateSelected(
+          { ids: ['res-a', 'res-b'], fim: '11:00' },
+          coordUser,
+        );
+
+        expect(result.count).toBe(2);
+        expect(lockCalls()).toEqual([
+          ['room-1', D1],
+          ['room-2', D2],
+        ]);
+        expect(Math.max(...mockTx.$executeRaw.mock.invocationCallOrder)).toBeLessThan(
+          firstOrder(mockConflictService.hasConflict),
+        );
+        expect(mockAuditService.log).toHaveBeenCalledTimes(2);
+      });
+
+      it('id inexistente → 404 com a MESMA mensagem do assertCanModify, nada gravado', async () => {
+        mockLot([itemA], { fim: '11:00' });
+
+        const err = await makeService()
+          .updateSelected({ ids: ['res-a', 'res-x'], fim: '11:00' }, coordUser)
+          .catch((e: unknown) => e);
+
+        expect(err).toBeInstanceOf(NotFoundException);
+        expect((err as NotFoundException).message).toBe('Reserva "res-x" não encontrada.');
+        expect(mockTx.reservation.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('id soft-deleted → 404 com a mesma mensagem, nada gravado', async () => {
+        mockLot([itemA, { ...itemB, deletedAt: new Date() } as unknown as Item], { fim: '11:00' });
+
+        const err = await makeService()
+          .updateSelected({ ids: ['res-a', 'res-b'], fim: '11:00' }, coordUser)
+          .catch((e: unknown) => e);
+
+        expect((err as NotFoundException).message).toBe('Reserva "res-b" não encontrada.');
+        expect(mockTx.reservation.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('posse checada por item, na ordem da requisição — o 1º sem permissão define o 403', async () => {
+        mockLot([itemA, itemB], { fim: '11:00' });
+        mockOwnershipService.assertOwnerOrPrivileged.mockImplementation((r: Item) => {
+          if (r.userId !== profUser.userId) {
+            throw new ForbiddenException('Você não tem permissão para modificar esta reserva.');
+          }
+        });
+
+        await expect(
+          makeService().updateSelected({ ids: ['res-b', 'res-a'], fim: '11:00' }, profUser),
+        ).rejects.toThrow('Você não tem permissão para modificar esta reserva.');
+        expect(mockOwnershipService.assertOwnerOrPrivileged.mock.calls[0][0]).toMatchObject({
+          id: 'res-b',
+        });
+        expect(mockTx.reservation.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('404 vem antes do 403 para o mesmo lote (mesma ordem do assertCanModify)', async () => {
+        mockLot([itemA], { fim: '11:00' });
+        mockOwnershipService.assertOwnerOrPrivileged.mockImplementation(() => {
           throw new ForbiddenException('Você não tem permissão para modificar esta reserva.');
-        }); // reservaDonoB — não é o dono
+        });
 
-      await expect(
-        makeService().updateGroup({ groupId: 'grp-1', fim: '11:00' }, profUser),
-      ).rejects.toThrow(ForbiddenException);
+        await expect(
+          makeService().updateSelected({ ids: ['res-x', 'res-a'], fim: '11:00' }, profUser),
+        ).rejects.toThrow(NotFoundException);
+      });
 
-      // A reserva do dono (A) já tinha sido atualizada antes da falha em B —
-      // sem transação agrupando o lote, sem rollback (mesmo padrão de updateSelected).
-      expect(mockPrisma.reservation.update).toHaveBeenCalledTimes(1);
-      expect(mockPrisma.reservation.update).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: 'res-a' } }),
-      );
-    });
+      it('conflito → 409 sem gravação parcial', async () => {
+        mockLot([itemA, itemB], { fim: '11:00' });
+        mockConflictService.hasConflict.mockResolvedValue(true);
 
-    it('COORDENADOR consegue atualizar grupo com reservas de donos diferentes', async () => {
-      mockOwnershipService.assertOwnerOrPrivileged.mockImplementation(() => undefined);
+        await expect(
+          makeService().updateSelected({ ids: ['res-a', 'res-b'], fim: '11:00' }, coordUser),
+        ).rejects.toThrow(ConflictException);
+        expect(mockAuditService.log).not.toHaveBeenCalled();
+      });
 
-      const result = await makeService().updateGroup({ groupId: 'grp-1', fim: '11:00' }, coordUser);
+      it('ids repetidos contam uma vez', async () => {
+        mockLot([itemA], { fim: '11:00' });
 
-      expect(result.count).toBe(2);
-      expect(mockPrisma.reservation.update).toHaveBeenCalledTimes(2);
+        const result = await makeService().updateSelected(
+          { ids: ['res-a', 'res-a'], fim: '11:00' },
+          coordUser,
+        );
+
+        expect(result.count).toBe(1);
+        expect(mockTx.reservation.updateMany).toHaveBeenCalledWith({
+          where: { id: { in: ['res-a'] } },
+          data: { fim: '11:00' },
+        });
+      });
     });
   });
 
