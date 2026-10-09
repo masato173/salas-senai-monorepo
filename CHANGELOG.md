@@ -1,3 +1,9 @@
+# Não lançado — mudanças de contrato (#22, #23)
+
+- **PATCH /reservations/group/:groupId** e **PATCH /reservations/selected**: edição em lote passa a ser tudo-ou-nada, dentro de transação com lock por (sala, data). Conflito de horário em qualquer item → **409** e nada é gravado (antes: o item era pulado e a resposta era 200 com `count` parcial). Erro de posse/existência (403/404) também não grava mais nenhum item. Formato de sucesso inalterado (`{ count, reservations }`, `count` = lote inteiro). Migração: tratar 409 na edição em lote; a mensagem lista as datas em conflito.
+- **PATCH /reservations/selected**: `ids` limitado a 60 itens por requisição; acima disso → 400.
+- **PATCH /reservations/:id/status**: reaprovar uma reserva `REJECTED` cujo horário foi ocupado depois da rejeição → **409**, status inalterado (antes: aprovava e criava sobreposição).
+
 # Não lançado — mudanças de contrato (issue 5)
 
 - **GET /availability**: o campo `professor` não existe mais na resposta pública (sem login). Usuários autenticados (PROFESSOR, COORDENADOR, ADMIN) obtêm o nome do professor responsável (dono da reserva) via `GET /reservations/day?date=` (campo `professor`, unido pelo `id` da reserva). Migração: quem lia `professor` sem login deve autenticar e consultar `/reservations/day`.
