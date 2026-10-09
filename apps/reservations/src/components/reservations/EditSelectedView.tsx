@@ -5,6 +5,7 @@ import { SALAS } from '../../config';
 import { validateTimeInput } from '../../validators/conflict';
 import { useUpdateReservationSelected } from '../../hooks/useUpdateReservationSelected';
 import { MiniCalendar } from './MiniCalendar';
+import { batchConflictMessage } from './batchConflictMessage';
 import { TimePicker } from '../ui/TimePicker';
 import { Select } from '../ui/Select';
 import type { ReservationFormService } from './ReservationForm';
@@ -153,11 +154,8 @@ export function EditSelectedView({
         }
 
         if (res.error?.code === 'CONFLICT') {
-          const conflictDates = res.error.details?.conflicts ?? [];
-          const shown = conflictDates.slice(0, 10).map(isoToBR).join(', ');
-          const more = conflictDates.length - 10;
-          const list = shown + (more > 0 ? ` (+${more} mais)` : '');
-          setErrors([`Conflito em ${conflictDates.length} data(s): ${list}`]);
+          // #22 — 409 tudo-ou-nada do backend (mensagem já com as datas).
+          setErrors([batchConflictMessage(res.error)]);
           return;
         }
 
@@ -319,11 +317,6 @@ function Field({ label, htmlFor, hint, children }: FieldProps): JSX.Element {
       {children}
     </div>
   );
-}
-
-function isoToBR(iso: string): string {
-  const [, m, d] = iso.split('-');
-  return `${d}/${m}`;
 }
 
 // ── Styles (CSSProperties — padrão do ReservationForm/Modal) ──

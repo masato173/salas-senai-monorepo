@@ -15,6 +15,7 @@ import { useUpdateReservationGroup } from '../../hooks/useUpdateReservationGroup
 import { useListProfessors } from '../../hooks/useListProfessors';
 import { expandDateRange } from '../../utils/dateRange';
 import { buildUpdatePayload } from './buildUpdatePayload';
+import { batchConflictMessage } from './batchConflictMessage';
 import type {
   CreateReservationRequest,
   CreateReservationResponse,
@@ -502,11 +503,8 @@ export function ReservationForm({
       }
 
       if (res.error?.code === 'CONFLICT') {
-        const conflictDates = res.error.details?.conflicts ?? [];
-        const shown = conflictDates.slice(0, 10).map(isoToBR).join(', ');
-        const more = conflictDates.length - 10;
-        const list = shown + (more > 0 ? ` (+${more} mais)` : '');
-        setErrors([`Conflito em ${conflictDates.length} data(s): ${list}`]);
+        // #22 — 409 tudo-ou-nada do backend (mensagem já com as datas).
+        setErrors([batchConflictMessage(res.error)]);
         return;
       }
 

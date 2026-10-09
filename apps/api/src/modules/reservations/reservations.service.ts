@@ -6,7 +6,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { ReservationStatus, Role, NotificationType } from '@prisma/client';
-import type { Reservation } from '@prisma/client';
+import type { Prisma, Reservation } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConflictService } from './conflict.service';
 import { OwnershipService } from './ownership.service';
@@ -24,6 +24,61 @@ import type { CreateReservationRangeDto } from './dtos/create-reservation-range.
 // PENDING (fluxo de aprovação normal). Usado em create() e createRange().
 function initialStatus(role: string): ReservationStatus {
   return role === 'PROFESSOR' ? ReservationStatus.PENDING : ReservationStatus.APPROVED;
+}
+
+// Chave do advisory lock de reserva: (sala, data) — mesma granularidade de
+// create/update/createRange: pg_advisory_xact_lock(hashtext(roomId), hashtext(date)).
+export interface LockKey {
+  roomId: string;
+  date: string;
+}
+
+const lockKeyId = (k: LockKey): string => `${k.roomId}\u0000${k.date}`;
+
+function compareCodeUnits(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+// #22 — chaves sem duplicata, em ordem total determinística (sala, depois
+// data; comparação por code unit, sem depender de locale). Todo lote adquire
+// os locks nessa ordem, então dois lotes concorrentes nunca esperam um pelo
+// outro em ciclo (sem deadlock). Os demais caminhos (create, update,
+// createRange, updateStatus) seguram um único lock por transação.
+export function sortedLockKeys(keys: readonly LockKey[]): LockKey[] {
+  const unique = new Map<string, LockKey>();
+  for (const { roomId, date } of keys) unique.set(lockKeyId({ roomId, date }), { roomId, date });
+  return [...unique.values()].sort(
+    (a, b) => compareCodeUnits(a.roomId, b.roomId) || compareCodeUnits(a.date, b.date),
+  );
+}
+
+// Status que ocupam horário — os mesmos que o ConflictService considera.
+const BLOCKING_STATUSES: ReadonlySet<ReservationStatus> = new Set<ReservationStatus>([
+  ReservationStatus.PENDING,
+  ReservationStatus.APPROVED,
+]);
+
+// #22 / ADR-007 — a edição em lote roda numa única $transaction (até 60
+// itens: locks + gravação + verificação + audit). O default do Prisma (5 s)
+// não cobre a latência Railway → Supabase (pooler pgbouncer); estes valores
+// foram dimensionados para ela e devem ser revistos no VPS (Postgres local,
+// sem pgbouncer).
+const BATCH_TX_OPTIONS = { maxWait: 5_000, timeout: 20_000 } as const;
+
+const CHANGED_DURING_OPERATION_MESSAGE =
+  'As reservas foram alteradas por outra operação. Recarregue e tente novamente.';
+
+// Campos que a edição em lote aplica (iguais em UpdateReservationGroupDto e
+// UpdateReservationSelectedDto) — uniformes para todos os itens do lote.
+type BatchUpdateFields = Pick<
+  UpdateReservationGroupDto,
+  'roomId' | 'inicio' | 'fim' | 'turma' | 'notes'
+>;
+
+// YYYY-MM-DD → DD/MM/AAAA (mensagens ao usuário).
+function formatDateBR(ymd: string): string {
+  const [y, m, d] = ymd.split('-');
+  return `${d}/${m}/${y}`;
 }
 
 interface FindAllParams {
@@ -399,7 +454,49 @@ export class ReservationsService {
         ? ('APPROVE_RESERVATION' as const)
         : ('REJECT_RESERVATION' as const);
 
+    // #23 — REJECTED não ocupa horário (ConflictService só conta PENDING/
+    // APPROVED). Voltar a um status que bloqueia (hoje, só REJECTED →
+    // APPROVED é possível pela API) precisa da mesma checagem de create/
+    // update: dentro do lock (sala, data), excluindo a própria reserva.
+    // PENDING → APPROVED não checa — PENDING já bloqueia.
+    const reactivates = BLOCKING_STATUSES.has(status) && !BLOCKING_STATUSES.has(reservation.status);
+
     const statusRes = await this.prisma.$transaction(async tx => {
+      let before = reservation;
+      if (reactivates) {
+        await this.lockKeys(tx, [{ roomId: reservation.roomId, date: reservation.date }]);
+        // Releitura dentro do lock: a reserva pode ter sido cancelada ou
+        // movida entre a leitura acima e o lock.
+        const current = await tx.reservation.findUnique({ where: { id } });
+        if (!current || current.deletedAt !== null) {
+          throw new NotFoundException(`Reserva "${id}" não encontrada.`);
+        }
+        if (current.status === ReservationStatus.CANCELLED) {
+          throw new BadRequestException(
+            'Não é possível alterar o status de uma reserva cancelada.',
+          );
+        }
+        if (current.roomId !== reservation.roomId || current.date !== reservation.date) {
+          throw new NestConflictException(CHANGED_DURING_OPERATION_MESSAGE);
+        }
+        const conflict = await this.conflictService.hasConflict(
+          {
+            roomId: current.roomId,
+            date: current.date,
+            inicio: current.inicio,
+            fim: current.fim,
+            excludeId: id,
+          },
+          tx,
+        );
+        if (conflict) {
+          throw new NestConflictException(
+            'Não é possível aprovar: o horário já está ocupado por outra reserva.',
+          );
+        }
+        before = current;
+      }
+
       const updated = await tx.reservation.update({
         where: { id },
         data: { status },
@@ -409,7 +506,7 @@ export class ReservationsService {
         action,
         entityId: id,
         userId: currentUser.userId,
-        before: reservation,
+        before,
         after: updated,
       });
 
@@ -443,85 +540,169 @@ export class ReservationsService {
     return statusRes;
   }
 
+  // #22 — lote tudo-ou-nada dentro do lock (ver applyBatchUpdate). Posse
+  // checada por item (não só no primeiro — Issue 3, C3) antes de qualquer
+  // gravação.
   async updateGroup(
     dto: UpdateReservationGroupDto,
     currentUser: RequestUser,
   ): Promise<{ count: number; reservations: Reservation[] }> {
-    const reservations = await this.prisma.reservation.findMany({
-      where: { groupId: dto.groupId, deletedAt: null },
-    });
-    if (reservations.length === 0) {
-      throw new NotFoundException(`Nenhuma reserva encontrada para o grupo "${dto.groupId}".`);
-    }
-    const updated: Reservation[] = [];
-    for (const r of reservations) {
-      // Verifica permissão por item (não só no primeiro) — reservations já
-      // veio de um findMany com deletedAt: null, então usamos a checagem em
-      // memória (sem I/O) em vez de reconsultar com assertCanModify.
-      this.ownershipService.assertOwnerOrPrivileged(r, currentUser);
-      const resolvedRoomId = dto.roomId ?? r.roomId;
-      const resolvedInicio = dto.inicio ?? r.inicio;
-      const resolvedFim = dto.fim ?? r.fim;
-      if (dto.inicio !== undefined || dto.fim !== undefined) {
-        this.assertValidTimes(resolvedInicio, resolvedFim);
-      }
-      const conflict = await this.conflictService.hasConflict({
-        roomId: resolvedRoomId,
-        date: r.date,
-        inicio: resolvedInicio,
-        fim: resolvedFim,
-        excludeId: r.id,
-      });
-      if (conflict) continue; // pula datas com conflito — não aborta o grupo todo
-      const u = await this.prisma.reservation.update({
-        where: { id: r.id },
-        data: {
-          ...(dto.roomId !== undefined ? { roomId: dto.roomId } : {}),
-          ...(dto.inicio !== undefined ? { inicio: dto.inicio } : {}),
-          ...(dto.fim !== undefined ? { fim: dto.fim } : {}),
-          ...(dto.turma !== undefined ? { turma: dto.turma } : {}),
-          ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
-        },
-      });
-      updated.push(u);
-    }
-    return { count: updated.length, reservations: updated };
+    return this.applyBatchUpdate(
+      tx => tx.reservation.findMany({ where: { groupId: dto.groupId, deletedAt: null } }),
+      items => {
+        if (items.length === 0) {
+          throw new NotFoundException(`Nenhuma reserva encontrada para o grupo "${dto.groupId}".`);
+        }
+        for (const r of items) {
+          this.ownershipService.assertOwnerOrPrivileged(r, currentUser);
+          this.assertBatchTimes(r, dto);
+        }
+        return items;
+      },
+      dto,
+      currentUser,
+    );
   }
 
+  // #22 — mesma regra do updateGroup. Valida os ids na ordem da requisição,
+  // com os mesmos status e mensagens do assertCanModify (404 para "não
+  // existe"/soft-deleted, depois 403 para "não é seu") — sem criar um
+  // oráculo de existência novo.
   async updateSelected(
     dto: UpdateReservationSelectedDto,
     currentUser: RequestUser,
   ): Promise<{ count: number; reservations: Reservation[] }> {
-    const updated: Reservation[] = [];
-    for (const id of dto.ids) {
-      const r = await this.ownershipService.assertCanModify(id, currentUser);
-      const resolvedRoomId = dto.roomId ?? r.roomId;
-      const resolvedInicio = dto.inicio ?? r.inicio;
-      const resolvedFim = dto.fim ?? r.fim;
-      if (dto.inicio !== undefined || dto.fim !== undefined) {
-        this.assertValidTimes(resolvedInicio, resolvedFim);
+    const ids = [...new Set(dto.ids)];
+    return this.applyBatchUpdate(
+      tx => tx.reservation.findMany({ where: { id: { in: ids } } }),
+      rows => {
+        const byId = new Map(rows.map(r => [r.id, r]));
+        return ids.map(id => {
+          const r = byId.get(id);
+          if (!r || r.deletedAt !== null) {
+            throw new NotFoundException(`Reserva "${id}" não encontrada.`);
+          }
+          this.ownershipService.assertOwnerOrPrivileged(r, currentUser);
+          this.assertBatchTimes(r, dto);
+          return r;
+        });
+      },
+      dto,
+      currentUser,
+    );
+  }
+
+  // #22 / ADR-007 — núcleo da edição em lote, numa única $transaction
+  // (tudo-ou-nada):
+  // 1. pré-leitura + validação (404/403/400) — só para descobrir as chaves;
+  // 2. locks (sala, data) de TODAS as chaves — sala atual e sala destino de
+  //    cada item — em ordem crescente e sem duplicata, antes de qualquer
+  //    checagem (sem deadlock entre lotes concorrentes);
+  // 3. releitura + validação; item que mudou de sala/data no meio → 409;
+  // 4. gravação (o DTO é uniforme para o lote: uma updateMany);
+  // 5. verificação de conflito de cada item que bloqueia (PENDING/APPROVED),
+  //    já na posição nova e excluindo a própria reserva — pega conflito com
+  //    reserva de fora do lote E entre itens do lote, sem contar as posições
+  //    antigas. ConflictService intocado (fórmula, critérios e assinatura);
+  // 6. AuditLog por item (mesmo formato do update()).
+  // Qualquer falha lança dentro da tx → rollback, nada gravado.
+  private async applyBatchUpdate(
+    load: (tx: Prisma.TransactionClient) => Promise<Reservation[]>,
+    validate: (items: Reservation[]) => Reservation[],
+    fields: BatchUpdateFields,
+    currentUser: RequestUser,
+  ): Promise<{ count: number; reservations: Reservation[] }> {
+    const keysOf = (items: readonly Reservation[]): LockKey[] =>
+      items.flatMap(r => [
+        { roomId: r.roomId, date: r.date },
+        { roomId: fields.roomId ?? r.roomId, date: r.date },
+      ]);
+
+    return this.prisma.$transaction(async tx => {
+      const preread = validate(await load(tx));
+      const lockedKeys = sortedLockKeys(keysOf(preread));
+      await this.lockKeys(tx, lockedKeys);
+
+      const items = validate(await load(tx));
+      const prereadIds = new Set(preread.map(r => r.id));
+      const locked = new Set(lockedKeys.map(lockKeyId));
+      const unchanged =
+        items.length === prereadIds.size &&
+        items.every(r => prereadIds.has(r.id)) &&
+        keysOf(items).every(k => locked.has(lockKeyId(k)));
+      if (!unchanged) {
+        throw new NestConflictException(CHANGED_DURING_OPERATION_MESSAGE);
       }
-      const conflict = await this.conflictService.hasConflict({
-        roomId: resolvedRoomId,
-        date: r.date,
-        inicio: resolvedInicio,
-        fim: resolvedFim,
-        excludeId: id,
-      });
-      if (conflict) continue;
-      const u = await this.prisma.reservation.update({
-        where: { id },
+
+      const ids = items.map(r => r.id);
+      await tx.reservation.updateMany({
+        where: { id: { in: ids } },
         data: {
-          ...(dto.roomId !== undefined ? { roomId: dto.roomId } : {}),
-          ...(dto.inicio !== undefined ? { inicio: dto.inicio } : {}),
-          ...(dto.fim !== undefined ? { fim: dto.fim } : {}),
-          ...(dto.turma !== undefined ? { turma: dto.turma } : {}),
-          ...(dto.notes !== undefined ? { notes: dto.notes } : {}),
+          ...(fields.roomId !== undefined ? { roomId: fields.roomId } : {}),
+          ...(fields.inicio !== undefined ? { inicio: fields.inicio } : {}),
+          ...(fields.fim !== undefined ? { fim: fields.fim } : {}),
+          ...(fields.turma !== undefined ? { turma: fields.turma } : {}),
+          ...(fields.notes !== undefined ? { notes: fields.notes } : {}),
         },
       });
-      updated.push(u);
+      const writtenById = new Map(
+        (await tx.reservation.findMany({ where: { id: { in: ids } } })).map(r => [r.id, r]),
+      );
+      const after = items.map(r => {
+        const written = writtenById.get(r.id);
+        if (!written) throw new NestConflictException(CHANGED_DURING_OPERATION_MESSAGE);
+        return written;
+      });
+
+      // Só itens que bloqueiam horário entram na verificação: um item
+      // REJECTED movido para horário ocupado não gera 409 (não ocupa nada).
+      const conflictDates = new Set<string>();
+      for (const r of after) {
+        if (!BLOCKING_STATUSES.has(r.status)) continue;
+        const conflict = await this.conflictService.hasConflict(
+          { roomId: r.roomId, date: r.date, inicio: r.inicio, fim: r.fim, excludeId: r.id },
+          tx,
+        );
+        if (conflict) conflictDates.add(r.date);
+      }
+      if (conflictDates.size > 0) {
+        // Só datas dos itens do próprio lote — nunca dados da reserva
+        // conflitante (dono, turma, notes, id).
+        const datas = [...conflictDates].sort().map(formatDateBR).join(', ');
+        throw new NestConflictException(
+          `Conflito de horário em ${conflictDates.size} data(s): ${datas}. Nenhuma alteração foi salva.`,
+        );
+      }
+
+      for (const [i, r] of after.entries()) {
+        await this.auditService.log(tx, {
+          action: 'UPDATE_RESERVATION',
+          entityId: r.id,
+          userId: currentUser.userId,
+          before: items[i],
+          after: r,
+        });
+      }
+
+      return { count: after.length, reservations: after };
+    }, BATCH_TX_OPTIONS);
+  }
+
+  // Um pg_advisory_xact_lock por chave, na ordem de sortedLockKeys — mesmo
+  // SQL (parametrizado) de create/update/createRange.
+  private async lockKeys(tx: Prisma.TransactionClient, keys: readonly LockKey[]): Promise<void> {
+    for (const { roomId, date } of sortedLockKeys(keys)) {
+      await tx.$executeRaw`
+        SELECT pg_advisory_xact_lock(hashtext(${roomId}), hashtext(${date}))
+      `;
     }
-    return { count: updated.length, reservations: updated };
+  }
+
+  // Mesma regra de antes nos lotes: só valida horário quando o lote muda
+  // início ou fim.
+  private assertBatchTimes(r: Reservation, fields: BatchUpdateFields): void {
+    if (fields.inicio === undefined && fields.fim === undefined) return;
+    this.assertValidTimes(fields.inicio ?? r.inicio, fields.fim ?? r.fim);
   }
 
   // Proxy: PROFESSOR sempre cria pra si mesmo (ownerUserId é ignorado, ainda
