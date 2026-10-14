@@ -1,0 +1,25 @@
+# dependencias instaladas no host (no Windows sao links que quebram no Linux)
+**/node_modules
+
+# saidas de build e cache
+**/dist
+**/.turbo
+coverage
+test-results
+playwright-report
+graphify-out
+
+# segredos: nunca podem entrar numa imagem
+**/.env
+**/.env.*
+!**/.env.example
+!**/*.env.example
+
+# coisas que nao fazem parte do app
+.git
+.github
+docs/security-audit
+arquitetura-agentes.json
+arquitetura.html
+gerar_entregaveis.py
+**/*.tsbuildinfo
