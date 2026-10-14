@@ -27,6 +27,36 @@ interface AppsScriptResponse {
 
 // SyncResult agora vem de @salas-senai/shared — removido daqui
 
+interface AppsScriptHttpResult {
+  status: number;
+  location: string | null;
+  contentType: string | null;
+  body: string;
+}
+
+// ADR-008 — redirecionamento do Apps Script.
+// Máximo de redirecionamentos seguidos (o fluxo normal usa 1: /exec → echo).
+const APPS_SCRIPT_MAX_REDIRECTS = 5;
+// Prazo total da busca, somando todos os saltos. O listSchedules lê ~1500
+// linhas da planilha (poucos segundos + cold start do Apps Script); 60 s dá
+// folga e, sobretudo, garante que o lock isRunning seja liberado se o
+// Google não responder (sem prazo, todo sync seguinte receberia 409).
+const APPS_SCRIPT_TIMEOUT_MS = 60_000;
+// 301/302/303 → a próxima requisição é GET sem corpo; 307/308 mantêm
+// método e corpo (regra HTTP). Outros 3xx não são seguidos.
+const FOLLOW_AS_GET: ReadonlySet<number> = new Set([301, 302, 303]);
+const FOLLOW_KEEP_METHOD: ReadonlySet<number> = new Set([307, 308]);
+// Destinos de redirecionamento aceitos: só https e domínios do Google
+// (script.google.com → script.googleusercontent.com). A URL inicial vem do
+// .env (APPS_SCRIPT_URL) e não passa por aqui.
+const REDIRECT_ALLOWED_HOSTS = ['google.com', 'googleusercontent.com'] as const;
+
+export function isAllowedRedirectTarget(url: URL): boolean {
+  if (url.protocol !== 'https:') return false;
+  const host = url.hostname.toLowerCase();
+  return REDIRECT_ALLOWED_HOSTS.some(allowed => host === allowed || host.endsWith(`.${allowed}`));
+}
+
 @Injectable()
 export class SyncService {
   // Lock in-memory — evita execuções simultâneas.
@@ -40,19 +70,28 @@ export class SyncService {
     private readonly config: ConfigService,
   ) {}
 
-  private postJsonOnce(
-    targetUrl: string,
-    payload: string,
-  ): Promise<{ status: number; location: string | null; body: string }> {
+  // Uma requisição. Só manda corpo (e Content-Type/Content-Length) quando
+  // há payload — o GET do link do resultado vai sem nada.
+  private requestOnce(
+    url: URL,
+    method: 'GET' | 'POST',
+    payload: string | null,
+    signal: AbortSignal,
+  ): Promise<AppsScriptHttpResult> {
     return new Promise((resolve, reject) => {
       const req = https.request(
-        new URL(targetUrl),
+        url,
         {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(payload),
-          },
+          method,
+          signal,
+          ...(payload !== null
+            ? {
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Content-Length': Buffer.byteLength(payload),
+                },
+              }
+            : {}),
         },
         res => {
           let body = '';
@@ -60,43 +99,91 @@ export class SyncService {
           res.on('data', chunk => {
             body += chunk;
           });
+          res.on('error', reject);
           res.on('end', () => {
             resolve({
               status: res.statusCode ?? 0,
               location: res.headers.location ?? null,
+              contentType: res.headers['content-type'] ?? null,
               body,
             });
           });
         },
       );
       req.on('error', reject);
-      req.write(payload);
+      // Garante que a promessa termina no prazo mesmo se o abort chegar
+      // durante a leitura do corpo (quando o req pode não emitir 'error').
+      signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+      if (payload !== null) req.write(payload);
       req.end();
     });
   }
 
-  // Apps Script Web Apps sempre respondem /exec com 302 pra
-  // script.googleusercontent.com (é lá que o script de fato executa).
-  // fetch nativo demove POST pra GET e descarta o body ao seguir esse
-  // redirect automaticamente (WHATWG fetch spec); redirect:'manual' no
-  // fetch do Node não resolve, porque undici retorna um "opaque redirect"
-  // (status 0, headers ilegíveis) nesse modo — igual um browser. Por isso
-  // usamos https.request direto e reenviamos o mesmo POST pra URL do
-  // Location manualmente.
-  private async postToAppsScript(url: string, payload: string): Promise<string> {
-    let currentUrl = url;
-    for (let hop = 0; hop < 5; hop++) {
-      const { status, location, body } = await this.postJsonOnce(currentUrl, payload);
-      if (status >= 300 && status < 400) {
-        if (!location) {
-          throw new Error(`Apps Script redirecionou (status ${status}) sem header Location.`);
+  // ADR-008 — o Apps Script EXECUTA no primeiro POST em /exec e responde 302
+  // com o link do resultado (script.googleusercontent.com/macros/echo?...).
+  // Esse link se busca com GET, sem corpo: é a regra HTTP de 301/302/303
+  // (307/308 mantêm método e corpo). Reenviar o POST ao Location — o que
+  // este código fazia — devolve uma página HTML de erro do Google, e o sync
+  // quebrava no JSON.parse. Por isso o laço é manual (https.request): segue
+  // a regra acima, recusa destinos fora do Google, limita os saltos e impõe
+  // um prazo total. O token só vai no corpo do primeiro POST (e de um
+  // eventual 307/308, sempre para host permitido).
+  private async fetchFromAppsScript(url: string, payload: string): Promise<AppsScriptHttpResult> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), APPS_SCRIPT_TIMEOUT_MS);
+    try {
+      let currentUrl = new URL(url);
+      let method: 'GET' | 'POST' = 'POST';
+      let body: string | null = payload;
+      for (let redirects = 0; ; redirects++) {
+        const res = await this.requestOnce(currentUrl, method, body, controller.signal);
+        const followAsGet = FOLLOW_AS_GET.has(res.status);
+        if (!followAsGet && !FOLLOW_KEEP_METHOD.has(res.status)) return res;
+
+        if (!res.location) {
+          throw new Error(`Apps Script redirecionou (status ${res.status}) sem header Location.`);
         }
-        currentUrl = new URL(location, currentUrl).toString();
-        continue;
+        if (redirects >= APPS_SCRIPT_MAX_REDIRECTS) {
+          throw new Error(
+            `Apps Script: redirecionamentos demais (limite ${APPS_SCRIPT_MAX_REDIRECTS}).`,
+          );
+        }
+        const next = new URL(res.location, currentUrl);
+        if (!isAllowedRedirectTarget(next)) {
+          // Só protocolo e host — a URL inteira pode carregar chaves de acesso.
+          throw new Error(
+            `Apps Script redirecionou para destino não permitido (${next.protocol}//${next.hostname}).`,
+          );
+        }
+        if (followAsGet) {
+          method = 'GET';
+          body = null;
+        }
+        currentUrl = next;
       }
-      return body;
+    } catch (e) {
+      if (controller.signal.aborted) {
+        throw new Error(`Apps Script não respondeu em ${APPS_SCRIPT_TIMEOUT_MS / 1000} s.`);
+      }
+      throw e;
+    } finally {
+      clearTimeout(timer);
     }
-    throw new Error('Apps Script excedeu o limite de redirecionamentos ao sincronizar.');
+  }
+
+  // Status fora de 2xx ou corpo não-JSON → erro com status e content-type,
+  // nunca com o corpo (pode ecoar dados da requisição). Lança antes do
+  // DELETE: o Schedule nunca é substituído por causa de uma página de erro.
+  private parseAppsScriptJson(res: AppsScriptHttpResult): AppsScriptResponse {
+    const descricao = `status ${res.status}, content-type ${res.contentType ?? 'ausente'}`;
+    if (res.status < 200 || res.status >= 300) {
+      throw new Error(`Apps Script respondeu com erro (${descricao}).`);
+    }
+    try {
+      return JSON.parse(res.body) as AppsScriptResponse;
+    } catch {
+      throw new Error(`Apps Script respondeu conteúdo que não é JSON (${descricao}).`);
+    }
   }
 
   async syncSchedules(userId: string): Promise<SyncResult> {
@@ -124,11 +211,11 @@ export class SyncService {
       // (query string vaza em logs de proxy/servidor e no header Referer).
       let raw: AppsScriptResponse;
       try {
-        const body = await this.postToAppsScript(
+        const res = await this.fetchFromAppsScript(
           url,
           JSON.stringify({ action: 'listSchedules', token }),
         );
-        raw = JSON.parse(body) as AppsScriptResponse;
+        raw = this.parseAppsScriptJson(res);
       } catch (e) {
         throw new InternalServerErrorException(
           `Falha ao buscar dados do Apps Script: ${e instanceof Error ? e.message : String(e)}`,

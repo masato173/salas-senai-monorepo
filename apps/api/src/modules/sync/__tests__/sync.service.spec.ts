@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { ConflictException, InternalServerErrorException } from '@nestjs/common';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { ConflictException, InternalServerErrorException, Logger } from '@nestjs/common';
 import { EventEmitter } from 'node:events';
 import * as https from 'node:https';
-import { SyncService } from '../sync.service';
+import { SyncService, isAllowedRedirectTarget } from '../sync.service';
 
 vi.mock('node:https', () => ({ request: vi.fn() }));
 
@@ -38,32 +38,64 @@ function makeService(): SyncService {
   return new SyncService(mockPrisma as never, mockConfig as never);
 }
 
-// ─── Mock de node:https (Apps Script sempre responde /exec com um
-// redirect 302 antes do conteúdo real — ver comentário em sync.service.ts) ──
-type HttpsResponseSpec = { status: number; location?: string; body: string };
+// ─── Mock de node:https (Apps Script responde /exec com um redirect 302
+// para o link do resultado — ver comentário em sync.service.ts) ──
+type HttpsResponseSpec = {
+  status: number;
+  location?: string;
+  body: string;
+  contentType?: string;
+  // Não responde: só emite 'error' quando o signal da requisição abortar.
+  hang?: boolean;
+};
 
-function mockAppsScript(responses: HttpsResponseSpec[]): { writes: string[] } {
+interface RecordedCall {
+  url: URL;
+  options: { method: string; headers?: Record<string, unknown>; signal?: AbortSignal };
+  writes: string[];
+}
+
+function mockAppsScript(responses: HttpsResponseSpec[]): {
+  writes: string[];
+  calls: RecordedCall[];
+} {
   const writes: string[] = [];
+  const calls: RecordedCall[] = [];
   let call = 0;
   (https.request as ReturnType<typeof vi.fn>).mockImplementation(
-    (_url: URL, options: { method: string }, callback: (res: unknown) => void) => {
+    (url: URL, options: RecordedCall['options'], callback: (res: unknown) => void) => {
       const spec = responses[Math.min(call, responses.length - 1)];
       call++;
+      const recorded: RecordedCall = { url, options, writes: [] };
+      calls.push(recorded);
       const req = new EventEmitter() as EventEmitter & {
         write: (chunk: string) => void;
         end: () => void;
       };
       req.write = (chunk: string) => {
         writes.push(chunk);
+        recorded.writes.push(chunk);
       };
       req.end = () => {
+        if (spec.hang) {
+          options.signal?.addEventListener('abort', () => {
+            req.emit(
+              'error',
+              Object.assign(new Error('The operation was aborted'), { name: 'AbortError' }),
+            );
+          });
+          return;
+        }
         const res = new EventEmitter() as EventEmitter & {
           statusCode?: number;
           headers: Record<string, string>;
           setEncoding: (enc: string) => void;
         };
         res.statusCode = spec.status;
-        res.headers = spec.location ? { location: spec.location } : {};
+        res.headers = {
+          ...(spec.location ? { location: spec.location } : {}),
+          ...(spec.contentType ? { 'content-type': spec.contentType } : {}),
+        };
         res.setEncoding = () => {};
         callback(res);
         queueMicrotask(() => {
@@ -74,8 +106,11 @@ function mockAppsScript(responses: HttpsResponseSpec[]): { writes: string[] } {
       return req;
     },
   );
-  return { writes };
+  return { writes, calls };
 }
+
+const ECHO_URL = 'https://script.googleusercontent.com/macros/echo?user_content_key=k-ficticia';
+const JSON_VAZIO = { status: 200, body: JSON.stringify({ ok: true, dados: [] }) };
 
 // ─── Payload de dados válido ──────────────────────────────────
 const DADO_VALIDO = {
@@ -221,24 +256,221 @@ describe('SyncService', () => {
       expect(writes[0]).toContain('test-token');
     });
 
-    it('segue um redirect 302 do Apps Script reenviando o mesmo POST, sem virar GET', async () => {
-      const { writes } = mockAppsScript([
-        { status: 302, location: 'https://script.googleusercontent.com/macros/echo?x=1', body: '' },
-        { status: 200, body: JSON.stringify({ ok: true, dados: [] }) },
+    it('o primeiro POST leva action listSchedules e o token no corpo', async () => {
+      const { calls } = mockAppsScript([JSON_VAZIO]);
+
+      await makeService().syncSchedules('user-1');
+
+      expect(JSON.parse(calls[0].writes.join(''))).toEqual({
+        action: 'listSchedules',
+        token: 'test-token',
+      });
+    });
+  });
+
+  // ── Redirecionamento do Apps Script (#1, ensaio local) ───────────
+  // O Apps Script executa no primeiro POST e responde 302 com o link do
+  // resultado. 301/302/303 → a próxima requisição é GET, sem corpo;
+  // 307/308 mantêm método e corpo.
+  describe('redirecionamento do Apps Script', () => {
+    it.each([301, 302, 303])(
+      '%i → segue com GET, sem corpo e sem Content-Type/Content-Length, para o Location',
+      async status => {
+        const { calls } = mockAppsScript([{ status, location: ECHO_URL, body: '' }, JSON_VAZIO]);
+
+        await makeService().syncSchedules('user-1');
+
+        expect(calls).toHaveLength(2);
+        expect(calls[0].options.method).toBe('POST');
+        expect(calls[1].options.method).toBe('GET');
+        expect(calls[1].url.toString()).toBe(ECHO_URL);
+        expect(calls[1].writes).toEqual([]);
+        const headerNames = Object.keys(calls[1].options.headers ?? {}).map(h => h.toLowerCase());
+        expect(headerNames).not.toContain('content-type');
+        expect(headerNames).not.toContain('content-length');
+      },
+    );
+
+    it('Location relativo é resolvido contra a URL atual', async () => {
+      const { calls } = mockAppsScript([
+        { status: 302, location: 'https://script.google.com/macros/s/x/exec', body: '' },
+        { status: 302, location: '/macros/echo?x=1', body: '' },
+        JSON_VAZIO,
       ]);
 
-      const service = makeService();
-      await service.syncSchedules('user-1');
+      await makeService().syncSchedules('user-1');
 
-      expect(https.request).toHaveBeenCalledTimes(2);
-      const calls = (https.request as ReturnType<typeof vi.fn>).mock.calls as [
-        URL,
-        { method: string },
-      ][];
-      expect(calls[0][1].method).toBe('POST');
-      expect(calls[1][1].method).toBe('POST'); // continua POST no segundo salto, nao vira GET
-      expect(calls[1][0].hostname).toBe('script.googleusercontent.com');
-      expect(writes[1]).toContain('test-token'); // o body foi reenviado no segundo hop, nao perdido
+      expect(calls[2].url.toString()).toBe('https://script.google.com/macros/echo?x=1');
+      expect(calls[2].options.method).toBe('GET');
+    });
+
+    it.each([307, 308])('%i → mantém POST com o mesmo corpo', async status => {
+      const { calls } = mockAppsScript([{ status, location: ECHO_URL, body: '' }, JSON_VAZIO]);
+
+      await makeService().syncSchedules('user-1');
+
+      expect(calls[1].options.method).toBe('POST');
+      expect(calls[1].writes.join('')).toBe(calls[0].writes.join(''));
+    });
+
+    it('JSON válido depois do 302 → fluxo atual (DELETE + INSERT)', async () => {
+      mockAppsScript([
+        { status: 302, location: ECHO_URL, body: '' },
+        { status: 200, body: JSON.stringify({ ok: true, dados: [DADO_VALIDO] }) },
+      ]);
+      mockScheduleDelegate.count.mockResolvedValue(1);
+
+      const result = await makeService().syncSchedules('user-1');
+
+      expect(mockScheduleDelegate.deleteMany).toHaveBeenCalledOnce();
+      expect(mockScheduleDelegate.createMany).toHaveBeenCalledOnce();
+      expect(result.synced).toBe(1);
+    });
+
+    it('mais de 5 redirecionamentos → erro "redirecionamentos demais", sem 7ª requisição', async () => {
+      const { calls } = mockAppsScript([{ status: 302, location: ECHO_URL, body: '' }]);
+
+      await expect(makeService().syncSchedules('user-1')).rejects.toThrow(
+        'redirecionamentos demais',
+      );
+      expect(calls).toHaveLength(6);
+      expect(mockScheduleDelegate.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('3xx sem Location → erro claro', async () => {
+      mockAppsScript([{ status: 302, body: '' }]);
+
+      await expect(makeService().syncSchedules('user-1')).rejects.toThrow('sem header Location');
+    });
+
+    it.each([
+      'http://script.googleusercontent.com/macros/echo?x=1',
+      'https://evil.example.com/macros/echo?x=1',
+      'https://evilgoogle.com/macros/x',
+      'https://google.com.evil.io/macros/x',
+    ])('Location para destino não permitido (%s) → erro, sem seguir', async location => {
+      const { calls } = mockAppsScript([{ status: 302, location, body: '' }, JSON_VAZIO]);
+
+      const err = (await makeService()
+        .syncSchedules('user-1')
+        .catch((e: unknown) => e)) as Error;
+
+      expect(err).toBeInstanceOf(InternalServerErrorException);
+      expect(err.message).toContain('destino não permitido');
+      expect(err.message).not.toContain('/macros'); // só protocolo//host, nunca a URL inteira
+      expect(calls).toHaveLength(1);
+      expect(mockScheduleDelegate.deleteMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('isAllowedRedirectTarget', () => {
+    it.each([
+      ['https://script.google.com/macros/s/x/exec', true],
+      ['https://script.googleusercontent.com/macros/echo?x=1', true],
+      ['https://google.com/', true],
+      ['https://googleusercontent.com/', true],
+      ['http://script.google.com/', false],
+      ['https://evilgoogle.com/', false],
+      ['https://google.com.evil.io/', false],
+      ['https://script.googleusercontent.com.evil.io/', false],
+      ['https://example.com/', false],
+    ])('%s → %s', (url, expected) => {
+      expect(isAllowedRedirectTarget(new URL(url))).toBe(expected);
+    });
+  });
+
+  describe('resposta final do Apps Script', () => {
+    it('corpo não-JSON → erro com status e content-type, SEM o corpo, e sem DELETE', async () => {
+      mockAppsScript([
+        { status: 302, location: ECHO_URL, body: '' },
+        {
+          status: 200,
+          contentType: 'text/html; charset=utf-8',
+          body: '<!DOCTYPE html><html><body>pagina de erro corpo-secreto</body></html>',
+        },
+      ]);
+
+      const err = (await makeService()
+        .syncSchedules('user-1')
+        .catch((e: unknown) => e)) as Error;
+
+      expect(err).toBeInstanceOf(InternalServerErrorException);
+      expect(err.message).toContain('status 200');
+      expect(err.message).toContain('text/html');
+      expect(err.message).not.toContain('<!DOCTYPE');
+      expect(err.message).not.toContain('corpo-secreto');
+      expect(mockScheduleDelegate.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('status final fora de 2xx → erro com o status, sem DELETE', async () => {
+      mockAppsScript([
+        {
+          status: 500,
+          contentType: 'application/json',
+          body: JSON.stringify({ dados: [DADO_VALIDO] }),
+        },
+      ]);
+
+      await expect(makeService().syncSchedules('user-1')).rejects.toThrow('status 500');
+      expect(mockScheduleDelegate.deleteMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('prazo total da busca', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('Apps Script não responde → erro depois de 60 s e o lock é liberado', async () => {
+      vi.useFakeTimers();
+      mockAppsScript([{ status: 200, body: '', hang: true }]);
+      const service = makeService();
+
+      const pending = service.syncSchedules('user-1').catch((e: unknown) => e);
+      await vi.advanceTimersByTimeAsync(60_000);
+      const err = (await pending) as Error;
+
+      expect(err).toBeInstanceOf(InternalServerErrorException);
+      expect(err.message).toContain('não respondeu em 60 s');
+      vi.useRealTimers();
+
+      // Lock liberado: a próxima execução não recebe 409.
+      mockAppsScript([JSON_VAZIO]);
+      await expect(service.syncSchedules('user-1')).resolves.toBeDefined();
+    });
+  });
+
+  describe('o token nunca aparece em erro nem em log', () => {
+    const cenarios: [string, HttpsResponseSpec[]][] = [
+      ['não-JSON', [{ status: 200, contentType: 'text/html', body: '<!DOCTYPE html>test-token' }]],
+      ['status 500', [{ status: 500, body: 'erro test-token' }]],
+      [
+        'destino não permitido',
+        [{ status: 302, location: 'https://evil.example.com/?t=test-token', body: '' }],
+      ],
+      ['sem Location', [{ status: 302, body: '' }]],
+      ['redirecionamentos demais', [{ status: 307, location: ECHO_URL, body: '' }]],
+      ['erro do Apps Script', [{ status: 200, body: JSON.stringify({ error: 'Acesso negado.' }) }]],
+    ];
+
+    it.each(cenarios)('%s', async (_nome, responses) => {
+      const spies = [
+        vi.spyOn(Logger.prototype, 'log'),
+        vi.spyOn(Logger.prototype, 'warn'),
+        vi.spyOn(Logger.prototype, 'error'),
+      ];
+      mockAppsScript(responses);
+
+      const err = (await makeService()
+        .syncSchedules('user-1')
+        .catch((e: unknown) => e)) as Error;
+
+      expect(err).toBeInstanceOf(Error);
+      expect(err.message).not.toContain('test-token');
+      for (const spy of spies) {
+        expect(JSON.stringify(spy.mock.calls)).not.toContain('test-token');
+        spy.mockRestore();
+      }
     });
   });
 
