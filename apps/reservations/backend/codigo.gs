@@ -168,11 +168,14 @@ function doPost(e) {
 
     // Sync de Schedule (SyncModule/NestJS) — token no corpo, não na URL,
     // pra não vazar em logs de proxy/servidor nem no header Referer.
+    // Todas as acoes exigem o token, enviado no CORPO (nao na URL, que vai para logs).
+    // Checagem unica na entrada: acao nova ja nasce protegida.
+    var reqToken = body.token || '';
+    if (!SECRET_TOKEN || reqToken !== SECRET_TOKEN) {
+      return jsonResponse({ error: 'Acesso negado.' });
+    }
+
     if (action === 'listSchedules') {
-      var reqToken = body.token || '';
-      if (!SECRET_TOKEN || reqToken !== SECRET_TOKEN) {
-        return jsonResponse({ error: 'Acesso negado.' });
-      }
       return listSchedules('doPost/listSchedules');
     }
 
