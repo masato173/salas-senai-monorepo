@@ -54,6 +54,11 @@ services:
       APPS_SCRIPT_URL: ${APPS_SCRIPT_URL}
       APPS_SCRIPT_TOKEN: ${APPS_SCRIPT_TOKEN}
       THROTTLE_SKIP: ${THROTTLE_SKIP}
+      # Topologia, não segredo — fixo aqui, não no .env.local: um proxy à
+      # frente da api (o nginx do serviço frontend). Obrigatório em produção
+      # (env.schema.ts); errar o número reabre a forja de X-Forwarded-For
+      # ou junta todos os clientes num IP só (ADR-009, #21).
+      TRUST_PROXY: '1'
       # Lido por infra/docker/entrypoint.sh — 'true' só no primeiro boot,
       # depois volta pra 'false' (ver README.md).
       SEED_FORCE: ${SEED_FORCE}

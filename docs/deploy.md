@@ -50,6 +50,7 @@ As mesmas do `apps/api/.env`, **exceto `PORT`** (o Railway injeta sozinho):
 | `APPS_SCRIPT_URL`        | URL `/exec` do Apps Script (sync de aulas)                                                  |
 | `APPS_SCRIPT_TOKEN`      | token do Apps Script                                                                        |
 | `CORS_ORIGIN`            | `https://masato173.github.io` (origem do Pages — **sem** o caminho `/salas-senai-monorepo`) |
+| `TRUST_PROXY`            | `1` — **obrigatória**: sem ela o boot falha em produção (proxies à frente da api; ADR-009)  |
 | `NIXPACKS_NODE_VERSION`  | `22` (mesma versão do CI)                                                                   |
 
 > **Nunca** definir `THROTTLE_SKIP` em produção (desligaria o rate limiting).
