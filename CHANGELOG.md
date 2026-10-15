@@ -1,3 +1,8 @@
+# Não lançado — configuração e infra (#21)
+
+- **`TRUST_PROXY`** (api): nova variável de ambiente, **obrigatória com `NODE_ENV=production`** — inteiro ≥ 0 (proxies à frente da api) ou `false`; sem ela, ou com valor inválido (inclusive `true`), o boot falha. Fora de produção, ausente = `false` (antes era sempre `1`). Migração: Railway → definir `TRUST_PROXY=1` nas Variables antes do próximo deploy (`docs/deploy.md`); `infra/docker` → já fixado em `1` no compose. Ver ADR-009.
+- **`infra/docker`**: a api não publica mais a porta 3000. Todo acesso passa pelo nginx do frontend, em `/api/` (REST, prefixo removido: `/api/health` → `/health`) e `/api/socket.io/` (WebSocket). O nginx sobrescreve `X-Forwarded-For`, então o rate limit por IP não pode mais ser contornado forjando o header. O frontend do Docker usa `/api` (mesma origem), fixo no compose; `VITE_API_URL` do `.env.local` deixa de ser lida e `CORS_ORIGIN` fica opcional. Migração: rebuild de `api` e `frontend`; quem usava `http://<ip>:3000` passa a usar `http://<ip>/api`. Rotas e contrato da api inalterados; build do GitHub Pages inalterado.
+
 # Não lançado — mudanças de contrato (#22, #23)
 
 - **PATCH /reservations/group/:groupId** e **PATCH /reservations/selected**: edição em lote passa a ser tudo-ou-nada, dentro de transação com lock por (sala, data). Conflito de horário em qualquer item → **409** e nada é gravado (antes: o item era pulado e a resposta era 200 com `count` parcial). Erro de posse/existência (403/404) também não grava mais nenhum item. Formato de sucesso inalterado (`{ count, reservations }`, `count` = lote inteiro). Migração: tratar 409 na edição em lote; a mensagem lista as datas em conflito.
