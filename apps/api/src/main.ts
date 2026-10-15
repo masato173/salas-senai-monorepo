@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
@@ -18,9 +19,11 @@ async function bootstrap(): Promise<void> {
   // F9.2 — headers de segurança HTTP (Helmet) antes de qualquer outra camada
   app.use(helmet());
 
-  // Atrás do proxy do Railway, req.ip deve refletir o cliente real (X-Forwarded-For).
-  // Sem isso, o rate limiting por IP trataria todos os clientes como um só.
-  app.set('trust proxy', 1);
+  // req.ip (rate limiting por IP) vem do X-Forwarded-For só até o número de
+  // proxies confiáveis da topologia: TRUST_PROXY, validado no boot e
+  // obrigatório em produção (1 = nginx do infra/docker ou borda do Railway;
+  // false = sem proxy). Já chega como number | false (ADR-009, #21).
+  app.set('trust proxy', app.get(ConfigService).getOrThrow<number | false>('TRUST_PROXY'));
 
   app.useGlobalPipes(
     new ValidationPipe({

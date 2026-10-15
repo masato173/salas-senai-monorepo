@@ -1,6 +1,6 @@
 import { io } from 'socket.io-client';
 import type { Socket } from 'socket.io-client';
-import { API_BASE } from '../config/api';
+import { API_BASE, resolveSocketTarget } from '../config/api';
 
 // ─────────────────────────────────────────────────────────────
 // socketClient — F7.3
@@ -140,7 +140,11 @@ export function getSocket(token: string): Socket {
     instance = null;
   }
 
-  instance = io(`${API_BASE}/rooms`, {
+  // Origem + namespace na URL; caminho do transporte em `path` (ver
+  // resolveSocketTarget — com API_BASE '/api' o transporte é /api/socket.io).
+  const { url, path } = resolveSocketTarget(API_BASE, window.location.origin, '/rooms');
+  instance = io(url, {
+    path,
     auth: { token },
     reconnection: true,
     reconnectionAttempts: Infinity, // explícito — robusto para Supabase free tier (Bug #1)

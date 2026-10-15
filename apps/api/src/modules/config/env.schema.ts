@@ -14,6 +14,17 @@ export const envSchema = z
     // Rate limiting — 'true' desliga o throttling (CI E2E faz polling em /auth/login).
     // Rejeitado no boot com NODE_ENV=production (superRefine abaixo).
     THROTTLE_SKIP: z.enum(['true', 'false']).optional(),
+    // Saltos de proxy confiáveis no X-Forwarded-For (Express 'trust proxy',
+    // define req.ip → rate limiting). Inteiro >= 0 = quantos proxies há à
+    // frente da api; 'false' = nenhum. 'true' é recusado: confiaria em
+    // qualquer X-Forwarded-For enviado pelo cliente. Convertido aqui porque o
+    // Express lê string como lista de IPs ('1' viraria o IP 0.0.0.1).
+    // Obrigatório em produção; fora dela, ausente = false (ADR-009, #21).
+    TRUST_PROXY: z
+      .string()
+      .regex(/^(\d+|false)$/, "TRUST_PROXY deve ser um inteiro >= 0 ou 'false'.")
+      .transform(v => (v === 'false' ? false : Number(v)))
+      .optional(),
     JWT_SECRET: z.string().min(32),
     JWT_REFRESH_SECRET: z.string().min(32),
     JWT_EXPIRES_IN: z.string().default('15m'),
@@ -30,6 +41,18 @@ export const envSchema = z
         message: 'THROTTLE_SKIP=true e proibido em producao.',
       });
     }
-  });
+    // Sem default em produção: o número de proxies depende da topologia
+    // (nginx no infra/docker, borda do Railway) e um palpite errado reabre a
+    // forja de X-Forwarded-For ou junta todos os clientes num IP só.
+    if (env.NODE_ENV === 'production' && env.TRUST_PROXY === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['TRUST_PROXY'],
+        message:
+          "TRUST_PROXY e obrigatoria em producao (proxies a frente da api, ex.: 1; ou 'false').",
+      });
+    }
+  })
+  .transform(env => ({ ...env, TRUST_PROXY: env.TRUST_PROXY ?? false }));
 
 export type Env = z.infer<typeof envSchema>;

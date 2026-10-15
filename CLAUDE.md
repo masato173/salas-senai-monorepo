@@ -312,8 +312,11 @@ mesmo `clientRequestId` em todas as tentativas de uma mutation.
 - **`ValidationPipe` global**: `whitelist`, `forbidNonWhitelisted`, `transform`.
 - Token do sync com Apps Script (`APPS_SCRIPT_TOKEN`) e segredos JWT nunca
   commitados — só em `.env` local / secrets do Railway e GitHub Actions.
-- `app.set('trust proxy', 1)` — necessário atrás do proxy do Railway para que
-  o rate limiting por IP funcione corretamente (`X-Forwarded-For`).
+- `trust proxy` vem de `TRUST_PROXY` (env validado; inteiro ≥ 0 ou `false`,
+  **obrigatório em produção** — Railway e `infra/docker` usam `1`) para que o
+  rate limiting por IP use o cliente real (`X-Forwarded-For`). No
+  `infra/docker` o nginx é a borda única: sobrescreve `X-Forwarded-For` e a
+  api não publica porta (ADR-009).
 
 ---
 
