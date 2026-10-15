@@ -5,6 +5,9 @@
 # (banco) + GitHub Pages (frontend) — tudo na rede interna, sem depender de
 # nenhum serviço externo.
 #
+# O nginx (serviço frontend) é a borda única: só a porta 80 é publicada; a
+# api e o Postgres ficam só na rede interna (ADR-009, #21).
+#
 # Uso (a partir de infra/docker/, depois de preencher .env.local — ver
 # .env.local.example e README.md deste diretório):
 #   docker compose --env-file .env.local build
@@ -38,8 +41,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    ports:
-      - '3000:3000'
+    # Sem `ports:` (ADR-009, #21) — a api só é alcançada pela rede interna,
+    # através do nginx do serviço frontend (/api/ e /api/socket.io/). Não
+    # publique a 3000: acesso direto fura o nginx (X-Forwarded-For forjado
+    # contorna o rate limit), e no VPS o ufw NÃO filtra portas publicadas
+    # pelo Docker. Para depurar, ver README.md ("Depurar a api").
     environment:
       NODE_ENV: production
       PORT: 3000
@@ -70,10 +76,13 @@ services:
       context: ../..
       dockerfile: infra/docker/Dockerfile.frontend
       args:
-        VITE_API_URL: ${VITE_API_URL}
+        # Topologia, fixo aqui (não vem do .env.local): o browser chama a api
+        # na mesma origem, pelo nginx desta imagem (ADR-009, #21).
+        VITE_API_URL: /api
     restart: unless-stopped
     depends_on:
       - api
+    # Única porta publicada da pilha: o nginx é a borda (SPA + /api/).
     ports:
       - '80:80'
     networks:

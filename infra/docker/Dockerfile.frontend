@@ -11,9 +11,8 @@
 #
 # Contexto de build esperado: raiz do monorepo (mesmo motivo do
 # Dockerfile.api — o build depende do workspace pnpm inteiro):
-#   docker build -f infra/docker/Dockerfile.frontend \
-#     --build-arg VITE_API_URL=http://192.168.X.X:3000 \
-#     -t salas-senai-frontend .
+#   docker build -f infra/docker/Dockerfile.frontend -t salas-senai-frontend .
+# (VITE_API_URL já tem o default certo pra esta imagem: /api, ver abaixo.)
 
 # ─── Stage 1: builder ───────────────────────────────────────────────────
 FROM node:22-alpine AS builder
@@ -29,7 +28,13 @@ RUN pnpm install --frozen-lockfile
 # aqui protege segredo, só configura pra qual host o browser final vai
 # mandar as requisições da API). ARG → ENV pra o `vite build` enxergar via
 # import.meta.env.VITE_API_URL.
-ARG VITE_API_URL
+#
+# Default /api (mesma origem): esta imagem traz o nginx-rotas.conf, que
+# encaminha /api/ e /api/socket.io/ pra api (ADR-009, #21). Sem default, um
+# build sem o arg gravaria '' no bundle e quebraria todas as chamadas. O
+# docker-compose.yml também fixa /api; o build do GitHub Pages (cd.yml) não
+# usa este Dockerfile e segue com a URL absoluta.
+ARG VITE_API_URL=/api
 ENV VITE_API_URL=$VITE_API_URL
 
 RUN pnpm --filter @salas-senai/reservations build
@@ -39,5 +44,8 @@ FROM nginx:alpine AS runner
 
 COPY --from=builder /app/apps/reservations/dist /usr/share/nginx/html
 COPY infra/docker/nginx.conf /etc/nginx/conf.d/default.conf
+# Fora de conf.d/: tudo que é *.conf ali entra no contexto http, e o snippet
+# de rotas é do contexto server (incluído pelo nginx.conf).
+COPY infra/docker/nginx-rotas.conf /etc/nginx/snippets/salas-senai-rotas.conf
 
 EXPOSE 80
