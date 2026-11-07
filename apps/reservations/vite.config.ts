@@ -1,6 +1,17 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
+import { vercelApiUrlError } from './src/config/vercelBuildGuard';
+
+// Build na Vercel (ADR-010): sem VITE_API_URL válida o bundle cairia no
+// fallback http://localhost:3000 — falha aqui, com mensagem clara. Fora da
+// Vercel (sem VERCEL no ambiente) não faz nada.
+const vercelError = vercelApiUrlError(process.env);
+if (vercelError) throw new Error(vercelError);
+if (process.env['VERCEL']) {
+  // Confirma no log do build que o guard rodou (a URL não é segredo).
+  console.info(`[vercel] VITE_API_URL = ${process.env['VITE_API_URL'] ?? ''}`);
+}
 
 export default defineConfig({
   plugins: [react()],
