@@ -1,4 +1,5 @@
 import { Braces } from 'lucide-react';
+import { API_BASE } from '../../../config/api';
 
 // ─────────────────────────────────────────────────────────────
 // AdminApiPage — F6.8
@@ -316,7 +317,8 @@ export default function AdminApiPage(): JSX.Element {
               alignSelf: 'center',
             }}
           >
-            http://localhost:3000 (dev)
+            {/* URL da API configurada neste build (VITE_API_URL) */}
+            {API_BASE}
           </span>
         </div>
 
