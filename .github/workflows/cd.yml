@@ -2,6 +2,11 @@ name: CD
 
 # F9.3 — deploy automático: dispara somente quando o workflow CI conclui
 # com SUCESSO num push na master. Nunca roda em cima de CI vermelho.
+#
+# ADR-010: o frontend vai para a Vercel e a API para a Render, que fazem o
+# deploy sozinhas pela integração com o GitHub (com gate nos checks do CI —
+# ver docs/deploy.md). Este workflow guarda só o job do Railway (plano B),
+# que fica pulado enquanto o secret RAILWAY_TOKEN não existir.
 on:
   workflow_run:
     workflows: [CI]
@@ -12,9 +17,10 @@ env:
   NODE_VERSION: '22'
   PNPM_VERSION: '8'
 
-# Necessário para publicar o build na branch gh-pages
+# Só leitura: o job do Railway faz checkout e nada mais (o write existia
+# apenas para publicar na branch gh-pages do GitHub Pages, removido).
 permissions:
-  contents: write
+  contents: read
 
 # Nunca dois deploys simultâneos; um push novo espera o deploy anterior acabar
 concurrency:
@@ -32,25 +38,17 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       railway: ${{ steps.check.outputs.railway }}
-      pages: ${{ steps.check.outputs.pages }}
     steps:
       - name: Checar secrets de deploy
         id: check
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          VITE_API_URL_PROD: ${{ secrets.VITE_API_URL_PROD }}
         run: |
           if [ -n "$RAILWAY_TOKEN" ]; then
             echo "railway=true" >> "$GITHUB_OUTPUT"
           else
             echo "railway=false" >> "$GITHUB_OUTPUT"
             echo "::notice::RAILWAY_TOKEN ausente — deploy do backend pulado (ver docs/deploy.md)"
-          fi
-          if [ -n "$VITE_API_URL_PROD" ]; then
-            echo "pages=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "pages=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::VITE_API_URL_PROD ausente — deploy do frontend pulado (ver docs/deploy.md)"
           fi
 
   # ── Job 1: backend → Railway ──────────────────────────────────
@@ -102,45 +100,3 @@ jobs:
         run: railway up --service 2c6ad92a-4af2-4414-b801-cd322650e675 --ci
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-
-  # ── Job 2: frontend → GitHub Pages ────────────────────────────
-  deploy-frontend:
-    name: Deploy frontend (GitHub Pages)
-    needs: preflight
-    if: needs.preflight.outputs.pages == 'true'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-
-      - uses: pnpm/action-setup@v3
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # --base: o app é servido em https://masato173.github.io/salas-senai-monorepo/
-      # (o router usa basename: import.meta.env.BASE_URL para acompanhar)
-      - name: Build frontend (produção)
-        run: pnpm --filter @salas-senai/reservations run build -- --base=/salas-senai-monorepo/
-        env:
-          VITE_API_URL: ${{ secrets.VITE_API_URL_PROD }}
-
-      # SPA fallback: Pages serve 404.html para rotas desconhecidas; copiar o
-      # index faz refresh/deep-link (ex.: /reservas) cair no app React.
-      - name: SPA fallback (404.html)
-        run: cp apps/reservations/dist/index.html apps/reservations/dist/404.html
-
-      - name: Publicar na branch gh-pages
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: apps/reservations/dist
-          publish_branch: gh-pages

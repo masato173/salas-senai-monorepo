@@ -1,3 +1,9 @@
+# Não lançado — deploy: frontend na Vercel, API na Render (ADR-010)
+
+- **Frontend**: sai do GitHub Pages e vai para a Vercel (`https://agendasalas.com.br`), servido na raiz (sem `/salas-senai-monorepo/`). O `cd.yml` não publica mais a branch `gh-pages`, e o secret `VITE_API_URL_PROD` deixa de ser usado. O build na Vercel **falha** se `VITE_API_URL` estiver ausente, apontar para a máquina local, não for `https://` ou terminar com `/`.
+- **API**: vai para a Render (`https://api.agendasalas.com.br`, plano gratuito, imagem do `infra/docker/Dockerfile.api`). Rotas e contrato inalterados. Migração: `CORS_ORIGIN=https://agendasalas.com.br` e `TRUST_PROXY` medido na Render (`docs/deploy.md`, seção 2.5). O plano gratuito dorme após 15 min sem tráfego; o cron das 03h UTC só roda com o serviço acordado.
+- **`engines.node`** (raiz): `>=20.0.0 <23.0.0` (era `>=18.0.0`), para a Vercel buildar em Node 22, como o CI. Em Node fora do intervalo, o `pnpm install` recusa.
+
 # Não lançado — configuração e infra (#21)
 
 - **`TRUST_PROXY`** (api): nova variável de ambiente, **obrigatória com `NODE_ENV=production`** — inteiro ≥ 0 (proxies à frente da api) ou `false`; sem ela, ou com valor inválido (inclusive `true`), o boot falha. Fora de produção, ausente = `false` (antes era sempre `1`). Migração: Railway → definir `TRUST_PROXY=1` nas Variables antes do próximo deploy (`docs/deploy.md`); `infra/docker` → já fixado em `1` no compose. Ver ADR-009.

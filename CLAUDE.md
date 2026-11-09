@@ -21,7 +21,8 @@ a transição**.
 | Realtime      | Socket.IO (namespace `/rooms`, JWT no handshake)                                  | Em produção                                            |
 | Auth          | JWT + Refresh Token + RBAC (PROFESSOR / COORDENADOR / ADMIN)                      | Em produção                                            |
 | Sync de aulas | Google Apps Script → `POST /sync/schedules` → tabela `Schedule`                   | Em produção — única função remanescente do Apps Script |
-| CI/CD         | GitHub Actions (validate + e2e) → Railway (backend) + GitHub Pages (frontend)     | Em produção                                            |
+| CI            | GitHub Actions (validate + e2e)                                                   | Em produção                                            |
+| Deploy        | Vercel (frontend) + Render (API), integração Git com gate no CI (ADR-010)         | Configurado no repo — implantação manual (deploy.md)   |
 
 O legado HTML/CSS/JS + Apps Script + Google Sheets como _backend de reservas_
 foi desativado no cutover oficial (ADR-003, F5.8). O Apps Script segue vivo
@@ -33,10 +34,10 @@ hoje só como fonte de dados de aulas/turmas da planilha institucional
 ## Arquitetura atual
 
 ```
-React (Vite, GitHub Pages)
-   │  JWT Bearer + refresh automático (apiClient.ts)
+React (Vite, Vercel — agendasalas.com.br)
+   │  JWT Bearer + refresh automático (apiClient.ts); URL absoluta (VITE_API_URL)
    ▼
-NestJS (Railway)
+NestJS (Render — api.agendasalas.com.br; Docker: infra/docker/Dockerfile.api)
    │  Prisma
    ▼
 PostgreSQL (Supabase)
@@ -331,20 +332,23 @@ mesmo `clientRequestId` em todas as tentativas de uma mutation.
   sobe o backend com `THROTTLE_SKIP=true`, roda Playwright, upload do relatório
   em caso de falha.
 
-**CD** (`.github/workflows/cd.yml`) — dispara via `workflow_run` do CI,
-só quando `conclusion == success`, na branch `master`:
+**Deploy (ADR-010)** — sem workflow próprio, pela integração Git de cada
+plataforma:
 
-- Job `preflight`: checa se os secrets `RAILWAY_TOKEN`/`VITE_API_URL_PROD`
-  existem; se não, **pula** os deploys sem falhar o workflow.
-- Job `deploy-backend`: checkout do SHA validado pelo CI, `prisma migrate deploy`,
-  `railway up --service salas-senai-api --ci` (build definido por `railway.json`
-  na raiz — Nixpacks, `node apps/api/dist/main.js`, healthcheck `/health`).
-- Job `deploy-frontend`: build com `--base=/salas-senai-monorepo/` e
-  `VITE_API_URL` de produção, fallback SPA (`404.html`), publica na branch
-  `gh-pages` via `peaceiris/actions-gh-pages`.
+- **Vercel** (frontend): `vercel.json` na raiz (pnpm 8.15.0 via `npx`, saída
+  `apps/reservations/dist`, rewrite de SPA). O build falha sem `VITE_API_URL`
+  `https://` válida (`src/config/vercelBuildGuard.ts`). Promoção ao domínio
+  só com os checks do CI verdes (Deployment Checks).
+- **Render** (API, plano gratuito): imagem do `infra/docker/Dockerfile.api`,
+  Auto-Deploy "After CI Checks Pass". Dorme após 15 min sem tráfego; o cron
+  das 03h UTC só roda acordado.
 
-Deploy nunca acontece em cima de CI vermelho, e sempre no SHA exato validado.
-Detalhes de setup manual (Railway, secrets) em `docs/deploy.md`.
+**CD** (`.github/workflows/cd.yml`) — só o plano B: job `deploy-backend`
+(Railway) via `workflow_run` do CI verde na `master`, **pulado** enquanto o
+secret `RAILWAY_TOKEN` não existir. O job do GitHub Pages foi removido.
+
+Deploy nunca deve acontecer em cima de CI vermelho — na Vercel e na Render
+isso depende dos gates acima. Setup completo em `docs/deploy.md`.
 
 ---
 

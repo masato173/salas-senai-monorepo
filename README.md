@@ -13,7 +13,8 @@ coordenação, calendário, auditoria e administração de salas/usuários.
 | Banco    | PostgreSQL (Supabase)                                        |
 | Auth     | JWT + Refresh Token + RBAC (PROFESSOR / COORDENADOR / ADMIN) |
 | Realtime | Socket.IO (namespace `/rooms`)                               |
-| CI/CD    | GitHub Actions → Railway (backend) + GitHub Pages (frontend) |
+| CI       | GitHub Actions (typecheck, lint, testes, build, E2E)         |
+| Deploy   | Vercel (frontend) + Render (API) — ADR-010                   |
 
 Aulas/turmas continuam sendo importadas de uma planilha institucional via
 Google Apps Script (`POST /sync/schedules`) — a única função remanescente
@@ -21,7 +22,7 @@ do Apps Script no sistema.
 
 ## Como rodar localmente
 
-Pré-requisitos: Node ≥ 18, pnpm ≥ 8.
+Pré-requisitos: Node 20 ou 22 (`engines`: `>=20.0.0 <23.0.0`), pnpm ≥ 8.
 
 ```bash
 git clone <url-do-repositorio>
@@ -102,7 +103,7 @@ packages/
   validators/       validadores compartilhados
 docs/
   adr/              Architecture Decision Records
-  deploy.md         passo a passo de deploy (Railway + GitHub Pages)
+  deploy.md         passo a passo de deploy (Vercel + Render; plano B)
   backup-restore.md  backup e restauração do banco (Supabase)
 ```
 
@@ -114,5 +115,5 @@ protocolo de mudança, critérios de aceite e o estado real da arquitetura.
 
 ## Deploy e operação
 
-- [`docs/deploy.md`](./docs/deploy.md) — setup do Railway, secrets do GitHub, GitHub Pages
+- [`docs/deploy.md`](./docs/deploy.md) — frontend na Vercel, API na Render (plano gratuito), plano B (Railway / Lightsail) e secrets do GitHub
 - [`docs/backup-restore.md`](./docs/backup-restore.md) — backup automático do Supabase e procedimento de restauração
